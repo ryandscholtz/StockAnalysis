@@ -3,11 +3,13 @@ API routes for stock analysis
 """
 from fastapi import APIRouter, HTTPException, Query, UploadFile, File
 from fastapi.responses import StreamingResponse
-from typing import List, AsyncGenerator
+from typing import List, AsyncGenerator, Optional
 import json
 import asyncio
 import math
 from app.api.models import StockAnalysis, QuoteResponse, CompareRequest, CompareResponse, MissingDataInfo, ManualDataEntry, ManualDataResponse, DataQualityWarning, GrowthMetrics, PriceRatios
+from pydantic import BaseModel
+from typing import List as ListType
 from app.api.progress import ProgressTracker
 from app.data.data_fetcher import DataFetcher
 from app.data.api_client import YahooFinanceClient
@@ -22,6 +24,11 @@ from app.analysis.price_ratios import PriceRatiosCalculator
 from app.analysis.data_quality import DataQualityAnalyzer
 
 router = APIRouter()
+
+# Test route to verify router is working
+@router.get("/test-batch-route")
+async def test_batch_route():
+    return {"message": "Batch route test - router is working"}
 
 # In-memory storage for manual data (in production, use a database)
 manual_data_store: dict = {}
@@ -546,3 +553,191 @@ async def compare_stocks(request: CompareRequest):
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+class BatchAnalysisRequest(BaseModel):
+    tickers: ListType[str]
+    exchange_name: str = "Custom"  # Kept for backward compatibility but not used in UI
+    skip_existing: bool = True
+
+
+@router.post("/batch-analyze")
+async def batch_analyze_stocks(request: BatchAnalysisRequest):
+    """
+    Analyze multiple stocks in batch with rate limiting
+    Returns summary with results
+    """
+    # Import here to avoid circular import
+    from app.api.batch_analysis import BatchAnalyzer
+    
+    try:
+        if not request.tickers or len(request.tickers) == 0:
+            raise HTTPException(status_code=400, detail="Tickers list cannot be empty")
+        
+        if len(request.tickers) > 1000:
+            raise HTTPException(status_code=400, detail="Maximum 1000 tickers per batch")
+        
+        # Create batch analyzer
+        analyzer = BatchAnalyzer(
+            max_concurrent=5,
+            requests_per_minute=30,
+            results_dir="batch_results",
+            use_database=True,
+            use_dynamodb=None,  # Auto-detect from env
+            dynamodb_table="stock-analyses",
+            dynamodb_region="us-east-1"
+        )
+        
+        # Run analysis
+        from datetime import date
+        analysis_date = date.today().isoformat()
+        
+        summary = await analyzer.analyze_ticker_list(
+            tickers=request.tickers,
+            exchange_name=request.exchange_name,
+            resume=True,
+            skip_existing=request.skip_existing,
+            analysis_date=analysis_date
+        )
+        
+        return {
+            "success": True,
+            "summary": summary,
+            "message": f"Batch analysis completed. Processed {summary.get('successful', 0)} tickers successfully, {summary.get('failed', 0)} failed."
+        }
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is (they'll be handled by exception handler with CORS)
+        raise
+    except Exception as e:
+        import traceback
+        error_traceback = traceback.format_exc()
+        print(f"Error in batch_analyze_stocks: {str(e)}")
+        print(f"Traceback:\n{error_traceback}")
+        # Raise as HTTPException so it gets CORS headers
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {str(e)}")
+
+
+@router.get("/batch-results")
+async def get_batch_results(
+    exchange: str = Query(..., description="Exchange name"),
+    analysis_date: Optional[str] = Query(None, description="Analysis date (YYYY-MM-DD), defaults to today")
+):
+    """
+    Get batch analysis results sorted by fair value/share price percentage (lowest to highest)
+    Returns list of tickers with their analysis data
+    """
+    try:
+        from datetime import date
+        from app.database.db_service import DatabaseService
+        import os
+        
+        if analysis_date is None:
+            analysis_date = date.today().isoformat()
+        
+        # Initialize database service
+        use_dynamodb = os.getenv('USE_DYNAMODB', 'false').lower() == 'true'
+        if use_dynamodb:
+            from app.database.dynamodb_service import DynamoDBService
+            db_service = DynamoDBService(
+                table_name="stock-analyses",
+                region="us-east-1"
+            )
+        else:
+            db_service = DatabaseService(db_path="stock_analysis.db")
+        
+        # Get all analyses for this exchange and date
+        print(f"Fetching batch results for exchange: {exchange}, date: {analysis_date}")
+        analyses = db_service.get_exchange_analyses(exchange, analysis_date)
+        print(f"Found {len(analyses)} analyses for exchange '{exchange}'")
+        
+        # Debug: If no results, try to see what exchanges exist
+        if len(analyses) == 0:
+            print(f"Warning: No analyses found for exchange '{exchange}' on {analysis_date}")
+            if not use_dynamodb:
+                # Try to see what exchanges exist in the database
+                from app.database.models import StockAnalysis
+                session = db_service.get_session()
+                try:
+                    from sqlalchemy import distinct
+                    existing_exchanges = session.query(distinct(StockAnalysis.exchange)).filter(
+                        StockAnalysis.analysis_date == analysis_date,
+                        StockAnalysis.status == 'success'
+                    ).all()
+                    exchanges_list = [e[0] for e in existing_exchanges if e[0]]
+                    print(f"Available exchanges in database for {analysis_date}: {exchanges_list}")
+                    
+                    # If exchange is 'Custom' and no results, try getting all analyses for today (in case exchange wasn't set)
+                    if exchange.lower() == 'custom':
+                        print("Trying to get all analyses for today (exchange may be NULL or different)")
+                        all_analyses = session.query(StockAnalysis).filter(
+                            StockAnalysis.analysis_date == analysis_date,
+                            StockAnalysis.status == 'success'
+                        ).all()
+                        print(f"Found {len(all_analyses)} total analyses for date {analysis_date}")
+                        # Filter to only include those with NULL exchange or 'Custom' exchange
+                        filtered_analyses = [
+                            a for a in all_analyses 
+                            if not a.exchange or a.exchange.lower() == 'custom'
+                        ]
+                        if len(filtered_analyses) > 0:
+                            analyses = [a.to_dict() for a in filtered_analyses]
+                            print(f"Using {len(analyses)} analyses (NULL or Custom exchange)")
+                        else:
+                            # If still nothing, use all analyses for today
+                            analyses = [a.to_dict() for a in all_analyses]
+                            print(f"Using all {len(analyses)} analyses for today (ignoring exchange filter)")
+                except Exception as e:
+                    print(f"Error checking available exchanges: {e}")
+                finally:
+                    session.close()
+        
+        # Calculate fair value percentage and sort
+        results = []
+        for analysis in analyses:
+            current_price = analysis.get('current_price')
+            fair_value = analysis.get('fair_value')
+            
+            # Skip if missing essential data
+            if not current_price or not fair_value or current_price <= 0:
+                continue
+                
+            fair_value_pct = (fair_value / current_price) * 100
+            
+            # Extract company name from analysis_data if not in top level
+            company_name = analysis.get('company_name')
+            if not company_name and analysis.get('analysis_data'):
+                analysis_data = analysis.get('analysis_data', {})
+                if isinstance(analysis_data, dict):
+                    company_name = analysis_data.get('companyName') or analysis_data.get('company_name')
+            
+            # Fallback to ticker if no company name found
+            if not company_name:
+                company_name = analysis.get('ticker', 'N/A')
+            
+            results.append({
+                'ticker': analysis.get('ticker'),
+                'company_name': company_name,
+                'current_price': float(current_price),
+                'fair_value': float(fair_value),
+                'fair_value_pct': round(fair_value_pct, 2),
+                'margin_of_safety_pct': float(analysis.get('margin_of_safety_pct')) if analysis.get('margin_of_safety_pct') is not None else None,
+                'recommendation': analysis.get('recommendation'),
+                'financial_health_score': float(analysis.get('financial_health_score')) if analysis.get('financial_health_score') is not None else None,
+                'business_quality_score': float(analysis.get('business_quality_score')) if analysis.get('business_quality_score') is not None else None,
+            })
+        
+        # Sort by fair_value_pct (lowest to highest - best deals first)
+        results.sort(key=lambda x: x['fair_value_pct'] if x['fair_value_pct'] is not None else float('inf'))
+        
+        return {
+            'exchange': exchange,
+            'analysis_date': analysis_date,
+            'total': len(results),
+            'results': results
+        }
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {str(e)}")

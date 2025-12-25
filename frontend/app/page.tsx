@@ -37,6 +37,25 @@ export default function Home() {
           <p style={{ marginTop: '8px', fontSize: '14px' }}>
             Examples: AAPL, MSFT, GOOGL, TSLA
           </p>
+          <div style={{ marginTop: '24px', paddingTop: '24px', borderTop: '1px solid #e5e7eb' }}>
+            <a
+              href="/batch-analysis"
+              style={{
+                display: 'inline-block',
+                padding: '12px 24px',
+                backgroundColor: '#f3f4f6',
+                color: '#374151',
+                textDecoration: 'none',
+                borderRadius: '8px',
+                fontWeight: '600',
+                transition: 'background-color 0.2s'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#e5e7eb'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
+            >
+              📊 Batch Analysis (Multiple Stocks)
+            </a>
+          </div>
         </div>
       </div>
     </div>

@@ -294,5 +294,38 @@ export const stockApi = {
     })
     return response.data
   },
+
+  async batchAnalyze(tickers: string[], exchangeName: string = 'Custom', skipExisting: boolean = true): Promise<{ success: boolean; summary: any; message: string }> {
+    const response = await api.post('/api/batch-analyze', {
+      tickers,
+      exchange_name: exchangeName,
+      skip_existing: skipExisting
+    })
+    return response.data
+  },
+
+  async getBatchResults(exchange: string, analysisDate?: string): Promise<{
+    exchange: string
+    analysis_date: string
+    total: number
+    results: Array<{
+      ticker: string
+      company_name: string
+      current_price: number
+      fair_value: number
+      fair_value_pct: number
+      margin_of_safety_pct?: number
+      recommendation?: string
+      financial_health_score?: number
+      business_quality_score?: number
+    }>
+  }> {
+    const params: any = { exchange }
+    if (analysisDate) {
+      params.analysis_date = analysisDate
+    }
+    const response = await api.get('/api/batch-results', { params })
+    return response.data
+  },
 }
 

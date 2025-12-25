@@ -1,0 +1,387 @@
+{
+  "AAPL": {
+    "ticker": "AAPL",
+    "timestamp": "2025-12-23T19:23:58.473007",
+    "analysis": {
+      "ticker": "AAPL",
+      "companyName": "Apple Inc.",
+      "currentPrice": 271.65,
+      "fairValue": 50.07028912184474,
+      "marginOfSafety": -442.5373105774301,
+      "upsidePotential": -81.56808793600415,
+      "priceToIntrinsicValue": 5.425373105774301,
+      "recommendation": "Avoid",
+      "recommendationReasoning": "Stock is overvalued (442.5% above fair value). Not recommended for purchase. Poor financial health increases risk.",
+      "valuation": {
+        "dcf": 68.46325893447333,
+        "earningsPower": 60.80569369481389,
+        "assetBased": 4.989932224818939,
+        "weightedAverage": 50.07028912184474
+      },
+      "financialHealth": {
+        "score": 35.0,
+        "metrics": {
+          "debtToEquity": 1.3380304612588665,
+          "currentRatio": 0.0,
+          "quickRatio": 0.0,
+          "interestCoverage": 999.0,
+          "roe": 0.0,
+          "roic": 0.8758414657774576,
+          "roa": 0.281661011443641,
+          "fcfMargin": 0.0
+        }
+      },
+      "businessQuality": {
+        "score": 78.0,
+        "moatIndicators": [
+          "Brand Strength",
+          "Network Effects",
+          "Cost Advantages"
+        ],
+        "competitivePosition": "Strong Position"
+      },
+      "managementQuality": {
+        "score": 64.0,
+        "strengths": [
+          "Strong capital allocation"
+        ],
+        "weaknesses": [
+          "Weak track record"
+        ]
+      },
+      "growthMetrics": {
+        "revenueGrowth1Y": 6.425511782832739,
+        "revenueGrowth3Y": 1.8125357434793932,
+        "revenueGrowth5Y": null,
+        "earningsGrowth1Y": 19.495177946573357,
+        "earningsGrowth3Y": 3.9212592033254,
+        "earningsGrowth5Y": null,
+        "fcfGrowth1Y": -9.227347505215656,
+        "fcfGrowth3Y": -3.9450634871626145,
+        "fcfGrowth5Y": null
+      },
+      "priceRatios": {
+        "priceToEarnings": 35.83605296357468,
+        "priceToBook": 54.439617165312676,
+        "priceToSales": 9.64529663387487,
+        "priceToFCF": 40.64106728411311,
+        "enterpriseValueToEBITDA": 28.284430372896345
+      },
+      "currency": "USD",
+      "financialCurrency": "USD",
+      "timestamp": "2025-12-23 19:23:58.302266",
+      "missingData": null,
+      "dataQualityWarnings": null
+    },
+    "status": "success",
+    "source": "new_analysis"
+  },
+  "BRK-B": {
+    "ticker": "BRK-B",
+    "timestamp": "2025-12-23T19:26:28.218956",
+    "analysis": {
+      "ticker": "BRK-B",
+      "companyName": "Berkshire Hathaway Inc.",
+      "currentPrice": 498.885,
+      "fairValue": 432.95969595511036,
+      "marginOfSafety": -15.22666074020082,
+      "upsidePotential": -13.21452920911425,
+      "priceToIntrinsicValue": 1.1522666074020083,
+      "recommendation": "Avoid",
+      "recommendationReasoning": "Stock is overvalued (15.2% above fair value). Not recommended for purchase. Poor financial health increases risk.",
+      "valuation": {
+        "dcf": 57.16312387071408,
+        "earningsPower": 422.7694389905799,
+        "assetBased": 779.4181987885305,
+        "weightedAverage": 432.95969595511036
+      },
+      "financialHealth": {
+        "score": 45.0,
+        "metrics": {
+          "debtToEquity": 0.19212834633058604,
+          "currentRatio": 0.0,
+          "quickRatio": 0.0,
+          "interestCoverage": 22.226153846153846,
+          "roe": 0.0,
+          "roic": 0.5341702237254431,
+          "roa": 0.05921603389867734,
+          "fcfMargin": 0.0
+        }
+      },
+      "businessQuality": {
+        "score": 66.0,
+        "moatIndicators": [
+          "Brand Strength",
+          "Regulatory Barriers"
+        ],
+        "competitivePosition": "Strong Position"
+      },
+      "managementQuality": {
+        "score": 64.0,
+        "strengths": [
+          "Strong capital allocation"
+        ],
+        "weaknesses": [
+          "Lack of financial discipline"
+        ]
+      },
+      "growthMetrics": {
+        "revenueGrowth1Y": -3.4381351900704926,
+        "revenueGrowth3Y": 6.145859854582025,
+        "revenueGrowth5Y": null,
+        "earningsGrowth1Y": -7.5117175727216985,
+        "earningsGrowth3Y": -0.3503593654626824,
+        "earningsGrowth5Y": null,
+        "fcfGrowth1Y": -61.003122167388454,
+        "fcfGrowth3Y": -23.7003110368773,
+        "fcfGrowth5Y": null
+      },
+      "priceRatios": {
+        "priceToEarnings": 7.695706219956345,
+        "priceToBook": 1.0546860563578973,
+        "priceToSales": 1.6143981949617543,
+        "priceToFCF": 58.96000129519757,
+        "enterpriseValueToEBITDA": 9.978672136775801
+      },
+      "currency": "USD",
+      "financialCurrency": "USD",
+      "timestamp": "2025-12-23 19:26:28.176694",
+      "missingData": {
+        "income_statement": [
+          "Operating Income"
+        ],
+        "balance_sheet": [],
+        "cashflow": [],
+        "key_metrics": [],
+        "has_missing_data": true
+      },
+      "dataQualityWarnings": null
+    },
+    "status": "success",
+    "source": "new_analysis"
+  },
+  "SOLBE1.JO": {
+    "ticker": "SOLBE1.JO",
+    "timestamp": "2025-12-23T19:32:26.011125",
+    "analysis": {
+      "ticker": "SOLBE1.JO",
+      "companyName": "Sasol Limited",
+      "currentPrice": 6000.0,
+      "fairValue": 2483304.754745745,
+      "marginOfSafety": 99.75838648121889,
+      "upsidePotential": 41288.41257909575,
+      "priceToIntrinsicValue": 0.002416135187811177,
+      "recommendation": "Buy",
+      "recommendationReasoning": "Good margin of safety (99.8%) with solid business quality. Stock appears undervalued. Poor financial health increases risk.",
+      "valuation": {
+        "dcf": 4524319.527252011,
+        "earningsPower": 806944.3990354659,
+        "assetBased": 2407497.1724026497,
+        "weightedAverage": 2483304.754745745
+      },
+      "financialHealth": {
+        "score": 27.0,
+        "metrics": {
+          "debtToEquity": 0.7916707669901002,
+          "currentRatio": 0.0,
+          "quickRatio": 0.0,
+          "interestCoverage": 2.3155526992287916,
+          "roe": 0.0,
+          "roic": 0.1346481343208953,
+          "roa": 0.0026643752360182293,
+          "fcfMargin": 0.0
+        }
+      },
+      "businessQuality": {
+        "score": 64.0,
+        "moatIndicators": [
+          "Brand Strength"
+        ],
+        "competitivePosition": "Moderate Position"
+      },
+      "managementQuality": {
+        "score": 59.0,
+        "strengths": [
+          "Strong capital allocation"
+        ],
+        "weaknesses": []
+      },
+      "growthMetrics": {
+        "revenueGrowth1Y": -9.456183140623239,
+        "revenueGrowth3Y": -2.978171651122208,
+        "revenueGrowth5Y": null,
+        "earningsGrowth1Y": 115.2854012784893,
+        "earningsGrowth3Y": -44.203459437820804,
+        "earningsGrowth5Y": null,
+        "fcfGrowth1Y": 3260.539215686274,
+        "fcfGrowth3Y": -9.741381586794384,
+        "fcfGrowth5Y": null
+      },
+      "priceRatios": {
+        "priceToEarnings": 0.056137257277966604,
+        "priceToBook": 0.002492214765100671,
+        "priceToSales": 0.0015250378167453512,
+        "priceToFCF": 0.02945954400930593,
+        "enterpriseValueToEBITDA": 4.173658739135317
+      },
+      "currency": "ZAc",
+      "financialCurrency": "ZAR",
+      "timestamp": "2025-12-23 19:32:25.968388",
+      "missingData": null,
+      "dataQualityWarnings": null
+    },
+    "status": "success",
+    "source": "new_analysis"
+  },
+  "NVDA": {
+    "ticker": "NVDA",
+    "timestamp": "2025-12-23T19:35:38.126635",
+    "analysis": {
+      "ticker": "NVDA",
+      "companyName": "NVIDIA Corporation",
+      "currentPrice": 187.8365,
+      "fairValue": 19.716425051518577,
+      "marginOfSafety": -852.6904573683487,
+      "upsidePotential": -89.50341118391869,
+      "priceToIntrinsicValue": 9.526904573683487,
+      "recommendation": "Avoid",
+      "recommendationReasoning": "Stock is overvalued (852.7% above fair value). Not recommended for purchase.",
+      "valuation": {
+        "dcf": 31.751167733154418,
+        "earningsPower": 10.626927929781251,
+        "assetBased": 3.2638140300349723,
+        "weightedAverage": 19.716425051518577
+      },
+      "financialHealth": {
+        "score": 50.0,
+        "metrics": {
+          "debtToEquity": 0.1294641168832806,
+          "currentRatio": 0.0,
+          "quickRatio": 0.0,
+          "interestCoverage": 341.1862348178138,
+          "roe": 0.0,
+          "roic": 2.472161923477698,
+          "roa": 0.3581449921826262,
+          "fcfMargin": 0.0
+        }
+      },
+      "businessQuality": {
+        "score": 70.0,
+        "moatIndicators": [
+          "Brand Strength",
+          "Network Effects",
+          "Cost Advantages"
+        ],
+        "competitivePosition": "Market Leader"
+      },
+      "managementQuality": {
+        "score": 72.0,
+        "strengths": [
+          "Strong capital allocation"
+        ],
+        "weaknesses": []
+      },
+      "growthMetrics": {
+        "revenueGrowth1Y": 114.20340763599357,
+        "revenueGrowth3Y": 69.25470878444982,
+        "revenueGrowth5Y": null,
+        "earningsGrowth1Y": 144.89247311827958,
+        "earningsGrowth3Y": 95.51116209533032,
+        "earningsGrowth5Y": null,
+        "fcfGrowth1Y": 125.20632100958512,
+        "fcfGrowth3Y": 95.59670802594465,
+        "fcfGrowth5Y": null
+      },
+      "priceRatios": {
+        "priceToEarnings": 62.64223562705818,
+        "priceToBook": 57.551226347901725,
+        "priceToSales": 34.984452765197666,
+        "priceToFCF": 75.02286054097578,
+        "enterpriseValueToEBITDA": 53.11190308722152
+      },
+      "currency": "USD",
+      "financialCurrency": "USD",
+      "timestamp": "2025-12-23 19:35:38.091991",
+      "missingData": null,
+      "dataQualityWarnings": null
+    },
+    "status": "success",
+    "source": "new_analysis"
+  },
+  "AMD": {
+    "ticker": "AMD",
+    "timestamp": "2025-12-23T19:35:38.020912",
+    "analysis": {
+      "ticker": "AMD",
+      "companyName": "Advanced Micro Devices, Inc.",
+      "currentPrice": 215.08,
+      "fairValue": 18.33787719393659,
+      "marginOfSafety": -1072.8729433912674,
+      "upsidePotential": -91.47392728569064,
+      "priceToIntrinsicValue": 11.728729433912674,
+      "recommendation": "Avoid",
+      "recommendationReasoning": "Stock is overvalued (1072.9% above fair value). Not recommended for purchase. Poor financial health increases risk.",
+      "valuation": {
+        "dcf": 17.052832249317554,
+        "earningsPower": 10.938534706484754,
+        "assetBased": 27.2640463461393,
+        "weightedAverage": 18.33787719393659
+      },
+      "financialHealth": {
+        "score": 45.0,
+        "metrics": {
+          "debtToEquity": 0.03842412451361868,
+          "currentRatio": 0.0,
+          "quickRatio": 0.0,
+          "interestCoverage": 22.619565217391305,
+          "roe": 0.0,
+          "roic": 1.4192979997624202,
+          "roa": 0.0776068357615269,
+          "fcfMargin": 0.0
+        }
+      },
+      "businessQuality": {
+        "score": 70.0,
+        "moatIndicators": [
+          "Brand Strength",
+          "Network Effects"
+        ],
+        "competitivePosition": "Market Leader"
+      },
+      "managementQuality": {
+        "score": 64.0,
+        "strengths": [
+          "Strong capital allocation"
+        ],
+        "weaknesses": [
+          "Weak track record"
+        ]
+      },
+      "growthMetrics": {
+        "revenueGrowth1Y": 13.690476190476192,
+        "revenueGrowth3Y": 16.20048775845504,
+        "revenueGrowth5Y": null,
+        "earningsGrowth1Y": 92.15456674473069,
+        "earningsGrowth3Y": -19.638338902932272,
+        "earningsGrowth5Y": null,
+        "fcfGrowth1Y": 114.54058876003567,
+        "fcfGrowth3Y": -9.269548997557875,
+        "fcfGrowth5Y": null
+      },
+      "priceRatios": {
+        "priceToEarnings": 213.38158100134066,
+        "priceToBook": 6.08253151791273,
+        "priceToSales": 13.579956347612955,
+        "priceToFCF": 145.59633032149688,
+        "enterpriseValueToEBITDA": 66.29596342335489
+      },
+      "currency": "USD",
+      "financialCurrency": "USD",
+      "timestamp": "2025-12-23 19:35:37.980644",
+      "missingData": null,
+      "dataQualityWarnings": null
+    },
+    "status": "success",
+    "source": "new_analysis"
+  }
+}
