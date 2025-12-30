@@ -2,11 +2,16 @@
 API routes for stock analysis
 """
 from fastapi import APIRouter, HTTPException, Query, UploadFile, File
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from typing import List, AsyncGenerator, Optional
 import json
 import asyncio
 import math
+import logging
+import base64
+import io
+
+logger = logging.getLogger(__name__)
 from app.api.models import StockAnalysis, QuoteResponse, CompareRequest, CompareResponse, MissingDataInfo, ManualDataEntry, ManualDataResponse, DataQualityWarning, GrowthMetrics, PriceRatios
 from pydantic import BaseModel
 from typing import List as ListType
@@ -265,8 +270,19 @@ async def analyze_stock(ticker: str, stream: bool = Query(False, description="St
                 try:
                     analysis_result = await analysis_task
                     analysis_complete = True
+                    # Ensure we have a result
+                    if analysis_result is None:
+                        analysis_error = "Analysis completed but returned None"
+                        analysis_result = None
+                except HTTPException as e:
+                    # HTTPException needs special handling
+                    analysis_error = f"HTTP {e.status_code}: {e.detail}"
+                    analysis_complete = True
                 except Exception as e:
-                    analysis_error = str(e)
+                    import traceback
+                    error_traceback = traceback.format_exc()
+                    logger.error(f"Analysis error for {ticker}: {e}\n{error_traceback}")
+                    analysis_error = f"Analysis failed: {str(e)}"
                     analysis_complete = True
             
             monitor_task = asyncio.create_task(monitor_analysis())
@@ -286,6 +302,9 @@ async def analyze_stock(ticker: str, stream: bool = Query(False, description="St
             
             # Wait for analysis to complete
             await monitor_task
+            
+            # Debug logging
+            logger.info(f"Analysis complete for {ticker}. Error: {analysis_error}, Result: {analysis_result is not None}")
             
             # Send final result
             if analysis_error:
@@ -352,14 +371,13 @@ async def add_manual_data(entry: ManualDataEntry):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/upload-pdf", response_model=ManualDataResponse)
-async def upload_pdf(
-    ticker: str = Query(..., description="Stock ticker symbol"),
-    file: UploadFile = File(..., description="PDF file to upload")
+@router.post("/extract-pdf-images")
+async def extract_pdf_images(
+    file: UploadFile = File(..., description="PDF file to extract images from")
 ):
     """
-    Upload a PDF financial statement and extract data using LLM
-    Supports annual reports, 10-K filings, quarterly reports, etc.
+    Extract images from PDF pages for testing/debugging
+    Returns base64-encoded images of all PDF pages
     """
     try:
         # Validate file type
@@ -374,17 +392,275 @@ async def upload_pdf(
         if len(pdf_bytes) > 50 * 1024 * 1024:  # 50MB limit
             raise HTTPException(status_code=400, detail="PDF file too large (max 50MB)")
         
+        # Check if pdf2image is available
+        try:
+            from pdf2image import convert_from_bytes
+            from PIL import Image
+        except ImportError:
+            raise HTTPException(
+                status_code=400,
+                detail="PDF to image conversion requires pdf2image and Pillow. Install with: pip install pdf2image Pillow. Also install Poppler from https://github.com/oschwartz10612/poppler-windows/releases/"
+            )
+        
+        # Convert PDF pages to images
+        try:
+            images = convert_from_bytes(pdf_bytes, dpi=150)  # Lower DPI for faster processing and smaller images
+        except Exception as convert_error:
+            error_msg = str(convert_error).lower()
+            if "poppler" in error_msg or "pdftoppm" in error_msg or "cannot find" in error_msg:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"PDF to image conversion failed: Poppler is not installed or not in PATH. Install Poppler: Windows - Download from https://github.com/oschwartz10612/poppler-windows/releases/ or use: winget install poppler. Error: {convert_error}"
+                )
+            else:
+                raise HTTPException(status_code=400, detail=f"PDF to image conversion failed: {convert_error}")
+        
+        if not images:
+            raise HTTPException(status_code=400, detail="No images could be extracted from PDF. The PDF may be corrupted or empty.")
+        
+        # Convert images to base64
+        image_data = []
+        for i, image in enumerate(images):
+            try:
+                # Convert PIL Image to base64
+                buffer = io.BytesIO()
+                image.save(buffer, format='PNG')
+                img_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+                
+                image_data.append({
+                    'page_number': i + 1,
+                    'image_base64': f'data:image/png;base64,{img_base64}',
+                    'width': image.size[0],
+                    'height': image.size[1]
+                })
+            except Exception as e:
+                logger.error(f"Failed to convert page {i+1} to base64: {e}")
+                continue
+        
+        return JSONResponse(content={
+            'success': True,
+            'total_pages': len(images),
+            'images': image_data,
+            'message': f'Successfully extracted {len(image_data)} page(s) from PDF'
+        })
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error extracting images from PDF: {str(e)}")
+
+
+@router.post("/upload-pdf", response_model=ManualDataResponse)
+async def upload_pdf(
+    ticker: str = Query(..., description="Stock ticker symbol"),
+    file: UploadFile = File(..., description="PDF file to upload")
+):
+    """
+    Upload a PDF financial statement and extract data using LLM
+    Supports annual reports, 10-K filings, quarterly reports, etc.
+    """
+    try:
+        # Validate file type
+        if not file.filename or not file.filename.lower().endswith('.pdf'):
+            raise HTTPException(status_code=400, detail="Only PDF files are supported")
+        
+        # Read PDF content
+        try:
+            pdf_bytes = await file.read()
+        except Exception as read_error:
+            logger.error(f"Error reading PDF file: {read_error}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            raise HTTPException(status_code=400, detail=f"Failed to read PDF file: {str(read_error)}")
+        
+        if len(pdf_bytes) == 0:
+            raise HTTPException(status_code=400, detail="PDF file is empty")
+        
+        if len(pdf_bytes) > 50 * 1024 * 1024:  # 50MB limit
+            raise HTTPException(status_code=400, detail="PDF file too large (max 50MB)")
+        
         ticker_upper = ticker.upper()
         
-        # Extract text and data from PDF
+        # Extract text and data from PDF (with OCR fallback for image-based PDFs)
         extractor = PDFExtractor()
-        pdf_text = extractor.extract_text_from_pdf(pdf_bytes)
+        try:
+            pdf_text = extractor.extract_text_from_pdf(pdf_bytes, use_ocr=True)
+        except Exception as e:
+            error_msg = str(e)
+            if "OCR" in error_msg and "not installed" in error_msg:
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"{error_msg}. For scanned PDFs, install OCR dependencies: pip install pytesseract pdf2image Pillow, and install Tesseract OCR from https://github.com/tesseract-ocr/tesseract"
+                )
+            raise HTTPException(status_code=400, detail=f"Failed to extract text from PDF: {error_msg}")
         
         if not pdf_text or len(pdf_text.strip()) < 100:
-            raise HTTPException(status_code=400, detail="Could not extract text from PDF. File may be corrupted or image-based.")
+            raise HTTPException(
+                status_code=400, 
+                detail="Could not extract text from PDF. File may be corrupted or image-based. OCR was attempted but may need Tesseract OCR installed. See server logs for details."
+            )
+        
+        # Llama-only mode: Check if Ollama is available
+        import os
+        llama_api_url = os.getenv("LLAMA_API_URL", "http://localhost:11434")
+        logger.info(f"Using Llama-only mode for PDF extraction (Ollama URL: {llama_api_url})")
         
         # Use LLM to extract financial data
-        extracted_data = extractor.extract_financial_data_with_llm(pdf_text, ticker_upper)
+        extraction_error = None
+        extraction_error_type = None
+        updated_periods = 0  # Initialize early to avoid reference errors
+        extraction_details = {
+            "pdf_text_length": len(pdf_text),
+            "llm_provider": "llama",  # Llama-only mode
+            "has_api_key": True,  # Llama is always available if Ollama is running
+            "extraction_method": None,
+            "error_type": None,
+            "error_message": None,
+            "llama_api_url": extractor.llama_api_url,
+            "llama_model": extractor.llama_model
+        }
+        
+        raw_llm_response = None
+        try:
+            logger.info(f"Starting LLM extraction for {ticker_upper} using Llama-only mode")
+            # Use per-page processing for better results on large PDFs (concurrent processing)
+            extracted_data, raw_llm_response = await extractor.extract_financial_data_per_page(pdf_bytes, ticker_upper)
+            logger.info(f"LLM extraction completed successfully for {ticker_upper} (concurrent per-page processing)")
+            extraction_details["extraction_method"] = "llm_per_page"
+            if raw_llm_response:
+                extraction_details["raw_llm_response_preview"] = raw_llm_response[:2000] if len(raw_llm_response) > 2000 else raw_llm_response
+                extraction_details["raw_llm_response_length"] = len(raw_llm_response)
+        except ValueError as e:
+            # PDF text validation errors
+            extraction_error = str(e)
+            extraction_error_type = "validation_error"
+            extraction_details["error_type"] = "validation_error"
+            extraction_details["error_message"] = str(e)
+            logger.error(f"PDF validation error for {ticker_upper}: {e}")
+            extracted_data = {
+                "income_statement": {},
+                "balance_sheet": {},
+                "cashflow": {},
+                "key_metrics": {}
+            }
+        except json.JSONDecodeError as e:
+            # JSON parsing errors
+            extraction_error = f"Failed to parse LLM response as JSON: {str(e)}"
+            extraction_error_type = "json_parse_error"
+            extraction_details["error_type"] = "json_parse_error"
+            extraction_details["error_message"] = str(e)
+            logger.error(f"JSON parsing error for {ticker_upper}: {e}")
+            extracted_data = {
+                "income_statement": {},
+                "balance_sheet": {},
+                "cashflow": {},
+                "key_metrics": {}
+            }
+        except Exception as e:
+            # Other LLM API errors
+            extraction_error = str(e)
+            extraction_error_type = "llm_api_error"
+            extraction_details["error_type"] = "llm_api_error"
+            extraction_details["error_message"] = str(e)
+            logger.error(f"LLM extraction failed for {ticker_upper}: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            # Return empty structure but still indicate success
+            extracted_data = {
+                "income_statement": {},
+                "balance_sheet": {},
+                "cashflow": {},
+                "key_metrics": {}
+            }
+        
+        # Analyze PDF text for financial keywords to diagnose issues
+        pdf_text_lower = pdf_text.lower()
+        financial_keywords = {
+            "income_statement": ["revenue", "net income", "operating income", "ebit", "income before tax", "earnings", "profit", "sales"],
+            "balance_sheet": ["total assets", "total liabilities", "stockholder equity", "shareholder equity", "cash and cash equivalents", "total debt"],
+            "cash_flow": ["operating cash flow", "cash from operations", "capital expenditures", "capex", "free cash flow", "financing activities"],
+            "dates": ["2024", "2023", "2022", "fiscal year", "year ended", "quarter ended", "period ended"]
+        }
+        
+        # Analyze extracted data to determine why it might be empty
+        income_statement = extracted_data.get('income_statement', {})
+        balance_sheet = extracted_data.get('balance_sheet', {})
+        cashflow = extracted_data.get('cashflow', {})
+        key_metrics = extracted_data.get('key_metrics', {})
+        
+        total_periods = (
+            (len(income_statement) if isinstance(income_statement, dict) else 0) +
+            (len(balance_sheet) if isinstance(balance_sheet, dict) else 0) +
+            (len(cashflow) if isinstance(cashflow, dict) else 0) +
+            (1 if key_metrics and isinstance(key_metrics, dict) and len(key_metrics) > 0 else 0)
+        )
+        
+        extraction_details["income_statement_periods"] = len(income_statement) if isinstance(income_statement, dict) else 0
+        extraction_details["balance_sheet_periods"] = len(balance_sheet) if isinstance(balance_sheet, dict) else 0
+        extraction_details["cashflow_periods"] = len(cashflow) if isinstance(cashflow, dict) else 0
+        extraction_details["has_key_metrics"] = bool(key_metrics and isinstance(key_metrics, dict) and len(key_metrics) > 0)
+        extraction_details["total_periods_found"] = total_periods
+        
+        # Analyze what the LLM actually returned
+        llm_response_analysis = extraction_details.get("llm_response_analysis", [])
+        if not llm_response_analysis:
+            llm_response_analysis = []
+        
+        if raw_llm_response:
+            extraction_details["raw_llm_response_length"] = len(raw_llm_response)
+            # Check if LLM returned empty objects
+            if raw_llm_response.strip().startswith('{'):
+                try:
+                    parsed = json.loads(raw_llm_response)
+                    for key, value in parsed.items():
+                        if isinstance(value, dict):
+                            if len(value) == 0:
+                                llm_response_analysis.append(f"LLM returned empty {key} object")
+                            else:
+                                llm_response_analysis.append(f"LLM returned {key} with {len(value)} items (but no valid periods extracted)")
+                        elif isinstance(value, list):
+                            llm_response_analysis.append(f"LLM returned {key} as array with {len(value)} items")
+                        else:
+                            llm_response_analysis.append(f"LLM returned {key} as {type(value).__name__}")
+                except:
+                    llm_response_analysis.append(f"LLM response is not valid JSON structure")
+            
+            # Show preview of what LLM said
+            preview = raw_llm_response[:1000] if len(raw_llm_response) > 1000 else raw_llm_response
+            extraction_details["raw_llm_response_preview"] = preview
+            extraction_details["llm_response_analysis"] = llm_response_analysis
+        
+        # Check for financial keywords in PDF
+        found_keywords = {}
+        for category, keywords in financial_keywords.items():
+            matches = [kw for kw in keywords if kw in pdf_text_lower]
+            if matches:
+                found_keywords[category] = len(matches)
+        
+        extraction_details["financial_keywords_detected"] = found_keywords
+        extraction_details["pdf_contains_financial_data"] = len(found_keywords) > 0
+        
+        # Log extracted data for debugging
+        logger.info(f"Extracted data for {ticker_upper}: {json.dumps(extracted_data, indent=2, default=str)}")
+        logger.info(f"Extracted data keys: {list(extracted_data.keys())}")
+        logger.info(f"Income statement periods: {len(income_statement) if isinstance(income_statement, dict) else 0}")
+        logger.info(f"Balance sheet periods: {len(balance_sheet) if isinstance(balance_sheet, dict) else 0}")
+        logger.info(f"Cashflow periods: {len(cashflow) if isinstance(cashflow, dict) else 0}")
+        
+        # Note: raw_llm_response is already set from the extraction call above
+        # If it wasn't set, try to get it from extraction_details
+        if not raw_llm_response and extraction_details.get("raw_llm_response_preview"):
+            # Try to reconstruct from preview if available
+            raw_llm_response = extraction_details.get("raw_llm_response_preview", "")
+        
+        if total_periods == 0 and not extraction_error and not raw_llm_response:
+            # Fallback: serialize extracted_data if we don't have raw response
+            raw_llm_response = json.dumps(extracted_data, indent=2, default=str)
+            logger.warning(f"LLM returned data structure but no periods extracted. Using serialized extracted_data as fallback.")
+            if len(raw_llm_response) > 0:
+                extraction_details["raw_llm_response_preview"] = raw_llm_response[:1000]  # First 1000 chars for debugging
         
         # Store extracted data in manual_data_store
         if ticker_upper not in manual_data_store:
@@ -393,8 +669,8 @@ async def upload_pdf(
         updated_periods = 0
         
         # Process income statement data
-        if 'income_statement' in extracted_data and extracted_data['income_statement']:
-            for period, data in extracted_data['income_statement'].items():
+        if income_statement and isinstance(income_statement, dict):
+            for period, data in income_statement.items():
                 entry_key = f"income_statement_{period}"
                 manual_data_store[ticker_upper][entry_key] = {
                     'ticker': ticker_upper,
@@ -405,8 +681,8 @@ async def upload_pdf(
                 updated_periods += 1
         
         # Process balance sheet data
-        if 'balance_sheet' in extracted_data and extracted_data['balance_sheet']:
-            for period, data in extracted_data['balance_sheet'].items():
+        if balance_sheet and isinstance(balance_sheet, dict):
+            for period, data in balance_sheet.items():
                 entry_key = f"balance_sheet_{period}"
                 manual_data_store[ticker_upper][entry_key] = {
                     'ticker': ticker_upper,
@@ -417,8 +693,8 @@ async def upload_pdf(
                 updated_periods += 1
         
         # Process cash flow data
-        if 'cashflow' in extracted_data and extracted_data['cashflow']:
-            for period, data in extracted_data['cashflow'].items():
+        if cashflow and isinstance(cashflow, dict):
+            for period, data in cashflow.items():
                 entry_key = f"cashflow_{period}"
                 manual_data_store[ticker_upper][entry_key] = {
                     'ticker': ticker_upper,
@@ -440,15 +716,102 @@ async def upload_pdf(
             }
             updated_periods += 1
         
+        # Create appropriate message with specific feedback
+        if updated_periods == 0:
+            # Build detailed error message
+            error_parts = []
+            
+            # Llama-only mode: Check if Ollama is running
+            llama_url = os.getenv("LLAMA_API_URL", "http://localhost:11434")
+            if extraction_error_type == "validation_error":
+                error_parts.append(f"PDF text validation failed: {extraction_error}")
+            elif extraction_error_type == "json_parse_error":
+                error_parts.append(f"LLM returned invalid JSON format: {extraction_error}")
+            elif extraction_error_type == "llm_api_error":
+                if "api key" in extraction_error.lower() or "authentication" in extraction_error.lower():
+                    error_parts.append(f"API authentication failed: {extraction_error}")
+                elif "rate limit" in extraction_error.lower() or "quota" in extraction_error.lower():
+                    error_parts.append(f"API rate limit exceeded: {extraction_error}")
+                else:
+                    error_parts.append(f"LLM API error: {extraction_error}")
+            elif extraction_error:
+                error_parts.append(f"Extraction error: {extraction_error}")
+            
+            # Analyze what went wrong with specific diagnostics
+            if total_periods == 0:
+                diagnostic_parts = []
+                
+                # Check if PDF contains financial keywords
+                if extraction_details.get("pdf_contains_financial_data"):
+                    keywords_info = extraction_details.get("financial_keywords_detected", {})
+                    keyword_summary = ", ".join([f"{k}: {v} matches" for k, v in keywords_info.items()])
+                    diagnostic_parts.append(f"PDF text analysis: Financial keywords detected ({keyword_summary}), but LLM did not extract structured data.")
+                else:
+                    diagnostic_parts.append("PDF text analysis: No financial keywords detected. The PDF may not contain standard financial statements.")
+                
+                # Check what LLM returned
+                provider_name = extraction_details.get("llm_provider", "unknown").upper()
+                if llm_response_analysis:
+                    diagnostic_parts.append(f"LLM response analysis ({provider_name}): {'; '.join(llm_response_analysis)}")
+                
+                # Check raw LLM response
+                if raw_llm_response:
+                    preview = raw_llm_response[:500].replace('\n', ' ').replace('\r', ' ')
+                    provider_name = extraction_details.get("llm_provider", "unknown").upper()
+                    diagnostic_parts.append(f"LLM raw response preview ({provider_name}): {preview}...")
+                
+                # Check structure
+                provider_name = extraction_details.get("llm_provider", "unknown").upper()
+                if income_statement == {} and balance_sheet == {} and cashflow == {} and not key_metrics:
+                    diagnostic_parts.append(f"LLM ({provider_name}) returned empty objects for all financial statement types.")
+                else:
+                    diagnostic_parts.append(f"LLM ({provider_name}) returned partial structure: Income Statement ({extraction_details['income_statement_periods']} periods), Balance Sheet ({extraction_details['balance_sheet_periods']} periods), Cash Flow ({extraction_details['cashflow_periods']} periods), Key Metrics ({'Yes' if extraction_details.get('has_key_metrics') else 'No'})")
+                
+                # Add actionable advice
+                provider_name = extraction_details.get("llm_provider", "unknown").upper()
+                if extraction_details.get("pdf_contains_financial_data") and total_periods == 0:
+                    # Llama-only mode: All extractions use Llama
+                    # Llama-only mode: All extractions use Llama
+                    llama_url = extraction_details.get("llama_api_url", "http://localhost:11434")
+                    llama_model = extraction_details.get("llama_model", "llava:7b")
+                    diagnostic_parts.append(f"RECOMMENDATION: PDF contains financial data but Llama extraction failed. Ensure Ollama is running at {llama_url} and model {llama_model} is available. Try: (1) Ensure PDF has complete financial statements with clear labels, (2) Check if PDF is a scanned/image-based document (OCR may be needed), (3) Verify the document format matches standard 10-K/annual report structure, (4) Verify Ollama is running: 'ollama serve' and model is available: 'ollama pull {llama_model}'")
+                elif not extraction_details.get("pdf_contains_financial_data"):
+                    diagnostic_parts.append("RECOMMENDATION: Upload a document with complete financial statements (10-K filing, annual report, or quarterly report with Income Statement, Balance Sheet, and Cash Flow sections).")
+                
+                error_parts.extend(diagnostic_parts)
+            
+            # Check PDF text quality
+            if extraction_details["pdf_text_length"] < 500:
+                error_parts.append(f"PDF text is very short ({extraction_details['pdf_text_length']} characters). The PDF may be image-based or corrupted.")
+            elif extraction_details["pdf_text_length"] < 1000:
+                error_parts.append(f"PDF text is short ({extraction_details['pdf_text_length']} characters). The document may not contain complete financial statements.")
+            
+            if not error_parts:
+                error_parts.append("No financial data could be extracted. The PDF may not contain standard financial statements or the format may not be recognized.")
+            
+            # Format diagnostics with better structure
+            if len(error_parts) > 1:
+                error_message = "\n".join([f"• {part}" for part in error_parts])
+            else:
+                error_message = error_parts[0] if error_parts else "Unknown error"
+            message = f"PDF processed successfully! Extracted {updated_periods} data period(s) for {ticker_upper}.\n\nDiagnostics:\n{error_message}"
+        else:
+            message = f"PDF processed successfully! Extracted {updated_periods} data period(s) for {ticker_upper}. The analysis will be updated automatically."
+        
         return ManualDataResponse(
             success=True,
-            message=f"PDF processed successfully! Extracted {updated_periods} data period(s) for {ticker_upper}. The analysis will be updated automatically.",
-            updated_periods=updated_periods
+            message=message,
+            updated_periods=updated_periods,
+            extracted_data=extracted_data,  # Return extracted data for UI display
+            extraction_details=extraction_details  # Return detailed extraction information
         )
     except HTTPException:
         raise
     except Exception as e:
         import traceback
+        error_traceback = traceback.format_exc()
+        logger.error(f"Unexpected error in upload_pdf for {ticker}: {e}")
+        logger.error(f"Traceback: {error_traceback}")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error processing PDF: {str(e)}")
 

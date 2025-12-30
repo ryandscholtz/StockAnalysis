@@ -283,11 +283,23 @@ export const stockApi = {
     return response.data
   },
 
-  async uploadPDF(ticker: string, file: File): Promise<{ success: boolean; message: string; updated_periods?: number }> {
+  async uploadPDF(ticker: string, file: File): Promise<{ success: boolean; message: string; updated_periods?: number; extracted_data?: any; extraction_details?: any }> {
     const formData = new FormData()
     formData.append('file', file)
     
-    const response = await api.post<{ success: boolean; message: string; updated_periods?: number }>(`/api/upload-pdf?ticker=${ticker}`, formData, {
+    const response = await api.post<{ success: boolean; message: string; updated_periods?: number; extracted_data?: any }>(`/api/upload-pdf?ticker=${ticker}`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+    return response.data
+  },
+
+  async extractPDFImages(file: File): Promise<{ success: boolean; total_pages: number; images: Array<{ page_number: number; image_base64: string; width: number; height: number }>; message: string }> {
+    const formData = new FormData()
+    formData.append('file', file)
+    
+    const response = await api.post<{ success: boolean; total_pages: number; images: Array<{ page_number: number; image_base64: string; width: number; height: number }>; message: string }>('/api/extract-pdf-images', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },

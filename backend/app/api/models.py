@@ -143,3 +143,5 @@ class ManualDataResponse(BaseModel):
     success: bool
     message: str
     updated_periods: int
+    extracted_data: Optional[dict] = None  # Include extracted data for UI display
+    extraction_details: Optional[dict] = None  # Detailed information about extraction

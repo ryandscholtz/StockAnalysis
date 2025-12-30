@@ -7,6 +7,9 @@ from typing import Optional, Dict, List
 import requests
 from datetime import datetime, timedelta
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class YahooFinanceClient:
@@ -18,23 +21,77 @@ class YahooFinanceClient:
     def get_ticker(self, symbol: str) -> Optional[yf.Ticker]:
         """Get yfinance Ticker object"""
         try:
-            return yf.Ticker(symbol)
+            ticker = yf.Ticker(symbol)
+            # Try to access info to verify ticker is valid
+            # Use a timeout to avoid hanging
+            try:
+                _ = ticker.fast_info  # Fast check
+            except:
+                pass  # Some tickers don't have fast_info, that's okay
+            return ticker
         except Exception as e:
-            print(f"Error getting ticker {symbol}: {e}")
+            logger.error(f"Error getting ticker {symbol}: {e}")
             return None
     
     def get_current_price(self, ticker: yf.Ticker) -> Optional[float]:
-        """Get current stock price"""
+        """Get current stock price with retry logic for rate limiting"""
+        import time
+        
+        # Add initial delay to avoid hitting rate limits immediately
+        time.sleep(1)
+        
+        # Try history first (least rate-limited, most reliable)
         try:
-            info = ticker.info
-            return info.get('currentPrice') or info.get('regularMarketPrice')
-        except Exception:
+            hist = ticker.history(period="5d", timeout=15)  # Get 5 days, use most recent
+            if not hist.empty:
+                price = float(hist['Close'].iloc[-1])
+                if price and price > 0:
+                    logger.info(f"Got price from history: {price}")
+                    return price
+        except Exception as e:
+            error_str = str(e).lower()
+            if '429' not in error_str and 'too many requests' not in error_str:
+                logger.warning(f"Error getting price from history: {e}")
+        
+        # Try fast_info (less rate-limited than info)
+        try:
+            time.sleep(1)  # Small delay between requests
+            fast_info = ticker.fast_info
+            if hasattr(fast_info, 'lastPrice') and fast_info.lastPrice:
+                price = float(fast_info.lastPrice)
+                if price and price > 0:
+                    logger.info(f"Got price from fast_info: {price}")
+                    return price
+        except Exception as e:
+            logger.debug(f"fast_info not available: {e}")
+        
+        # Try info with retry for rate limiting (most rate-limited)
+        max_retries = 3
+        for attempt in range(max_retries):
             try:
-                hist = ticker.history(period="1d")
-                if not hist.empty:
-                    return float(hist['Close'].iloc[-1])
-            except Exception:
-                return None
+                if attempt > 0:
+                    wait_time = (2 ** attempt) * 5  # Exponential backoff: 10s, 20s, 40s
+                    logger.warning(f"Rate limited, waiting {wait_time}s before retry {attempt + 1}/{max_retries}")
+                    time.sleep(wait_time)
+                
+                info = ticker.info
+                price = info.get('currentPrice') or info.get('regularMarketPrice')
+                if price and price > 0:
+                    logger.info(f"Got price from info: {price}")
+                    return price
+                break  # Got info but no price, don't retry
+            except Exception as e:
+                error_str = str(e).lower()
+                if '429' in error_str or 'too many requests' in error_str or 'rate limit' in error_str:
+                    if attempt < max_retries - 1:
+                        continue  # Will wait before next attempt
+                    else:
+                        logger.error(f"Rate limited after {max_retries} attempts. Cannot get current price.")
+                else:
+                    logger.warning(f"Error getting price from ticker.info: {e}")
+                    break
+        
+        logger.error("Could not get current price from any source")
         return None
     
     def get_company_info(self, ticker: yf.Ticker) -> Dict:
@@ -116,24 +173,30 @@ class YahooFinanceClient:
             return None
     
     def search_tickers(self, query: str, max_results: int = 10) -> List[Dict]:
-        """Search for ticker symbols and company names"""
+        """Search for ticker symbols and company names using Yahoo Finance API"""
         try:
-            from yfinance import Search
-            search = Search(query, max_results=max_results, enable_fuzzy_query=True)
+            import json
+            import urllib.parse
             
+            # Use Yahoo Finance search API directly
+            url = f"https://query1.finance.yahoo.com/v1/finance/search?q={urllib.parse.quote(query)}&quotesCount={max_results}&newsCount=0"
+            
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+            
+            response = requests.get(url, headers=headers, timeout=10)
+            response.raise_for_status()
+            
+            data = response.json()
             results = []
-            if hasattr(search, 'quotes') and search.quotes:
-                for quote in search.quotes:
-                    # Handle both dict and object attributes
-                    if isinstance(quote, dict):
-                        ticker_symbol = quote.get('symbol', '') or quote.get('ticker', '')
-                        company_name = quote.get('longname') or quote.get('shortname') or quote.get('name', '') or quote.get('longName', '')
-                        exchange = quote.get('exchange', '') or quote.get('exchDisp', '')
-                    else:
-                        # Handle object attributes
-                        ticker_symbol = getattr(quote, 'symbol', '') or getattr(quote, 'ticker', '')
-                        company_name = getattr(quote, 'longname', '') or getattr(quote, 'shortname', '') or getattr(quote, 'name', '') or getattr(quote, 'longName', '')
-                        exchange = getattr(quote, 'exchange', '') or getattr(quote, 'exchDisp', '')
+            
+            # Extract quotes from the response
+            if 'quotes' in data and isinstance(data['quotes'], list):
+                for quote in data['quotes'][:max_results]:
+                    ticker_symbol = quote.get('symbol', '')
+                    company_name = quote.get('longname') or quote.get('shortname') or quote.get('name', '')
+                    exchange = quote.get('exchange', '') or quote.get('exchDisp', '')
                     
                     if ticker_symbol:
                         results.append({

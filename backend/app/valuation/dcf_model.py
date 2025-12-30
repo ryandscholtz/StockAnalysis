@@ -5,6 +5,10 @@ from typing import Optional, Dict
 from dataclasses import dataclass
 from app.data.data_fetcher import CompanyData
 import numpy as np
+import math
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -124,6 +128,188 @@ class DCFModel:
         print(f"Extracted {len(fcf_history)} FCF values")
         return list(reversed(fcf_history))  # Oldest to newest
     
+    def _classify_company_for_growth_cap(self) -> str:
+        """
+        Classify company for growth rate caps based on sector/industry
+        Returns: 'high_growth', 'cyclical', or 'mature'
+        """
+        sector = (self.company_data.sector or '').lower()
+        industry = (self.company_data.industry or '').lower()
+        
+        # High-growth sectors (tech, biotech)
+        high_growth_keywords = [
+            'technology', 'software', 'internet', 'biotechnology', 'biotech',
+            'pharmaceutical', 'semiconductor', 'semiconductors', 'tech',
+            'information technology', 'healthcare technology', 'cloud',
+            'saas', 'ai', 'artificial intelligence', 'machine learning'
+        ]
+        
+        # Cyclical/industrial sectors
+        cyclical_keywords = [
+            'industrial', 'manufacturing', 'automotive', 'construction',
+            'materials', 'metals', 'mining', 'steel', 'chemical',
+            'energy', 'oil', 'gas', 'petroleum', 'cyclical'
+        ]
+        
+        # Mature/utility sectors
+        mature_keywords = [
+            'utility', 'utilities', 'telecommunications', 'telecom',
+            'consumer staples', 'staples', 'food', 'beverage',
+            'tobacco', 'retail', 'banking', 'financial services',
+            'real estate', 'reit'
+        ]
+        
+        # Check sector
+        if any(keyword in sector for keyword in high_growth_keywords):
+            return 'high_growth'
+        if any(keyword in sector for keyword in cyclical_keywords):
+            return 'cyclical'
+        if any(keyword in sector for keyword in mature_keywords):
+            return 'mature'
+        
+        # Check industry if sector didn't match
+        if any(keyword in industry for keyword in high_growth_keywords):
+            return 'high_growth'
+        if any(keyword in industry for keyword in cyclical_keywords):
+            return 'cyclical'
+        if any(keyword in industry for keyword in mature_keywords):
+            return 'mature'
+        
+        # Default to mature if unknown
+        return 'mature'
+    
+    def _calculate_historical_cagr(self, values: list[float], years: int = None) -> Optional[float]:
+        """
+        Calculate CAGR from historical values
+        Uses longest available period (5-10 years) if years not specified
+        Returns CAGR as decimal (e.g., 0.15 for 15%)
+        """
+        if not values or len(values) < 2:
+            return None
+        
+        # Use longest available period (up to 10 years)
+        if years is None:
+            years = min(len(values) - 1, 10)
+            years = max(years, 5)  # Prefer at least 5 years
+        
+        if len(values) < years + 1:
+            # Use what we have
+            years = len(values) - 1
+        
+        if years < 1:
+            return None
+        
+        start_value = values[0]
+        end_value = values[-1]
+        
+        # Both must be positive for meaningful CAGR
+        if start_value <= 0 or end_value <= 0:
+            return None
+        
+        # Calculate CAGR: (End/Start)^(1/Years) - 1
+        try:
+            cagr = math.pow(end_value / start_value, 1.0 / years) - 1
+            return cagr
+        except (ValueError, ZeroDivisionError):
+            return None
+    
+    def _get_revenue_history(self) -> list[float]:
+        """Extract revenue history from income statements (oldest to newest)"""
+        revenue_history = []
+        
+        if not self.company_data.income_statement:
+            return revenue_history
+        
+        # Sort dates (most recent first typically)
+        sorted_dates = sorted(self.company_data.income_statement.keys(), reverse=True)
+        
+        for date in sorted_dates[:10]:  # Last 10 years
+            statement = self.company_data.income_statement[date]
+            if isinstance(statement, dict):
+                # Try multiple revenue field names
+                revenue = (
+                    statement.get('Total Revenue') or
+                    statement.get('Revenue') or
+                    statement.get('Net Sales') or
+                    statement.get('Sales') or
+                    0
+                )
+                if revenue and revenue > 0:
+                    revenue_history.append(float(revenue))
+        
+        return list(reversed(revenue_history))  # Oldest to newest
+    
+    def _calculate_growth_rate(self) -> float:
+        """
+        Calculate growth rate using improved method:
+        1. Calculate historical revenue CAGR (5-10 years)
+        2. Calculate historical FCF CAGR (same period)
+        3. Take the LOWER of the two values
+        4. Apply caps based on company classification
+        """
+        # Get revenue history
+        revenue_history = self._get_revenue_history()
+        revenue_cagr = None
+        if len(revenue_history) >= 2:
+            revenue_cagr = self._calculate_historical_cagr(revenue_history)
+        
+        # Get FCF history (already extracted, but need to get it again for consistency)
+        fcf_history = self.extract_free_cash_flow()
+        fcf_cagr = None
+        if len(fcf_history) >= 2:
+            fcf_cagr = self._calculate_historical_cagr(fcf_history)
+        
+        # Take the lower of the two (more conservative)
+        growth_rate = None
+        if revenue_cagr is not None and fcf_cagr is not None:
+            growth_rate = min(revenue_cagr, fcf_cagr)
+            logger.info(f"Revenue CAGR: {revenue_cagr*100:.2f}%, FCF CAGR: {fcf_cagr*100:.2f}%, Using lower: {growth_rate*100:.2f}%")
+        elif revenue_cagr is not None:
+            growth_rate = revenue_cagr
+            logger.info(f"Using Revenue CAGR: {growth_rate*100:.2f}% (FCF CAGR not available)")
+        elif fcf_cagr is not None:
+            growth_rate = fcf_cagr
+            logger.info(f"Using FCF CAGR: {growth_rate*100:.2f}% (Revenue CAGR not available)")
+        
+        # If we couldn't calculate CAGR, fall back to simple average
+        if growth_rate is None:
+            if len(fcf_history) >= 2:
+                growth_rates = []
+                for i in range(1, len(fcf_history)):
+                    if fcf_history[i-1] > 0:
+                        growth = (fcf_history[i] - fcf_history[i-1]) / abs(fcf_history[i-1])
+                        growth_rates.append(growth)
+                
+                if growth_rates:
+                    growth_rate = np.mean(growth_rates)
+                    logger.info(f"Fallback: Using average FCF growth rate: {growth_rate*100:.2f}%")
+                else:
+                    growth_rate = 0.05  # Default 5%
+                    logger.warning("No growth data available, using default 5%")
+            else:
+                growth_rate = 0.05  # Default 5%
+                logger.warning("Insufficient data for CAGR, using default 5%")
+        
+        # Apply caps based on company classification
+        company_type = self._classify_company_for_growth_cap()
+        if company_type == 'high_growth':
+            max_growth = 0.15  # 15% max
+        elif company_type == 'cyclical':
+            max_growth = 0.10  # 10% max
+        else:  # mature
+            max_growth = 0.05  # 5% max
+        
+        # Apply cap
+        if growth_rate > max_growth:
+            logger.info(f"Growth rate {growth_rate*100:.2f}% capped at {max_growth*100:.2f}% for {company_type} company")
+            growth_rate = max_growth
+        
+        # Also apply minimum floor (prevent extreme negative growth)
+        growth_rate = max(growth_rate, -0.10)  # -10% minimum
+        
+        logger.info(f"Final growth rate: {growth_rate*100:.2f}% (company type: {company_type})")
+        return growth_rate
+    
     def project_future_cash_flows(self, historical_fcf: list[float], wacc: float) -> tuple[list[float], float]:
         """
         Project future free cash flows
@@ -132,19 +318,8 @@ class DCFModel:
         if not historical_fcf:
             return [], 0.0
         
-        # Calculate growth rate (average of historical)
-        if len(historical_fcf) >= 2:
-            growth_rates = []
-            for i in range(1, len(historical_fcf)):
-                if historical_fcf[i-1] > 0:
-                    growth = (historical_fcf[i] - historical_fcf[i-1]) / abs(historical_fcf[i-1])
-                    growth_rates.append(growth)
-            
-            avg_growth = np.mean(growth_rates) if growth_rates else 0.05
-            # Cap growth at reasonable levels
-            avg_growth = min(max(avg_growth, -0.1), 0.3)
-        else:
-            avg_growth = 0.05  # Default 5%
+        # Calculate growth rate using improved method
+        avg_growth = self._calculate_growth_rate()
         
         # Start with most recent FCF
         base_fcf = historical_fcf[-1]

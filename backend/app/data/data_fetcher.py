@@ -52,16 +52,40 @@ class DataFetcher:
         Fetch all company data for a ticker
         """
         try:
+            logger.info(f"Fetching data for ticker: {ticker}")
             yf_ticker = self.yahoo_client.get_ticker(ticker)
             if not yf_ticker:
+                logger.warning(f"Failed to get yfinance ticker object for {ticker}")
                 return None
             
-            # Get company info
-            info = self.yahoo_client.get_company_info(yf_ticker)
+            # Get price first (tries fast_info and history which are less rate-limited)
             current_price = self.yahoo_client.get_current_price(yf_ticker)
             
             if not current_price:
-                return None
+                # Last resort: try to get most recent historical price directly
+                logger.warning(f"Could not get current price for {ticker}, trying historical price as fallback")
+                try:
+                    hist = yf_ticker.history(period="1mo", timeout=15)
+                    if not hist.empty and len(hist) > 0:
+                        current_price = float(hist['Close'].iloc[-1])
+                        logger.info(f"Using historical price as fallback: {current_price}")
+                    else:
+                        logger.error(f"Could not get any price data for {ticker}")
+                        return None
+                except Exception as e:
+                    error_str = str(e).lower()
+                    if '429' in error_str or 'too many requests' in error_str:
+                        logger.error(f"Rate limited - please wait 5-10 minutes before trying again")
+                    else:
+                        logger.error(f"Failed to get historical price fallback: {e}")
+                    return None
+            
+            # Get company info (may be rate-limited, but we already have price)
+            info = self.yahoo_client.get_company_info(yf_ticker)
+            if not info:
+                logger.warning(f"No company info returned for {ticker}, but we have price: {current_price}")
+                # Create minimal info dict if we have price but no info
+                info = {'longName': ticker.upper(), 'shortName': ticker.upper()}
             
             # Get financial statements - try multiple sources
             financials = self.yahoo_client.get_financials(yf_ticker)
