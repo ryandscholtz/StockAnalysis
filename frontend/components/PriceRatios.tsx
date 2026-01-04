@@ -12,7 +12,7 @@ export default function PriceRatiosComponent({ priceRatios }: PriceRatiosProps) 
   }
 
   const formatRatio = (value: number | null | undefined): string => {
-    if (value === null || value === undefined) return 'N/A'
+    if (value === null || value === undefined || isNaN(value) || !isFinite(value)) return '-'
     return value.toFixed(2)
   }
 
@@ -67,28 +67,24 @@ export default function PriceRatiosComponent({ priceRatios }: PriceRatiosProps) 
       </h2>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' }}>
-        {ratios.map((ratio) => {
-          if (ratio.value === null || ratio.value === undefined) return null
-          
-          return (
-            <div
-              key={ratio.key}
-              style={{
-                padding: '16px',
-                background: '#f9fafb',
-                borderRadius: '6px',
-                border: '1px solid #e5e7eb'
-              }}
-            >
-              <div style={{ fontSize: '13px', color: '#6b7280', marginBottom: '8px' }}>
-                {ratio.label}
-              </div>
-              <div style={{ fontSize: '24px', fontWeight: '700', color: getRatioColor(ratio.abbr, ratio.value) }}>
-                {formatRatio(ratio.value)}
-              </div>
+        {ratios.map((ratio) => (
+          <div
+            key={ratio.key}
+            style={{
+              padding: '16px',
+              background: '#f9fafb',
+              borderRadius: '6px',
+              border: '1px solid #e5e7eb'
+            }}
+          >
+            <div style={{ fontSize: '13px', color: '#6b7280', marginBottom: '8px' }}>
+              {ratio.label}
             </div>
-          )
-        })}
+            <div style={{ fontSize: '24px', fontWeight: '700', color: getRatioColor(ratio.abbr, ratio.value) }}>
+              {formatRatio(ratio.value)}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   )

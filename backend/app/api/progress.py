@@ -25,13 +25,23 @@ class ProgressTracker:
         if self.callback:
             try:
                 progress_data = {
+                    'type': 'progress',  # Required for frontend to recognize as progress update
                     'step': step,
                     'total': self.total_steps,
                     'task': task,
                     'progress': (step / self.total_steps) * 100
                 }
                 print(f"ProgressTracker.update: Step {step}/{self.total_steps} - {task}")  # Debug log
-                await self.callback(progress_data)
+                # Ensure callback is awaited and completes before continuing
+                if asyncio.iscoroutinefunction(self.callback):
+                    await self.callback(progress_data)
+                else:
+                    # If callback is not async, call it directly
+                    result = self.callback(progress_data)
+                    if asyncio.iscoroutine(result):
+                        await result
+                # Small delay to ensure the update is processed
+                await asyncio.sleep(0.05)
             except Exception as e:
                 print(f"Error in progress callback: {e}")
                 import traceback

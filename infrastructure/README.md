@@ -69,18 +69,16 @@ Set these in your backend `.env` file or environment:
 ```bash
 USE_DYNAMODB=true
 DYNAMODB_TABLE_NAME=stock-analyses
-DYNAMODB_REGION=us-east-1
-AWS_PROFILE=Cerebrum  # Or Personal
+DYNAMODB_REGION=eu-west-1
+AWS_PROFILE=Cerebrum
 ```
 
 ### AWS Profile
 
-To use a specific AWS profile:
+The application uses the Cerebrum AWS profile by default. To use a specific AWS profile:
 
 ```bash
 export AWS_PROFILE=Cerebrum
-# Or
-export AWS_PROFILE=Personal
 ```
 
 ## Table Structure
@@ -148,7 +146,7 @@ If the table exists from a previous deployment:
 - Check AWS profile: `aws configure list`
 
 ### "Region not found"
-- Specify region: `cdk deploy --context region=us-east-1`
+- Specify region: `cdk deploy --context region=eu-west-1`
 - Or set in `cdk.json` context
 
 ## Migration from SQLite

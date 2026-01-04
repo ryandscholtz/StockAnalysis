@@ -13,7 +13,7 @@ export default function GrowthMetricsComponent({ growthMetrics, currency }: Grow
   }
 
   const formatPercent = (value: number | null | undefined): string => {
-    if (value === null || value === undefined) return 'N/A'
+    if (value === null || value === undefined || isNaN(value) || !isFinite(value)) return '-'
     const sign = value >= 0 ? '+' : ''
     return `${sign}${value.toFixed(1)}%`
   }
@@ -45,30 +45,24 @@ export default function GrowthMetricsComponent({ growthMetrics, currency }: Grow
             Revenue Growth
           </h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {growthMetrics.revenueGrowth1Y !== null && growthMetrics.revenueGrowth1Y !== undefined && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '13px', color: '#6b7280' }}>1 Year:</span>
-                <span style={{ fontSize: '16px', fontWeight: '600', color: getColor(growthMetrics.revenueGrowth1Y) }}>
-                  {formatPercent(growthMetrics.revenueGrowth1Y)}
-                </span>
-              </div>
-            )}
-            {growthMetrics.revenueGrowth3Y !== null && growthMetrics.revenueGrowth3Y !== undefined && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '13px', color: '#6b7280' }}>3 Year CAGR:</span>
-                <span style={{ fontSize: '16px', fontWeight: '600', color: getColor(growthMetrics.revenueGrowth3Y) }}>
-                  {formatPercent(growthMetrics.revenueGrowth3Y)}
-                </span>
-              </div>
-            )}
-            {growthMetrics.revenueGrowth5Y !== null && growthMetrics.revenueGrowth5Y !== undefined && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '13px', color: '#6b7280' }}>5 Year CAGR:</span>
-                <span style={{ fontSize: '16px', fontWeight: '600', color: getColor(growthMetrics.revenueGrowth5Y) }}>
-                  {formatPercent(growthMetrics.revenueGrowth5Y)}
-                </span>
-              </div>
-            )}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '13px', color: '#6b7280' }}>1 Year:</span>
+              <span style={{ fontSize: '16px', fontWeight: '600', color: getColor(growthMetrics.revenueGrowth1Y) }}>
+                {formatPercent(growthMetrics.revenueGrowth1Y)}
+              </span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '13px', color: '#6b7280' }}>3 Year CAGR:</span>
+              <span style={{ fontSize: '16px', fontWeight: '600', color: getColor(growthMetrics.revenueGrowth3Y) }}>
+                {formatPercent(growthMetrics.revenueGrowth3Y)}
+              </span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '13px', color: '#6b7280' }}>5 Year CAGR:</span>
+              <span style={{ fontSize: '16px', fontWeight: '600', color: getColor(growthMetrics.revenueGrowth5Y) }}>
+                {formatPercent(growthMetrics.revenueGrowth5Y)}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -78,30 +72,24 @@ export default function GrowthMetricsComponent({ growthMetrics, currency }: Grow
             Earnings Growth
           </h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {growthMetrics.earningsGrowth1Y !== null && growthMetrics.earningsGrowth1Y !== undefined && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '13px', color: '#6b7280' }}>1 Year:</span>
-                <span style={{ fontSize: '16px', fontWeight: '600', color: getColor(growthMetrics.earningsGrowth1Y) }}>
-                  {formatPercent(growthMetrics.earningsGrowth1Y)}
-                </span>
-              </div>
-            )}
-            {growthMetrics.earningsGrowth3Y !== null && growthMetrics.earningsGrowth3Y !== undefined && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '13px', color: '#6b7280' }}>3 Year CAGR:</span>
-                <span style={{ fontSize: '16px', fontWeight: '600', color: getColor(growthMetrics.earningsGrowth3Y) }}>
-                  {formatPercent(growthMetrics.earningsGrowth3Y)}
-                </span>
-              </div>
-            )}
-            {growthMetrics.earningsGrowth5Y !== null && growthMetrics.earningsGrowth5Y !== undefined && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '13px', color: '#6b7280' }}>5 Year CAGR:</span>
-                <span style={{ fontSize: '16px', fontWeight: '600', color: getColor(growthMetrics.earningsGrowth5Y) }}>
-                  {formatPercent(growthMetrics.earningsGrowth5Y)}
-                </span>
-              </div>
-            )}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '13px', color: '#6b7280' }}>1 Year:</span>
+              <span style={{ fontSize: '16px', fontWeight: '600', color: getColor(growthMetrics.earningsGrowth1Y) }}>
+                {formatPercent(growthMetrics.earningsGrowth1Y)}
+              </span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '13px', color: '#6b7280' }}>3 Year CAGR:</span>
+              <span style={{ fontSize: '16px', fontWeight: '600', color: getColor(growthMetrics.earningsGrowth3Y) }}>
+                {formatPercent(growthMetrics.earningsGrowth3Y)}
+              </span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '13px', color: '#6b7280' }}>5 Year CAGR:</span>
+              <span style={{ fontSize: '16px', fontWeight: '600', color: getColor(growthMetrics.earningsGrowth5Y) }}>
+                {formatPercent(growthMetrics.earningsGrowth5Y)}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -111,30 +99,24 @@ export default function GrowthMetricsComponent({ growthMetrics, currency }: Grow
             Free Cash Flow Growth
           </h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {growthMetrics.fcfGrowth1Y !== null && growthMetrics.fcfGrowth1Y !== undefined && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '13px', color: '#6b7280' }}>1 Year:</span>
-                <span style={{ fontSize: '16px', fontWeight: '600', color: getColor(growthMetrics.fcfGrowth1Y) }}>
-                  {formatPercent(growthMetrics.fcfGrowth1Y)}
-                </span>
-              </div>
-            )}
-            {growthMetrics.fcfGrowth3Y !== null && growthMetrics.fcfGrowth3Y !== undefined && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '13px', color: '#6b7280' }}>3 Year CAGR:</span>
-                <span style={{ fontSize: '16px', fontWeight: '600', color: getColor(growthMetrics.fcfGrowth3Y) }}>
-                  {formatPercent(growthMetrics.fcfGrowth3Y)}
-                </span>
-              </div>
-            )}
-            {growthMetrics.fcfGrowth5Y !== null && growthMetrics.fcfGrowth5Y !== undefined && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '13px', color: '#6b7280' }}>5 Year CAGR:</span>
-                <span style={{ fontSize: '16px', fontWeight: '600', color: getColor(growthMetrics.fcfGrowth5Y) }}>
-                  {formatPercent(growthMetrics.fcfGrowth5Y)}
-                </span>
-              </div>
-            )}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '13px', color: '#6b7280' }}>1 Year:</span>
+              <span style={{ fontSize: '16px', fontWeight: '600', color: getColor(growthMetrics.fcfGrowth1Y) }}>
+                {formatPercent(growthMetrics.fcfGrowth1Y)}
+              </span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '13px', color: '#6b7280' }}>3 Year CAGR:</span>
+              <span style={{ fontSize: '16px', fontWeight: '600', color: getColor(growthMetrics.fcfGrowth3Y) }}>
+                {formatPercent(growthMetrics.fcfGrowth3Y)}
+              </span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '13px', color: '#6b7280' }}>5 Year CAGR:</span>
+              <span style={{ fontSize: '16px', fontWeight: '600', color: getColor(growthMetrics.fcfGrowth5Y) }}>
+                {formatPercent(growthMetrics.fcfGrowth5Y)}
+              </span>
+            </div>
           </div>
         </div>
       </div>

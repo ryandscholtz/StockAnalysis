@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { stockApi, SearchResult } from '@/lib/api'
+import { formatPrice, formatPercent, formatNumber } from '@/lib/currency'
 
 interface TickerCard {
   ticker: string
@@ -629,7 +630,7 @@ export default function BatchSearchPage() {
                         {stock.ticker}
                       </div>
                       <div style={{ fontSize: '14px', color: '#6b7280', lineHeight: '1.4' }}>
-                        {stock.company_name || 'N/A'}
+                        {stock.company_name || '-'}
                       </div>
                     </div>
                     {stock.recommendation && (
@@ -656,33 +657,23 @@ export default function BatchSearchPage() {
                         fontWeight: '700', 
                         color: color 
                       }}>
-                        {fairValuePct.toFixed(1)}%
+                        {formatPercent(fairValuePct, 1)}
                       </span>
                     </div>
                     
-                    {stock.current_price && stock.fair_value && (
-                      <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '8px' }}>
-                        <div>Price: ${stock.current_price.toFixed(2)}</div>
-                        <div>Fair Value: ${stock.fair_value.toFixed(2)}</div>
-                        {stock.margin_of_safety_pct !== null && stock.margin_of_safety_pct !== undefined && (
-                          <div style={{ marginTop: '4px', color: isGoodDeal ? '#10b981' : '#6b7280' }}>
-                            Margin: {stock.margin_of_safety_pct.toFixed(1)}%
-                          </div>
-                        )}
+                    <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '8px' }}>
+                      <div>Price: {formatPrice(stock.current_price)}</div>
+                      <div>Fair Value: {formatPrice(stock.fair_value)}</div>
+                      <div style={{ marginTop: '4px', color: isGoodDeal ? '#10b981' : '#6b7280' }}>
+                        Margin: {formatPercent(stock.margin_of_safety_pct, 1)}
                       </div>
-                    )}
+                    </div>
                   </div>
                   
-                  {(stock.financial_health_score || stock.business_quality_score) && (
-                    <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #e5e7eb', fontSize: '11px', color: '#9ca3af' }}>
-                      {stock.financial_health_score && (
-                        <span style={{ marginRight: '12px' }}>Health: {stock.financial_health_score.toFixed(0)}</span>
-                      )}
-                      {stock.business_quality_score && (
-                        <span>Quality: {stock.business_quality_score.toFixed(0)}</span>
-                      )}
-                    </div>
-                  )}
+                  <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #e5e7eb', fontSize: '11px', color: '#9ca3af' }}>
+                    <span style={{ marginRight: '12px' }}>Health: {formatNumber(stock.financial_health_score, 0)}</span>
+                    <span>Quality: {formatNumber(stock.business_quality_score, 0)}</span>
+                  </div>
                 </div>
               )
             })}

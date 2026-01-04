@@ -3,6 +3,8 @@ FastAPI application entry point for Stock Analysis Tool
 """
 from dotenv import load_dotenv
 import os
+import asyncio
+import logging
 
 # Load environment variables from .env file
 load_dotenv()
@@ -15,10 +17,16 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import Message
 from app.api.routes import router
+from datetime import datetime
+
+logger = logging.getLogger(__name__)
+
+# Generate build timestamp in yymmdd-hh:mm format
+BUILD_TIMESTAMP = datetime.now().strftime("%y%m%d-%H:%M")
 
 app = FastAPI(
     title="Stock Analysis API",
-    description="Charlie Munger methodology stock analysis API",
+    description="Value investing stock analysis API",
     version="1.0.0"
 )
 
@@ -116,4 +124,42 @@ async def root():
 @app.get("/health")
 async def health():
     return {"status": "healthy"}
+
+
+# Background task for EC2 auto-stop monitoring
+async def ec2_idle_monitor():
+    """Background task to monitor EC2 instance idle time and stop if idle"""
+    try:
+        from app.utils.ec2_manager import get_ec2_manager
+        ec2_manager = get_ec2_manager()
+        
+        if not ec2_manager.auto_stop_enabled:
+            logger.info("EC2 auto-stop is disabled, skipping idle monitoring")
+            return
+        
+        logger.info("Starting EC2 idle monitor background task")
+        
+        while True:
+            try:
+                await ec2_manager.check_and_stop_if_idle()
+            except Exception as e:
+                logger.error(f"Error in EC2 idle monitor: {e}")
+            
+            # Check every minute
+            await asyncio.sleep(60)
+    except Exception as e:
+        logger.error(f"Failed to start EC2 idle monitor: {e}")
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Start background tasks on application startup"""
+    # Start EC2 idle monitor if enabled
+    auto_stop_enabled = os.getenv("EC2_AUTO_STOP", "true").lower() == "true"
+    if auto_stop_enabled:
+        try:
+            asyncio.create_task(ec2_idle_monitor())
+            logger.info("EC2 auto-stop monitor started")
+        except Exception as e:
+            logger.warning(f"Failed to start EC2 auto-stop monitor: {e}")
 

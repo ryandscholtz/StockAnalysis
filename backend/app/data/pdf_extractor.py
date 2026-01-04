@@ -1,5 +1,5 @@
 """
-PDF extraction service using LLM to extract financial data
+PDF extraction service using AWS Textract and LLM to extract financial data
 """
 import os
 import logging
@@ -22,19 +22,48 @@ except ImportError:
 
 
 class PDFExtractor:
-    """Extract text from PDF files"""
+    """Extract text from PDF files using AWS Textract"""
     
     def __init__(self):
-        # Llama/Ollama is the only supported provider
-        # For local: use http://localhost:11434 (default Ollama)
-        # For hosted: use your hosted instance URL
-        self.llama_api_url = os.getenv("LLAMA_API_URL", "http://localhost:11434")
-        self.llama_model = os.getenv("LLAMA_MODEL", "llava:7b")  # Vision-capable model
-        self.llama_api_key = os.getenv("LLAMA_API_KEY")  # Optional, for hosted instances
+        # Use AWS Textract for PDF extraction
+        self.use_textract = os.getenv("USE_TEXTRACT", "true").lower() == "true"
         
-        # Log Llama configuration
-        logger.info(f"PDFExtractor initialized with Llama (100% Llama-only mode)")
-        logger.info(f"  ✓ Llama API URL: {self.llama_api_url}, Model: {self.llama_model}")
+        if self.use_textract:
+            try:
+                from app.data.textract_extractor import TextractExtractor
+                self.textract_extractor = TextractExtractor()
+                logger.info("PDFExtractor initialized with AWS Textract")
+            except Exception as e:
+                logger.error(f"Failed to initialize Textract: {e}")
+                logger.warning("Falling back to local PDF extraction (pdfplumber/PyPDF2)")
+                self.use_textract = False
+                self.textract_extractor = None
+        else:
+            self.textract_extractor = None
+            logger.info("PDFExtractor initialized with local extraction (Textract disabled)")
+        
+    
+    def get_pdf_page_count(self, pdf_bytes: bytes) -> int:
+        """Get the total number of pages in a PDF"""
+        try:
+            # Try pdfplumber first
+            with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+                return len(pdf.pages)
+        except Exception:
+            try:
+                # Fallback to PyPDF2
+                pdf_file = io.BytesIO(pdf_bytes)
+                pdf_reader = PyPDF2.PdfReader(pdf_file)
+                return len(pdf_reader.pages)
+            except Exception:
+                # If both fail, try to get from images
+                try:
+                    if OCR_AVAILABLE:
+                        images = convert_from_bytes(pdf_bytes, dpi=120)
+                        return len(images)
+                except Exception:
+                    pass
+                return 0
     
     def extract_text_from_pdf(self, pdf_bytes: bytes, use_ocr: bool = True) -> str:
         """Extract text content from PDF bytes, with OCR fallback for image-based PDFs"""
@@ -80,10 +109,11 @@ class PDFExtractor:
         except Exception as e:
             logger.warning(f"PyPDF2 failed: {e}")
         
-        # Method 3: OCR for image-based/scanned PDFs
+        # Method 3: OCR for image-based/scanned PDFs (FALLBACK ONLY - not used with Textract)
         if use_ocr:
             try:
-                logger.info("Text extraction methods failed, attempting OCR...")
+                logger.warning("⚠️ FALLBACK: Text extraction methods failed, attempting local OCR (image conversion)...")
+                logger.warning("⚠️ NOTE: AWS Textract does NOT require image conversion. This fallback is only used when Textract is unavailable.")
                 return self._extract_text_with_ocr(pdf_bytes)
             except Exception as e:
                 logger.error(f"OCR extraction also failed: {e}")
@@ -151,7 +181,10 @@ class PDFExtractor:
                 raise Exception("No images could be extracted from PDF. The PDF may be corrupted or empty.")
             
             total_pages = len(images)
-            logger.info(f"Successfully converted {total_pages} pages to images. Processing ALL pages with OCR...")
+            logger.warning(f"⚠️ FALLBACK MODE: Converted {total_pages} page(s) to images for local OCR processing.")
+            logger.warning("⚠️ NOTE: This is SLOW and not needed when using AWS Textract. Textract processes PDFs directly without image conversion.")
+            logger.warning("⚠️ To use Textract instead, ensure AWS credentials are configured and USE_TEXTRACT=true in .env")
+            logger.info(f"Processing {total_pages} page(s) with OCR...")
             
             # Verify images are valid
             for i, img in enumerate(images):
@@ -456,10 +489,9 @@ class PDFExtractor:
     
     async def extract_financial_data_per_page(self, pdf_bytes: bytes, ticker: str, progress_callback: Optional[Callable[[int, int], None]] = None) -> Tuple[Dict[str, Any], str]:
         """
-        Extract financial data by processing each page image separately with LLM vision
-        This approach uses LLM vision capabilities to read PDF pages as images directly
-        Processes pages concurrently for significant speedup
-        Returns tuple: (merged structured financial data, combined raw LLM responses)
+        Extract financial data from PDF using AWS Textract
+        This approach uses Textract to extract text and tables, then uses LLM to structure the data
+        Returns tuple: (merged structured financial data, raw extracted text)
         
         Args:
             pdf_bytes: PDF file bytes
@@ -467,227 +499,83 @@ class PDFExtractor:
             progress_callback: Optional callback function(current_page, total_pages) for progress updates
         """
         import asyncio
-        import time
         
-        # Convert PDF pages to images
-        try:
-            from pdf2image import convert_from_bytes
-            from PIL import Image
-            import base64
-        except ImportError:
-            raise ImportError(
-                "PDF to image conversion requires pdf2image and Pillow. Install with: pip install pdf2image Pillow. "
-                "Also install Poppler from https://github.com/oschwartz10612/poppler-windows/releases/"
-            )
-        
-        try:
-            logger.info("Converting PDF pages to images for LLM vision processing...")
-            images = convert_from_bytes(pdf_bytes, dpi=200)  # 200 DPI is good balance of quality and size
-            logger.info(f"Converted {len(images)} pages to images")
-        except Exception as e:
-            error_msg = str(e).lower()
-            if "poppler" in error_msg or "pdftoppm" in error_msg:
-                raise Exception(
-                    f"PDF to image conversion failed: Poppler is not installed. "
-                    f"Install Poppler: Windows - Download from https://github.com/oschwartz10612/poppler-windows/releases/ "
-                    f"or use: winget install poppler. Error: {e}"
-                )
-            raise Exception(f"PDF to image conversion failed: {e}")
-        
-        if not images:
-            raise ValueError("No images could be extracted from PDF")
-        
-        logger.info(f"Encoding {len(images)} images to base64 concurrently...")
-        
-        # Pre-encode all images to base64 concurrently
-        async def encode_image_to_base64(page_num: int, image) -> Tuple[int, str]:
-            """Convert PIL image to base64 string concurrently"""
-            loop = asyncio.get_event_loop()
-            def _encode():
-                buffer = io.BytesIO()
-                image.save(buffer, format='PNG', optimize=True)
-                img_bytes = buffer.getvalue()
-                return base64.b64encode(img_bytes).decode('utf-8')
-            encoded = await loop.run_in_executor(None, _encode)
-            return page_num, encoded
-        
-        # Encode all images concurrently
-        encode_tasks = [encode_image_to_base64(page_num, image) for page_num, image in enumerate(images, start=1)]
-        encoded_images = await asyncio.gather(*encode_tasks)
-        
-        # Create a dictionary for quick lookup
-        image_base64_map = {page_num: img_base64 for page_num, img_base64 in encoded_images}
-        logger.info(f"Encoded {len(encoded_images)} images to base64")
-        
-        logger.info(f"Processing {len(images)} page images with LLM vision (concurrent processing)...")
-        
-        # Process pages concurrently with a semaphore to limit concurrent requests
-        # Vision API calls are I/O bound, so we can handle many concurrent requests
-        # Limit to 30 concurrent requests for optimal throughput
-        max_concurrent = 30
-        semaphore = asyncio.Semaphore(max_concurrent)
-        logger.info(f"Processing up to {max_concurrent} pages concurrently")
-        
-        # Progress tracking
-        completed_pages = set()
-        total_pages = len(images)
-        last_progress_log_time = time.time()
-        progress_log_interval = 10.0  # Log progress every 10 seconds
-        progress_info = {"current": 0, "total": total_pages}  # Store progress for access
-        
-        async def log_progress():
-            """Periodically log progress"""
-            nonlocal last_progress_log_time, progress_info
-            while len(completed_pages) < total_pages:
-                await asyncio.sleep(1)  # Check every second
-                current_time = time.time()
-                if current_time - last_progress_log_time >= progress_log_interval:
-                    completed_count = len(completed_pages)
-                    progress_info["current"] = completed_count
-                    progress_msg = f"Processing image {completed_count} of {total_pages}"
-                    logger.info(progress_msg)
-                    print(f"[PROGRESS] {progress_msg}")  # Print to console for immediate visibility
-                    if progress_callback:
-                        try:
-                            progress_callback(completed_count, total_pages)
-                        except Exception as e:
-                            logger.warning(f"Progress callback error: {e}")
-                    last_progress_log_time = current_time
-        
-        # Start progress logging task
-        progress_task = asyncio.create_task(log_progress())
-        
-        async def process_page(page_num: int) -> Tuple[int, Dict[str, Any], str]:
-            """Process a single page asynchronously"""
-            async with semaphore:
-                try:
-                    logger.info(f"Processing page {page_num}/{len(images)} with LLM vision...")
-                    
-                    # Get pre-encoded base64 image
-                    img_base64 = image_base64_map[page_num]
-                    
-                    # Create vision-based prompt
-                    prompt = self._create_vision_extraction_prompt(ticker, page_num=page_num, total_pages=len(images))
-                    
-                    # Extract from this page using vision (run in executor since API calls are sync)
-                    # Use run_in_executor to run sync API calls concurrently
-                    loop = asyncio.get_event_loop()
-                    
-                    # Log which provider we're actually using
-                    logger.info(f"Processing page {page_num} with Llama (Llama-only mode)")
-                    
-                    # Llama-only mode: Use Llama for all extractions
-                    logger.info(f"Using Llama for page {page_num} (URL: {self.llama_api_url}, Model: {self.llama_model})")
-                    try:
-                        page_data, raw_response = await loop.run_in_executor(
-                            None, self._extract_with_llama_vision, prompt, img_base64
-                        )
-                    except Exception as e:
-                        logger.error(f"Llama extraction failed for page {page_num}: {e}")
-                        logger.error(f"Check if Ollama is running at {self.llama_api_url}")
-                        raise ValueError(f"Llama extraction failed. Error: {e}. Ensure Ollama is running at {self.llama_api_url} with model {self.llama_model}.")
-                    
-                    # Mark page as completed
-                    completed_pages.add(page_num)
-                    
-                    # Log what was extracted from this page
-                    if page_data:
-                        for key in ["income_statement", "balance_sheet", "cashflow", "key_metrics"]:
-                            if key in page_data and isinstance(page_data[key], dict) and len(page_data[key]) > 0:
-                                logger.info(f"Page {page_num}: Found {len(page_data[key])} items in {key}")
-                    
-                    # Check if we got any data from this page
-                    has_data = False
-                    for key in ["income_statement", "balance_sheet", "cashflow", "key_metrics"]:
-                        if key in page_data and isinstance(page_data[key], dict) and len(page_data[key]) > 0:
-                            has_data = True
-                            break
-                    
-                    if has_data:
-                        logger.info(f"Page {page_num}: Extracted data successfully")
-                        return page_num, page_data, raw_response
-                    else:
-                        logger.info(f"Page {page_num}: No financial data found in image")
-                        return page_num, {}, raw_response[:500] + "..." if len(raw_response) > 500 else raw_response
-                        
-                except Exception as e:
-                    logger.error(f"Error processing page {page_num}: {e}")
-                    completed_pages.add(page_num)
-                    return page_num, {}, f"Error: {str(e)}"
-        
-        # Create tasks for all pages
-        tasks = [process_page(page_num) for page_num in range(1, len(images) + 1)]
-        
-        # Process all pages concurrently
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        
-        # Cancel progress logging task
-        progress_task.cancel()
-        try:
-            await progress_task
-        except asyncio.CancelledError:
-            pass
-        
-        # Final progress log
-        logger.info(f"Completed processing all {total_pages} images")
-        
-        # Collect results - include partial data even if some pages failed
-        all_results = []
-        all_raw_responses = []
-        pages_with_data = 0
-        pages_with_errors = 0
-        
-        for result in results:
-            if isinstance(result, Exception):
-                logger.error(f"Exception in page processing: {result}")
-                pages_with_errors += 1
-                all_raw_responses.append(f"Page (error):\nError: {str(result)}")
-                continue
-            
-            page_num, page_data, raw_response = result
-            
-            # Include page_data even if it's partially empty - partial data is valuable
-            if page_data:
-                # Check if page_data has any non-empty sections
-                has_any_data = False
-                for key in ["income_statement", "balance_sheet", "cashflow", "key_metrics"]:
-                    if key in page_data and isinstance(page_data[key], dict) and len(page_data[key]) > 0:
-                        has_any_data = True
-                        break
+        # Use Textract if available
+        if self.use_textract and self.textract_extractor:
+            try:
+                logger.info(f"Using AWS Textract to extract financial data for {ticker}")
+                logger.info("✓ Textract processes PDF directly - NO image conversion needed (faster and more accurate)")
                 
-                if has_any_data:
-                    all_results.append(page_data)
-                    pages_with_data += 1
-                    all_raw_responses.append(f"Page {page_num}:\n{raw_response}")
-                else:
-                    # Even if empty, include it for debugging
-                    all_raw_responses.append(f"Page {page_num} (no data):\n{raw_response}")
-            elif raw_response:
-                all_raw_responses.append(f"Page {page_num} (no data):\n{raw_response}")
+                # Update progress: starting extraction
+                if progress_callback:
+                    try:
+                        progress_callback(0, 1)
+                    except Exception as e:
+                        logger.warning(f"Progress callback error: {e}")
+                
+                # Extract financial data using Textract (processes entire PDF at once)
+                # Run in executor since Textract calls are synchronous
+                loop = asyncio.get_event_loop()
+                extracted_data, raw_text = await loop.run_in_executor(
+                    None,
+                    self.textract_extractor.extract_financial_data,
+                    pdf_bytes,
+                    ticker
+                )
+                
+                # Update progress: extraction complete
+                if progress_callback:
+                    try:
+                        progress_callback(1, 1)
+                    except Exception as e:
+                        logger.warning(f"Progress callback error: {e}")
+                
+                logger.info(f"Textract extraction completed for {ticker}")
+                return extracted_data, raw_text
+                
+            except Exception as e:
+                logger.error(f"Textract extraction failed: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
+                # Fall back to local extraction
+                logger.warning("Falling back to local PDF extraction (this will be slower and may convert to images)")
+                self.use_textract = False
         
-        logger.info(f"Extraction summary: {pages_with_data} pages with data, {pages_with_errors} pages with errors, {len(all_results)} total results to merge")
+        # Fallback: Use local extraction (pdfplumber/PyPDF2) with basic pattern matching
+        # NOTE: This fallback should rarely be used if Textract is properly configured
+        logger.warning(f"⚠️ FALLBACK MODE: Using local PDF extraction for {ticker} (Textract not available or failed)")
+        logger.warning("⚠️ NOTE: Local extraction may convert PDF to images for OCR - this is SLOW and not needed with Textract")
+        logger.warning("⚠️ To use Textract: Ensure AWS credentials are configured (AWS_PROFILE, AWS_REGION) and USE_TEXTRACT=true")
         
-        # Even if we have partial data, merge it - partial data is better than nothing
-        if not all_results:
-            logger.warning("No data extracted from any page")
-            return {
-                "income_statement": {},
-                "balance_sheet": {},
-                "cashflow": {},
-                "key_metrics": {}
-            }, "\n\n".join(all_raw_responses) if all_raw_responses else ""
-        
-        # Merge results from all pages
-        logger.info(f"Merging data from {len(all_results)} pages...")
-        merged_data = self._merge_extracted_data(all_results)
-        
-        combined_response = "\n\n---\n\n".join(all_raw_responses)
-        
-        logger.info(f"Successfully merged data: {len(merged_data.get('income_statement', {}))} income periods, "
-                   f"{len(merged_data.get('balance_sheet', {}))} balance periods, "
-                   f"{len(merged_data.get('cashflow', {}))} cashflow periods")
-        
-        return merged_data, combined_response
+        try:
+            # For local fallback, try without OCR first (faster)
+            pdf_text = self.extract_text_from_pdf(pdf_bytes, use_ocr=False)
+            if not pdf_text or len(pdf_text.strip()) < 100:
+                # Only use OCR if text extraction failed
+                logger.warning("⚠️ FALLBACK: Text extraction failed, falling back to OCR (image conversion)...")
+                logger.warning("⚠️ NOTE: OCR converts PDF pages to images - this is SLOW. AWS Textract processes PDFs directly without conversion.")
+                pdf_text = self.extract_text_from_pdf(pdf_bytes, use_ocr=True)
+            
+            if progress_callback:
+                try:
+                    progress_callback(0, 1)
+                except Exception as e:
+                    logger.warning(f"Progress callback error: {e}")
+            
+            # Use basic extraction (no LLM available)
+            extracted_data = self._extract_with_rules(pdf_text)
+            
+            if progress_callback:
+                try:
+                    progress_callback(1, 1)
+                except Exception as e:
+                    logger.warning(f"Progress callback error: {e}")
+            
+            return extracted_data, pdf_text
+            
+        except Exception as e:
+            logger.error(f"Local PDF extraction failed: {e}")
+            raise
     
     def _create_vision_extraction_prompt(self, ticker: str, page_num: int = None, total_pages: int = None) -> str:
         """Create prompt for LLM vision to extract financial data from PDF page images"""
@@ -735,11 +623,24 @@ EXTRACT THE FOLLOWING DATA:
 
 INSTRUCTIONS:
 - Read the image carefully - look for tables, financial statements, or any structured data
-- Extract numbers exactly as you see them, then convert to numeric format
+- CRITICAL: First, check the table header/title for unit notation:
+  * Look for text like "In millions", "In thousands", "In billions" at the top of the table
+  * If you see "In millions except per share data", ALL numbers in the table are in millions
+  * If table says "In millions" and shows $47,061, you must extract as 47061000000 (47,061 × 1,000,000)
+  * If table says "In thousands" and shows $1,000, you must extract as 1000000 (1,000 × 1,000)
+  * If table says "In billions" and shows $1.5, you must extract as 1500000000 (1.5 × 1,000,000,000)
+- Extract numbers exactly as you see them in the table, then apply the unit conversion
 - Look for dates in various formats: YYYY-MM-DD, YYYY-12-31, "Year ended December 31, YYYY", "Fiscal Year YYYY"
 - Convert all monetary values to numbers (remove currency symbols, commas, parentheses for negatives)
 - If you see a table with years as columns and financial terms as rows, extract all the data
 - Be very thorough - even partial data is valuable
+
+UNIT CONVERSION EXAMPLES:
+- Table header: "In millions except per share data"
+- Table shows: "Net Operating Revenues: $47,061" for 2024
+- You must extract: "Total Revenue": 47061000000 (because 47,061 × 1,000,000 = 47,061,000,000)
+- Table shows: "Net Income: $10,631" for 2024
+- You must extract: "Net Income": 10631000000 (because 10,631 × 1,000,000 = 10,631,000,000)
 
 CRITICAL: You MUST extract financial data if you see ANY numbers that look like financial metrics in the image.
 Do NOT return empty objects {{}} unless the page contains absolutely no financial data.
@@ -760,18 +661,24 @@ IMPORTANT: You MUST always return a JSON object with these exact top-level keys:
 
 Return ONLY valid JSON. Here are examples:
 
-EXAMPLE 1 - When data is found:
+EXAMPLE 1 - When data is found (with proper unit conversion):
+Table header says "In millions except per share data" and shows:
+- Net Operating Revenues 2024: $47,061 → extract as "Total Revenue": 47061000000
+- Net Income Attributable to Shareowners 2024: $10,631 → extract as "Net Income": 10631000000
+- Operating Income 2024: $9,992 → extract as "Operating Income": 9992000000
+- Income Before Income Taxes 2024: $13,086 → extract as "Income Before Tax": 13086000000
+
 {{
   "income_statement": {{
     "2024-12-31": {{
-      "Total Revenue": 1000000,
-      "Net Income": 100000,
-      "Operating Income": 150000,
-      "EBIT": 150000,
-      "Income Before Tax": 120000
+      "Total Revenue": 47061000000,
+      "Net Income": 10631000000,
+      "Operating Income": 9992000000,
+      "EBIT": 9992000000,
+      "Income Before Tax": 13086000000
     }},
     "2023-12-31": {{
-      "Total Revenue": 950000,
+      "Total Revenue": 45754000000,
       "Net Income": 95000
     }}
   }},
@@ -989,8 +896,110 @@ PDF Text ({len(pdf_text)} characters):
             logger.error(f"OpenAI extraction failed: {e}")
             raise
     
+    async def _extract_with_llama_vision_async(self, prompt: str, image_base64: str) -> Tuple[Dict[str, Any], str]:
+        """Extract using Llama/Ollama API with vision (image input) - Simplified version. Returns (parsed_data, raw_response)"""
+        import requests
+        import json as json_module
+        
+        # Simple, direct Ollama native API call (what works locally)
+        payload = {
+            "model": self.llama_model,
+            "prompt": prompt,
+            "images": [image_base64],
+            "stream": False,
+            "options": {
+                "temperature": 0.0,
+                "num_predict": 16000
+            }
+        }
+        
+        try:
+            response = requests.post(
+                f"{self.llama_api_url}/api/generate",
+                json=payload,
+                headers={"Content-Type": "application/json"},
+                timeout=300  # 5 minute timeout (reasonable for vision processing)
+            )
+            response.raise_for_status()
+            result = response.json()
+            content = result.get("response", "").strip()
+            
+            # Remove markdown code blocks if present
+            if content.startswith("```json"):
+                content = content[7:]
+            if content.startswith("```"):
+                content = content[3:]
+            if content.endswith("```"):
+                content = content[:-3]
+            content = content.strip()
+            
+            parsed_data = json_module.loads(content)
+            return parsed_data, content
+            
+        except requests.exceptions.Timeout:
+            raise ValueError(f"Request timed out after 5 minutes. The model may need more time or the instance may be overloaded.")
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Ollama API request failed: {str(e)}")
+        except json_module.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON response: {str(e)}. Response: {content[:500] if 'content' in locals() else 'N/A'}")
+    
+    def _extract_with_llama_vision_simple(self, prompt: str, image_base64: str) -> Tuple[Dict[str, Any], str]:
+        """Simple synchronous version for executor - matches local test"""
+        import requests
+        import json as json_module
+        
+        payload = {
+            "model": self.llama_model,
+            "prompt": prompt,
+            "images": [image_base64],
+            "stream": False,
+            "options": {
+                "temperature": 0.0,
+                "num_predict": 16000
+            }
+        }
+        
+        logger.info(f"Making request to {self.llama_api_url}/api/generate with model {self.llama_model}")
+        logger.info(f"Image size: {len(image_base64)} chars, Prompt length: {len(prompt)} chars")
+        
+        try:
+            response = requests.post(
+                f"{self.llama_api_url}/api/generate",
+                json=payload,
+                headers={"Content-Type": "application/json"},
+                timeout=300
+            )
+            logger.info(f"Response status: {response.status_code}")
+            response.raise_for_status()
+            result = response.json()
+            content = result.get("response", "").strip()
+            logger.info(f"Got response, length: {len(content)} chars")
+            
+            # Remove markdown code blocks
+            if content.startswith("```json"):
+                content = content[7:]
+            if content.startswith("```"):
+                content = content[3:]
+            if content.endswith("```"):
+                content = content[:-3]
+            content = content.strip()
+            
+            parsed_data = json_module.loads(content)
+            logger.info(f"Parsed JSON successfully, keys: {list(parsed_data.keys())}")
+            return parsed_data, content
+            
+        except requests.exceptions.Timeout:
+            logger.error("Request timed out after 5 minutes")
+            raise ValueError(f"Request timed out after 5 minutes")
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Ollama API request failed: {str(e)}")
+            raise ValueError(f"Ollama API request failed: {str(e)}")
+        except json_module.JSONDecodeError as e:
+            logger.error(f"Invalid JSON response: {str(e)}, content preview: {content[:500] if 'content' in locals() else 'N/A'}")
+            raise ValueError(f"Invalid JSON response: {str(e)}")
+    
     def _extract_with_llama_vision(self, prompt: str, image_base64: str) -> Tuple[Dict[str, Any], str]:
-        """Extract using Llama/Ollama API with vision (image input). Returns (parsed_data, raw_response)"""
+        """Extract using Llama/Ollama API with vision (image input) - SYNC VERSION (kept for backward compatibility). Returns (parsed_data, raw_response)"""
         try:
             import requests
             import json as json_module
@@ -1012,7 +1021,7 @@ PDF Text ({len(pdf_text)} characters):
                 "messages": [
                     {
                         "role": "system",
-                        "content": "You are a financial data extraction expert. Analyze PDF page images and extract financial numbers. You MUST extract data if you see ANY financial numbers in tables or statements. Never return empty objects unless the image contains absolutely no financial data."
+                        "content": "You are a financial data extraction expert. Analyze PDF page images and extract financial numbers. CRITICAL: Always check the table header for units (In millions, In thousands, In billions). If table says 'In millions' and shows $47,061, extract as 47061000000 (multiply by 1,000,000). You MUST extract data if you see ANY financial numbers in tables or statements. Never return empty objects unless the image contains absolutely no financial data."
                     },
                     {
                         "role": "user",
@@ -1020,7 +1029,7 @@ PDF Text ({len(pdf_text)} characters):
                             {
                                 "type": "image_url",
                                 "image_url": {
-                                    "url": f"data:image/png;base64,{image_base64}"
+                                    "url": f"data:image/jpeg;base64,{image_base64}"
                                 }
                             },
                             {
@@ -1034,37 +1043,38 @@ PDF Text ({len(pdf_text)} characters):
                 "max_tokens": 8000  # Llama models can handle larger outputs
             }
             
-            # Try OpenAI-compatible endpoint first (/v1/chat/completions)
-            try:
-                response = requests.post(
-                    f"{self.llama_api_url}/v1/chat/completions",
-                    json=openai_payload,
-                    headers=headers,
-                    timeout=300  # 5 minute timeout for large models
-                )
-                response.raise_for_status()
-                result = response.json()
-                content = result["choices"][0]["message"]["content"].strip()
-            except requests.exceptions.RequestException as e:
-                # Fallback to Ollama native API format
-                logger.info(f"OpenAI-compatible format failed, trying Ollama native format: {e}")
-                
-                ollama_payload = {
-                    "model": self.llama_model,
-                    "prompt": prompt,
-                    "images": [image_base64],  # Ollama accepts base64 images directly
-                    "stream": False,
-                    "options": {
-                        "temperature": 0.0,
-                        "num_predict": 16000
-                    }
+            # Use Ollama native API format directly (more reliable for vision models)
+            # Vision models can take hours for large documents (160+ pages)
+            ollama_payload = {
+                "model": self.llama_model,
+                "prompt": prompt,
+                "images": [image_base64],  # Ollama accepts base64 images directly
+                "stream": False,
+                "options": {
+                    "temperature": 0.0,
+                    "num_predict": 16000
                 }
-                
+            }
+            
+            try:
                 response = requests.post(
                     f"{self.llama_api_url}/api/generate",
                     json=ollama_payload,
                     headers=headers,
-                    timeout=300
+                    timeout=10800  # 3 hour timeout for large document processing
+                )
+                response.raise_for_status()
+                result = response.json()
+                content = result.get("response", "").strip()
+            except requests.exceptions.RequestException as e:
+                # Fallback to OpenAI-compatible endpoint if Ollama native fails
+                logger.info(f"Ollama native format failed, trying OpenAI-compatible format: {e}")
+                
+                response = requests.post(
+                    f"{self.llama_api_url}/v1/chat/completions",
+                    json=openai_payload,
+                    headers=headers,
+                    timeout=10800  # 3 hour timeout for large document processing
                 )
                 response.raise_for_status()
                 result = response.json()
@@ -1087,15 +1097,20 @@ PDF Text ({len(pdf_text)} characters):
             logger.info(f"Llama vision extraction successful. Parsed keys: {list(parsed_data.keys())}")
             return parsed_data, raw_response
             
+        except requests.exceptions.Timeout as e:
+            logger.error(f"Llama API request timed out after 3 hours: {e}")
+            raise ValueError(f"Llama API request timed out after 3 hours. For very large documents (160+ pages), processing can take 4+ hours. Consider processing in smaller batches or using a faster model. Error: {str(e)}")
         except requests.exceptions.RequestException as e:
             logger.error(f"Llama API request failed: {e}")
+            error_msg = str(e)
             if hasattr(e, 'response') and e.response is not None:
                 try:
                     error_body = e.response.text[:500]
                     logger.error(f"Response status: {e.response.status_code}, body: {error_body}")
+                    error_msg = f"{error_msg}. Response: {error_body}"
                 except:
                     pass
-            raise ValueError(f"Llama API request failed: {e}")
+            raise ValueError(f"Llama API request failed: {error_msg}")
         except json_module.JSONDecodeError as e:
             logger.error(f"Failed to parse JSON from Llama response: {e}")
             logger.error(f"Raw response (first 1000 chars): {raw_response[:1000] if 'raw_response' in locals() else 'N/A'}")
@@ -1126,7 +1141,7 @@ PDF Text ({len(pdf_text)} characters):
                             {
                                 "type": "image_url",
                                 "image_url": {
-                                    "url": f"data:image/png;base64,{image_base64}"
+                                    "url": f"data:image/jpeg;base64,{image_base64}"
                                 }
                             },
                             {

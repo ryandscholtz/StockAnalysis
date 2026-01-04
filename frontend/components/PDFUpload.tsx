@@ -26,8 +26,6 @@ export default function PDFUpload({ ticker, onDataExtracted }: PDFUploadProps) {
   const [uploading, setUploading] = useState(false)
   const [message, setMessage] = useState<string>('')
   const [error, setError] = useState<string>('')
-  const [extractedImages, setExtractedImages] = useState<PDFImage[]>([])
-  const [pdfConversionStatus, setPdfConversionStatus] = useState<string>('')
   const [processingStatus, setProcessingStatus] = useState<string>('')
   const [extractedData, setExtractedData] = useState<ExtractedData | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -48,57 +46,74 @@ export default function PDFUpload({ ticker, onDataExtracted }: PDFUploadProps) {
 
     setError('')
     setMessage('')
-    setPdfConversionStatus('')
     setProcessingStatus('')
     setUploading(true)
-    setExtractedImages([])
     setExtractedData(null)
 
-    try {
-      // Step 1: Convert PDF to images
-      setPdfConversionStatus('Converting PDF pages to images...')
-      let imageCount = 0
-      try {
-        const imageResult = await stockApi.extractPDFImages(file)
-        if (imageResult.success && imageResult.images.length > 0) {
-          setExtractedImages(imageResult.images)
-          imageCount = imageResult.total_pages
-          setPdfConversionStatus(`✅ PDF conversion complete: ${imageCount} page(s) converted to images`)
-        } else {
-          setPdfConversionStatus('⚠️ PDF conversion completed but no images were extracted')
-        }
-      } catch (imgErr: any) {
-        console.warn('Image extraction failed (non-critical):', imgErr)
-        setPdfConversionStatus(`⚠️ PDF conversion warning: ${imgErr.message || 'Could not extract images'}`)
-        // Don't fail the whole upload if image extraction fails
-      }
+    // Declare progress interval outside try block so it's accessible in catch/finally
+    let progressInterval: NodeJS.Timeout | null = null
+    let elapsedSeconds = 0
 
-      // Step 2: Process images with LLM vision
-      setProcessingStatus('Processing images with AI vision model...')
-      const result = await stockApi.uploadPDF(ticker, file)
+    try {
+      // Process PDF directly with AWS Textract (no image conversion needed)
+      setProcessingStatus('📄 Processing PDF with AWS Textract...')
       
-      // Update processing status
-      if (result.updated_periods && result.updated_periods > 0) {
-        setProcessingStatus(`✅ AI processing complete: Extracted ${result.updated_periods} data period(s) from ${imageCount} page(s)`)
-      } else {
-        setProcessingStatus(`⚠️ AI processing completed but no financial data was extracted from ${imageCount} page(s)`)
-      }
+      // Update progress every 15 seconds while processing
+      progressInterval = setInterval(() => {
+        elapsedSeconds += 15
+        const minutes = Math.floor(elapsedSeconds / 60)
+        const seconds = elapsedSeconds % 60
+        const timeStr = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`
+        setProcessingStatus(`📄 Processing PDF with AWS Textract... (${timeStr} elapsed)`)
+      }, 15000) // Update every 15 seconds
       
-      setMessage(result.message || 'PDF processed successfully!')
-      
-      // Store extracted data if available
-      if (result.extracted_data) {
-        setExtractedData(result.extracted_data as ExtractedData)
-      }
-      
-      if (onDataExtracted) {
-        setTimeout(() => {
-          onDataExtracted()
-        }, 2000)
+      try {
+        const result = await stockApi.uploadPDF(ticker, file)
+        
+        // Clear progress interval when done
+        if (progressInterval) {
+          clearInterval(progressInterval)
+        }
+        
+        // Update processing status
+        if (result.updated_periods && result.updated_periods > 0) {
+          setProcessingStatus(`✅ Textract processing complete: Extracted ${result.updated_periods} data period(s)`)
+        } else {
+          setProcessingStatus(`⚠️ Textract processing completed but no financial data was extracted`)
+        }
+        
+        setMessage(result.message || 'PDF processed successfully!')
+        
+        // Store extracted data if available
+        if (result.extracted_data) {
+          setExtractedData(result.extracted_data as ExtractedData)
+        }
+        
+        if (onDataExtracted) {
+          setTimeout(() => {
+            onDataExtracted()
+          }, 2000)
+        }
+      } catch (err: any) {
+        // Clear progress interval on error
+        if (progressInterval) {
+          clearInterval(progressInterval)
+        }
+        setError(err.response?.data?.detail || err.message || 'Error uploading PDF')
+        setProcessingStatus('❌ Processing failed')
       }
     } catch (err: any) {
+      // Clear progress interval on error (outer catch for any other errors)
+      if (progressInterval) {
+        clearInterval(progressInterval)
+      }
       setError(err.response?.data?.detail || err.message || 'Error uploading PDF')
+      setProcessingStatus('❌ Processing failed')
     } finally {
+      // Clear progress interval in finally as well (safety)
+      if (progressInterval) {
+        clearInterval(progressInterval)
+      }
       setUploading(false)
       // Reset file input
       if (fileInputRef.current) {
@@ -175,7 +190,7 @@ export default function PDFUpload({ ticker, onDataExtracted }: PDFUploadProps) {
             <div style={{ fontSize: '32px', marginBottom: '12px' }}>⏳</div>
             <p style={{ color: '#3b82f6', fontWeight: '500' }}>Processing PDF...</p>
             <p style={{ color: '#6b7280', fontSize: '12px', marginTop: '8px' }}>
-              Converting PDF to images and extracting financial data with AI vision. This may take a moment.
+              Processing PDF directly with AWS Textract to extract financial data. This may take a moment.
             </p>
           </div>
         ) : (
@@ -191,33 +206,44 @@ export default function PDFUpload({ ticker, onDataExtracted }: PDFUploadProps) {
         )}
       </div>
 
-      {/* PDF Conversion Status */}
-      {pdfConversionStatus && (
+      {/* Processing Status */}
+      {processingStatus && (
         <div style={{
           marginTop: '16px',
           padding: '12px',
-          backgroundColor: pdfConversionStatus.includes('✅') ? '#d1fae5' : pdfConversionStatus.includes('⚠️') ? '#fef3c7' : '#e0f2fe',
-          border: pdfConversionStatus.includes('✅') ? '1px solid #10b981' : pdfConversionStatus.includes('⚠️') ? '1px solid #f59e0b' : '1px solid #3b82f6',
-          borderRadius: '6px',
-          color: pdfConversionStatus.includes('✅') ? '#065f46' : pdfConversionStatus.includes('⚠️') ? '#92400e' : '#1e40af',
-          fontSize: '14px'
-        }}>
-          📄 {pdfConversionStatus}
-        </div>
-      )}
-
-      {/* Image Processing Status */}
-      {processingStatus && (
-        <div style={{
-          marginTop: '12px',
-          padding: '12px',
+          paddingRight: '32px',
+          position: 'relative',
           backgroundColor: processingStatus.includes('✅') ? '#d1fae5' : processingStatus.includes('⚠️') ? '#fef3c7' : '#e0f2fe',
           border: processingStatus.includes('✅') ? '1px solid #10b981' : processingStatus.includes('⚠️') ? '1px solid #f59e0b' : '1px solid #3b82f6',
           borderRadius: '6px',
           color: processingStatus.includes('✅') ? '#065f46' : processingStatus.includes('⚠️') ? '#92400e' : '#1e40af',
           fontSize: '14px'
         }}>
-          🤖 {processingStatus}
+          <button
+            onClick={() => setProcessingStatus('')}
+            style={{
+              position: 'absolute',
+              top: '8px',
+              right: '8px',
+              background: 'none',
+              border: 'none',
+              fontSize: '18px',
+              cursor: 'pointer',
+              color: 'inherit',
+              opacity: 0.7,
+              padding: '0',
+              width: '20px',
+              height: '20px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              lineHeight: '1'
+            }}
+            title="Close"
+          >
+            ×
+          </button>
+          {processingStatus}
         </div>
       )}
 
@@ -225,12 +251,38 @@ export default function PDFUpload({ ticker, onDataExtracted }: PDFUploadProps) {
         <div style={{
           marginTop: '16px',
           padding: '12px',
+          paddingRight: '32px',
+          position: 'relative',
           backgroundColor: '#d1fae5',
           border: '1px solid #10b981',
           borderRadius: '6px',
           color: '#065f46',
           fontSize: '14px'
         }}>
+          <button
+            onClick={() => setMessage('')}
+            style={{
+              position: 'absolute',
+              top: '8px',
+              right: '8px',
+              background: 'none',
+              border: 'none',
+              fontSize: '18px',
+              cursor: 'pointer',
+              color: 'inherit',
+              opacity: 0.7,
+              padding: '0',
+              width: '20px',
+              height: '20px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              lineHeight: '1'
+            }}
+            title="Close"
+          >
+            ×
+          </button>
           ✅ {message}
         </div>
       )}
@@ -239,12 +291,38 @@ export default function PDFUpload({ ticker, onDataExtracted }: PDFUploadProps) {
         <div style={{
           marginTop: '16px',
           padding: '12px',
+          paddingRight: '32px',
+          position: 'relative',
           backgroundColor: '#fee2e2',
           border: '1px solid #ef4444',
           borderRadius: '6px',
           color: '#991b1b',
           fontSize: '14px'
         }}>
+          <button
+            onClick={() => setError('')}
+            style={{
+              position: 'absolute',
+              top: '8px',
+              right: '8px',
+              background: 'none',
+              border: 'none',
+              fontSize: '18px',
+              cursor: 'pointer',
+              color: 'inherit',
+              opacity: 0.7,
+              padding: '0',
+              width: '20px',
+              height: '20px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              lineHeight: '1'
+            }}
+            title="Close"
+          >
+            ×
+          </button>
           ❌ {error}
         </div>
       )}

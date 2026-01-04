@@ -30,13 +30,13 @@ else
     echo "✅ CDK already bootstrapped"
 fi
 
-# Get private AWS account ID if not set
-if [ -z "$CDK_PRIVATE_ACCOUNT" ]; then
-    echo "⚠️  CDK_PRIVATE_ACCOUNT not set. Using default private account (771250468817)..."
-    export CDK_PRIVATE_ACCOUNT='771250468817'
-    echo "Using private account: $CDK_PRIVATE_ACCOUNT"
+# Get Cerebrum AWS account ID if not set
+if [ -z "$CDK_DEFAULT_ACCOUNT" ]; then
+    echo "⚠️  CDK_DEFAULT_ACCOUNT not set. Using default Cerebrum account (295202642810)..."
+    export CDK_DEFAULT_ACCOUNT='295202642810'
+    echo "Using Cerebrum account: $CDK_DEFAULT_ACCOUNT"
 else
-    echo "Using private account: $CDK_PRIVATE_ACCOUNT"
+    echo "Using Cerebrum account: $CDK_DEFAULT_ACCOUNT"
 fi
 
 # Deploy

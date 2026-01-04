@@ -7,8 +7,8 @@ const app = new cdk.App();
 
 new StockAnalysisStack(app, 'StockAnalysisStack', {
   env: {
-    account: process.env.CDK_PRIVATE_ACCOUNT || '771250468817', // Private AWS account
-    region: process.env.CDK_DEFAULT_REGION || 'us-east-1',
+    account: process.env.CDK_DEFAULT_ACCOUNT || '295202642810', // Cerebrum AWS account
+    region: process.env.CDK_DEFAULT_REGION || 'eu-west-1',
   },
   description: 'Stock Analysis Application - DynamoDB Table',
 });

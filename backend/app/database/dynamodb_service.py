@@ -23,7 +23,7 @@ class DynamoDBService:
             region: AWS region (defaults to env var or "us-east-1")
         """
         self.table_name = table_name or os.getenv('DYNAMODB_TABLE_NAME', 'stock-analyses')
-        self.region = region or os.getenv('DYNAMODB_REGION', 'us-east-1')
+        self.region = region or os.getenv('DYNAMODB_REGION', 'eu-west-1')
         
         # Use AWS profile if set
         session = boto3.Session()
@@ -196,6 +196,13 @@ class DynamoDBService:
             item['sector'] = analysis_data.get('sector')
             item['industry'] = analysis_data.get('industry')
             item['currency'] = analysis_data.get('currency')
+            
+            # Analysis configuration (new fields)
+            item['business_type'] = analysis_data.get('businessType')
+            analysis_weights = analysis_data.get('analysisWeights')
+            if analysis_weights:
+                # Convert to JSON string for DynamoDB
+                item['analysis_weights'] = json.dumps(analysis_weights) if isinstance(analysis_weights, dict) else analysis_weights
             
             # Price ratios
             price_ratios = analysis_data.get('priceRatios', {})

@@ -7,9 +7,9 @@ export default function Navigation() {
   const pathname = usePathname()
 
   const navItems = [
-    { href: '/single-search', label: 'Single Stock Search' },
-    { href: '/batch-search', label: 'Batch Stock Search' },
-    { href: '/processing-data', label: 'AI Process Data' },
+    { href: '/watchlist', label: 'Watchlist' },
+    { href: '/processing-data', label: 'Upload PDF Statement' },
+    { href: '/docs', label: 'Docs' },
   ]
 
   return (
@@ -37,7 +37,7 @@ export default function Navigation() {
           gap: '8px'
         }}>
           {navItems.map((item) => {
-            const isActive = pathname === item.href || (item.href === '/single-search' && pathname === '/')
+            const isActive = pathname === item.href || (item.href === '/watchlist' && pathname === '/')
             return (
               <Link
                 key={item.href}

@@ -20,6 +20,8 @@ Stores individual stock analysis results:
 - **recommendation**: BUY, HOLD, or AVOID
 - **financial_health_score**: Score 0-100
 - **business_quality_score**: Score 0-100
+- **business_type**: Detected or user-selected business type (e.g., 'bank', 'reit', 'technology')
+- **analysis_weights**: JSON storing the analysis weights configuration used
 - **status**: success, error, or partial
 - **error_message**: Error details if status is error
 

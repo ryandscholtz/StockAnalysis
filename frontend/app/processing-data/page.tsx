@@ -28,8 +28,6 @@ export default function ProcessingDataPage() {
   const [message, setMessage] = useState<string>('')
   const [error, setError] = useState<string>('')
   const [extractedData, setExtractedData] = useState<ExtractedData | null>(null)
-  const [extractedImages, setExtractedImages] = useState<PDFImage[]>([])
-  const [pdfConversionStatus, setPdfConversionStatus] = useState<string>('')
   const [processingStatus, setProcessingStatus] = useState<string>('')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -55,8 +53,11 @@ export default function ProcessingDataPage() {
             setShowSuggestions(false)
           }
           setSelectedIndex(-1)
-        } catch (error) {
-          console.error('Search error:', error)
+        } catch (error: any) {
+          // Only log non-network errors (network errors are expected when backend is down)
+          if (error?.code !== 'ERR_NETWORK' && error?.code !== 'ECONNREFUSED') {
+            console.error('Search error:', error)
+          }
           setSuggestions([])
           setShowSuggestions(false)
         } finally {
@@ -146,84 +147,154 @@ export default function ProcessingDataPage() {
 
     setError('')
     setMessage('')
-    setPdfConversionStatus('')
     setProcessingStatus('')
     setUploading(true)
     setExtractedData(null)
-    setExtractedImages([])
 
+    // Progress update interval
+    let progressInterval: NodeJS.Timeout | null = null
+    let elapsedSeconds = 0
+    
     try {
-      // Step 1: Convert PDF to images
-      setPdfConversionStatus('Converting PDF pages to images...')
-      let imageCount = 0
-      try {
-        const imageResult = await stockApi.extractPDFImages(file)
-        if (imageResult.success && imageResult.images.length > 0) {
-          setExtractedImages(imageResult.images)
-          imageCount = imageResult.total_pages
-          setPdfConversionStatus(`✅ PDF conversion complete: ${imageCount} page(s) converted to images`)
-        } else {
-          setPdfConversionStatus('⚠️ PDF conversion completed but no images were extracted')
+      // Upload PDF and process with AWS Textract (no image conversion needed)
+      setProcessingStatus('📄 Processing PDF with AWS Textract...')
+      console.log('Starting PDF upload for ticker:', ticker)
+      
+      // Start progress updates every 5 seconds
+      progressInterval = setInterval(() => {
+        elapsedSeconds += 5
+        const minutes = Math.floor(elapsedSeconds / 60)
+        const seconds = elapsedSeconds % 60
+        const timeStr = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`
+        
+        // Add helpful hints after certain time thresholds
+        let hint = ''
+        if (elapsedSeconds > 120) {
+          hint = ' (This is taking longer than expected. Large PDFs may take a few minutes)'
+        } else if (elapsedSeconds > 60) {
+          hint = ' (Processing large PDF with AWS Textract - this may take a few minutes)'
         }
-      } catch (imgErr: any) {
-        console.warn('Image extraction failed (non-critical):', imgErr)
-        setPdfConversionStatus(`⚠️ PDF conversion warning: ${imgErr.message || 'Could not extract images'}`)
-        // Don't fail the whole upload if image extraction fails
+        
+        setProcessingStatus(`📄 Processing PDF with AWS Textract... (${timeStr} elapsed)${hint}`)
+      }, 5000)
+      
+      const uploadResult = await stockApi.uploadPDF(ticker.trim().toUpperCase(), file)
+      console.log('Upload result:', uploadResult)
+      
+      // Clear progress interval when done
+      if (progressInterval) {
+        clearInterval(progressInterval)
+        progressInterval = null
+      }
+      
+      if (!uploadResult.success) {
+        const errorMsg = uploadResult.message || 'Failed to process PDF'
+        console.error('Upload failed:', errorMsg)
+        throw new Error(errorMsg)
       }
 
-      // Step 2: Process images with LLM vision
-      setProcessingStatus('Processing images with AI vision model...')
-      const result = await stockApi.uploadPDF(ticker.trim().toUpperCase(), file)
-      
-      // Update processing status
-      if (result.updated_periods && result.updated_periods > 0) {
-        setProcessingStatus(`✅ AI processing complete: Extracted ${result.updated_periods} data period(s) from ${imageCount} page(s)`)
+      // Processing is complete
+      setUploading(false)
+      if (uploadResult.updated_periods && uploadResult.updated_periods > 0) {
+        setProcessingStatus(`✅ Textract processing complete: Extracted ${uploadResult.updated_periods} data period(s)`)
       } else {
-        setProcessingStatus(`⚠️ AI processing completed but no financial data was extracted from ${imageCount} page(s)`)
+        setProcessingStatus('✅ Textract processing complete')
       }
       
-      // Show detailed message
-      if (result.message) {
-        setMessage(result.message)
-      } else {
-        setMessage('PDF processed successfully!')
+      if (uploadResult.extracted_data) {
+        setExtractedData(uploadResult.extracted_data as ExtractedData)
       }
       
-      // Display extracted data if available
-      if (result.extracted_data) {
-        setExtractedData(result.extracted_data as ExtractedData)
+      if (uploadResult.updated_periods !== undefined) {
+        if (uploadResult.updated_periods > 0) {
+          setMessage(`✅ Successfully extracted ${uploadResult.updated_periods} data period(s) for ${ticker.trim().toUpperCase()}`)
+        } else {
+          // Build detailed error message from extraction_details
+          let errorMsg = `⚠️ ⚠️ Processing completed but no financial data was extracted for ${ticker.trim().toUpperCase()}.`
+          
+          if (uploadResult.extraction_details) {
+            const details = uploadResult.extraction_details
+            
+            // Build diagnostics from extraction_details
+            const detailParts = []
+            
+            if (details.error_type) {
+              detailParts.push(`Error Type: ${details.error_type}`)
+            }
+            if (details.error_message) {
+              detailParts.push(`Error: ${details.error_message}`)
+            }
+            if (details.llm_response_analysis && Array.isArray(details.llm_response_analysis)) {
+              detailParts.push(...details.llm_response_analysis)
+            }
+            if (details.financial_keywords_detected) {
+              const keywords = details.financial_keywords_detected
+              if (Object.keys(keywords).length > 0) {
+                detailParts.push(`Financial keywords found: ${Object.entries(keywords).map(([k, v]) => `${k} (${v} matches)`).join(', ')}`)
+              }
+            }
+            if (details.pdf_text_length) {
+              detailParts.push(`PDF text length: ${details.pdf_text_length} characters`)
+            }
+            if (details.llama_api_url) {
+              detailParts.push(`Ollama URL: ${details.llama_api_url}`)
+            }
+            if (details.llama_model) {
+              detailParts.push(`Model: ${details.llama_model}`)
+            }
+            
+            if (detailParts.length > 0) {
+              errorMsg += `\n\n${detailParts.map(p => `  • ${p}`).join('\n')}`
+            }
+            
+            // Add LLM response preview if available
+            if (details.raw_llm_response_preview) {
+              errorMsg += `\n\nLLM Response Preview:\n${details.raw_llm_response_preview.substring(0, 500)}...`
+            }
+          }
+          
+          setMessage(errorMsg)
+        }
+      } else if (uploadResult.message) {
+        setMessage(uploadResult.message)
       }
       
-      // Show extraction details if available and no data was extracted
-      if (result.updated_periods === 0 && result.extraction_details) {
-        const details = result.extraction_details
-        let detailMsg = 'Extraction Details: '
-        const detailParts = []
-        
-        if (details.error_type) {
-          detailParts.push(`Error Type: ${details.error_type}`)
-        }
-        if (details.error_message) {
-          detailParts.push(`Error: ${details.error_message}`)
-        }
-        if (details.pdf_text_length) {
-          detailParts.push(`PDF Text Length: ${details.pdf_text_length} characters`)
-        }
-        if (details.llm_provider) {
-          detailParts.push(`LLM Provider: ${details.llm_provider}`)
-        }
-        if (details.has_api_key === false) {
-          detailParts.push('No API key configured')
-        }
-        
-        if (detailParts.length > 0) {
-          setMessage(result.message + ' ' + detailMsg + detailParts.join(' | '))
-        }
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
       }
     } catch (err: any) {
-      setError(err.response?.data?.detail || err.message || 'Error uploading PDF')
-    } finally {
+      // Clear progress interval on error
+      if (progressInterval) {
+        clearInterval(progressInterval)
+        progressInterval = null
+      }
+      
       setUploading(false)
+      
+      // Handle network errors (backend not running)
+      if (err?.code === 'ERR_NETWORK' || err?.code === 'ECONNREFUSED') {
+        setError('Cannot connect to backend server. Please ensure the backend is running on http://localhost:8000')
+        setProcessingStatus('❌ Connection failed')
+        console.warn('Backend connection error:', err.message)
+      } else if (err?.code === 'ECONNABORTED' || err.message?.includes('timeout') || err.message?.includes('Timeout')) {
+        setError('Request timed out after 10 minutes. The PDF may be too large or Ollama may not be responding. Please try a smaller PDF or check if Ollama is running at http://localhost:11434')
+        setProcessingStatus('⏱️ Request timed out')
+        console.error('Upload timeout:', err)
+      } else if (err.response?.data?.detail) {
+        setError(err.response.data.detail)
+        setProcessingStatus('❌ Processing failed')
+        console.error('Upload error:', err)
+      } else if (err.message) {
+        setError(err.message)
+        setProcessingStatus('❌ Processing failed')
+        console.error('Upload error:', err)
+      } else {
+        setError('Failed to process PDF. Please check the backend logs.')
+        setProcessingStatus('❌ Processing failed')
+        console.error('Upload error:', err)
+      }
+      
       // Reset file input
       if (fileInputRef.current) {
         fileInputRef.current.value = ''
@@ -359,10 +430,11 @@ export default function ProcessingDataPage() {
               }
             }}
             onKeyDown={handleKeyDown}
-            onFocus={() => {
+            onFocus={(e) => {
               if (suggestions.length > 0 && searchQuery.trim().length > 0) {
                 setShowSuggestions(true)
               }
+              e.currentTarget.style.borderColor = '#2563eb'
             }}
             placeholder="Search by ticker or company name (e.g., AAPL or Apple)"
             style={{
@@ -373,9 +445,6 @@ export default function ProcessingDataPage() {
               fontSize: '16px',
               outline: 'none',
               transition: 'border-color 0.2s'
-            }}
-            onFocus={(e) => {
-              e.currentTarget.style.borderColor = '#2563eb'
             }}
             onBlur={(e) => {
               e.currentTarget.style.borderColor = '#d1d5db'
@@ -530,33 +599,44 @@ export default function ProcessingDataPage() {
         )}
       </div>
 
-      {/* PDF Conversion Status */}
-      {pdfConversionStatus && (
+      {/* Processing Status */}
+      {processingStatus && (
         <div style={{
           marginTop: '16px',
           padding: '12px',
-          backgroundColor: pdfConversionStatus.includes('✅') ? '#d1fae5' : pdfConversionStatus.includes('⚠️') ? '#fef3c7' : '#e0f2fe',
-          border: pdfConversionStatus.includes('✅') ? '1px solid #10b981' : pdfConversionStatus.includes('⚠️') ? '1px solid #f59e0b' : '1px solid #3b82f6',
-          borderRadius: '6px',
-          color: pdfConversionStatus.includes('✅') ? '#065f46' : pdfConversionStatus.includes('⚠️') ? '#92400e' : '#1e40af',
-          fontSize: '14px'
-        }}>
-          📄 {pdfConversionStatus}
-        </div>
-      )}
-
-      {/* Image Processing Status */}
-      {processingStatus && (
-        <div style={{
-          marginTop: '12px',
-          padding: '12px',
+          paddingRight: '32px',
+          position: 'relative',
           backgroundColor: processingStatus.includes('✅') ? '#d1fae5' : processingStatus.includes('⚠️') ? '#fef3c7' : '#e0f2fe',
           border: processingStatus.includes('✅') ? '1px solid #10b981' : processingStatus.includes('⚠️') ? '1px solid #f59e0b' : '1px solid #3b82f6',
           borderRadius: '6px',
           color: processingStatus.includes('✅') ? '#065f46' : processingStatus.includes('⚠️') ? '#92400e' : '#1e40af',
           fontSize: '14px'
         }}>
-          🤖 {processingStatus}
+          <button
+            onClick={() => setProcessingStatus('')}
+            style={{
+              position: 'absolute',
+              top: '8px',
+              right: '8px',
+              background: 'none',
+              border: 'none',
+              fontSize: '18px',
+              cursor: 'pointer',
+              color: 'inherit',
+              opacity: 0.7,
+              padding: '0',
+              width: '20px',
+              height: '20px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              lineHeight: '1'
+            }}
+            title="Close"
+          >
+            ×
+          </button>
+          {processingStatus}
         </div>
       )}
 
@@ -679,15 +759,43 @@ export default function ProcessingDataPage() {
       {message && (
           <div style={{
             marginTop: '16px',
-            padding: '12px',
-            backgroundColor: message.includes('0 data period') ? '#fef3c7' : '#d1fae5',
-            border: message.includes('0 data period') ? '1px solid #f59e0b' : '1px solid #10b981',
+            padding: '16px',
+            paddingRight: '32px',
+            position: 'relative',
+            backgroundColor: message.includes('no financial data') || message.includes('0 data period') ? '#fef3c7' : '#d1fae5',
+            border: message.includes('no financial data') || message.includes('0 data period') ? '1px solid #f59e0b' : '1px solid #10b981',
             borderRadius: '6px',
-            color: message.includes('0 data period') ? '#92400e' : '#065f46',
+            color: message.includes('no financial data') || message.includes('0 data period') ? '#92400e' : '#065f46',
             fontSize: '14px',
-            lineHeight: '1.6'
+            lineHeight: '1.8',
+            whiteSpace: 'pre-wrap',
+            fontFamily: 'monospace'
           }}>
-            {message.includes('0 data period') ? '⚠️' : '✅'} {message}
+            <button
+              onClick={() => setMessage('')}
+              style={{
+                position: 'absolute',
+                top: '8px',
+                right: '8px',
+                background: 'none',
+                border: 'none',
+                fontSize: '18px',
+                cursor: 'pointer',
+                color: 'inherit',
+                opacity: 0.7,
+                padding: '0',
+                width: '20px',
+                height: '20px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                lineHeight: '1'
+              }}
+              title="Close"
+            >
+              ×
+            </button>
+            {message.includes('no financial data') || message.includes('0 data period') ? '⚠️' : '✅'} {message}
           </div>
         )}
 
@@ -695,12 +803,38 @@ export default function ProcessingDataPage() {
           <div style={{
             marginTop: '16px',
             padding: '12px',
+            paddingRight: '32px',
+            position: 'relative',
             backgroundColor: '#fee2e2',
             border: '1px solid #ef4444',
             borderRadius: '6px',
             color: '#991b1b',
             fontSize: '14px'
           }}>
+            <button
+              onClick={() => setError('')}
+              style={{
+                position: 'absolute',
+                top: '8px',
+                right: '8px',
+                background: 'none',
+                border: 'none',
+                fontSize: '18px',
+                cursor: 'pointer',
+                color: 'inherit',
+                opacity: 0.7,
+                padding: '0',
+                width: '20px',
+                height: '20px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                lineHeight: '1'
+              }}
+              title="Close"
+            >
+              ×
+            </button>
             ❌ {error}
           </div>
         )}

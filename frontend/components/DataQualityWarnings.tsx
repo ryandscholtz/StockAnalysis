@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { DataQualityWarning } from '@/types/analysis'
 
 interface DataQualityWarningsProps {
@@ -7,7 +8,9 @@ interface DataQualityWarningsProps {
 }
 
 export default function DataQualityWarnings({ warnings }: DataQualityWarningsProps) {
-  if (!warnings || warnings.length === 0) {
+  const [isVisible, setIsVisible] = useState(true)
+  
+  if (!warnings || warnings.length === 0 || !isVisible) {
     return null
   }
 
@@ -59,10 +62,36 @@ export default function DataQualityWarnings({ warnings }: DataQualityWarningsPro
     <div style={{
       marginBottom: '24px',
       padding: '20px',
+      paddingRight: '48px',
+      position: 'relative',
       backgroundColor: highWarnings.length > 0 ? '#fee2e2' : '#fef3c7',
       border: `2px solid ${highWarnings.length > 0 ? '#ef4444' : '#f59e0b'}`,
       borderRadius: '8px'
     }}>
+      <button
+        onClick={() => setIsVisible(false)}
+        style={{
+          position: 'absolute',
+          top: '16px',
+          right: '16px',
+          background: 'none',
+          border: 'none',
+          fontSize: '24px',
+          cursor: 'pointer',
+          color: '#111827',
+          opacity: 0.7,
+          padding: '0',
+          width: '24px',
+          height: '24px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          lineHeight: '1'
+        }}
+        title="Close"
+      >
+        ×
+      </button>
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
         <span style={{ fontSize: '24px', marginRight: '12px' }}>⚠️</span>
         <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#111827', margin: 0 }}>
@@ -108,7 +137,7 @@ export default function DataQualityWarnings({ warnings }: DataQualityWarningsPro
                 <div style={{ fontSize: '12px', color: '#6b7280', fontStyle: 'italic' }}>
                   Assumed value: {typeof warning.assumed_value === 'number' 
                     ? warning.assumed_value.toLocaleString() 
-                    : 'N/A'}
+                    : '-'}
                 </div>
               )}
             </div>

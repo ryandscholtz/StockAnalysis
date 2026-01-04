@@ -79,6 +79,49 @@ class DataQualityWarning(BaseModel):
     actual_value: Optional[float] = None
 
 
+class AnalysisWeights(BaseModel):
+    """Valuation weights configuration - determines how much each valuation method contributes to the final fair value"""
+    # Valuation weights (must sum to 1.0)
+    dcf_weight: float = 0.40
+    epv_weight: float = 0.40
+    asset_weight: float = 0.20
+
+
+class BankMetrics(BaseModel):
+    """Bank-specific metrics"""
+    net_interest_margin: float
+    return_on_equity: float
+    return_on_assets: float
+    tier_1_capital_ratio: Optional[float] = None
+    loan_loss_provision_ratio: Optional[float] = None
+    efficiency_ratio: Optional[float] = None
+    loan_to_deposit_ratio: Optional[float] = None
+    non_performing_loans_ratio: Optional[float] = None
+
+
+class REITMetrics(BaseModel):
+    """REIT-specific metrics"""
+    funds_from_operations: Optional[float] = None
+    adjusted_funds_from_operations: Optional[float] = None
+    ffo_per_share: Optional[float] = None
+    affo_per_share: Optional[float] = None
+    net_asset_value: Optional[float] = None
+    dividend_yield: Optional[float] = None
+    payout_ratio: Optional[float] = None
+    occupancy_rate: Optional[float] = None
+
+
+class InsuranceMetrics(BaseModel):
+    """Insurance-specific metrics"""
+    combined_ratio: Optional[float] = None
+    loss_ratio: Optional[float] = None
+    expense_ratio: Optional[float] = None
+    return_on_equity: float
+    return_on_assets: float
+    reserve_adequacy: Optional[float] = None
+    investment_yield: Optional[float] = None
+
+
 class StockAnalysis(BaseModel):
     ticker: str
     companyName: str
@@ -100,6 +143,11 @@ class StockAnalysis(BaseModel):
     timestamp: datetime
     missingData: Optional[MissingDataInfo] = None  # Information about missing data
     dataQualityWarnings: Optional[List[DataQualityWarning]] = None  # Warnings about assumptions
+    businessType: Optional[str] = None  # Detected or user-selected business type
+    analysisWeights: Optional[AnalysisWeights] = None  # Weights used for this analysis
+    bankMetrics: Optional[BankMetrics] = None  # Bank-specific metrics (if applicable)
+    reitMetrics: Optional[REITMetrics] = None  # REIT-specific metrics (if applicable)
+    insuranceMetrics: Optional[InsuranceMetrics] = None  # Insurance-specific metrics (if applicable)
 
 
 class QuoteResponse(BaseModel):
@@ -145,3 +193,36 @@ class ManualDataResponse(BaseModel):
     updated_periods: int
     extracted_data: Optional[dict] = None  # Include extracted data for UI display
     extraction_details: Optional[dict] = None  # Detailed information about extraction
+
+
+class PDFJobResponse(BaseModel):
+    """Response when PDF upload is accepted for processing"""
+    success: bool
+    job_id: int
+    message: str
+    ticker: str
+    filename: Optional[str] = None
+    total_pages: int = 0
+
+
+class PDFJobStatusResponse(BaseModel):
+    """Response for PDF job status polling"""
+    job_id: int
+    ticker: str
+    status: str  # running, completed, failed, cancelled
+    total_pages: int
+    pages_processed: int
+    current_page: int
+    current_task: Optional[str] = None
+    progress_pct: float
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
+    error_message: Optional[str] = None
+    result: Optional[dict] = None  # Final result when completed
+    extraction_details: Optional[dict] = None  # Detailed extraction info
+
+
+class AnalysisWeightsRequest(BaseModel):
+    """Request to set analysis weights"""
+    business_type: Optional[str] = None  # Use preset for this business type
+    weights: Optional[AnalysisWeights] = None  # Manual weights (overrides preset)

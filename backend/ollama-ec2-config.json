@@ -1,0 +1,9 @@
+﻿{
+    "PublicIP":  "54.147.38.239",
+    "Profile":  "Cerebrum",
+    "Region":  "us-east-1",
+    "InstanceId":  "i-056dc6971b402f0b2",
+    "PrivateIP":  "172.31.25.210",
+    "OllamaURL":  "http://",
+    "InstanceType":  "t3.xlarge"
+}

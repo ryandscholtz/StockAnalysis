@@ -8,7 +8,10 @@ interface MarginOfSafetyProps {
 
 export default function MarginOfSafety({ analysis }: MarginOfSafetyProps) {
   const margin = analysis.marginOfSafety
+  const isValid = margin !== null && margin !== undefined && !isNaN(margin) && isFinite(margin)
+  
   const getColor = () => {
+    if (!isValid) return '#6b7280'
     if (margin > 50) return '#059669'
     if (margin > 30) return '#0d9488'
     if (margin > 10) return '#d97706'
@@ -16,6 +19,7 @@ export default function MarginOfSafety({ analysis }: MarginOfSafetyProps) {
   }
 
   const getWidth = () => {
+    if (!isValid) return 0
     // Clamp between 0 and 100 for display
     return Math.min(Math.max(margin, 0), 100)
   }
@@ -28,7 +32,7 @@ export default function MarginOfSafety({ analysis }: MarginOfSafetyProps) {
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
           <span style={{ fontSize: '14px', color: '#6b7280' }}>Margin of Safety</span>
           <span style={{ fontSize: '24px', fontWeight: '700', color: getColor() }}>
-            {margin > 0 ? '+' : ''}{margin.toFixed(1)}%
+            {isValid ? `${margin > 0 ? '+' : ''}${margin.toFixed(1)}%` : '-'}
           </span>
         </div>
         <div style={{
@@ -67,9 +71,14 @@ export default function MarginOfSafety({ analysis }: MarginOfSafetyProps) {
           and the calculated intrinsic value. A higher margin provides a buffer 
           against estimation errors and market volatility.
         </p>
-        {margin < 30 && (
+        {isValid && margin < 30 && (
           <p style={{ marginTop: '12px', color: '#d97706' }}>
             ⚠️ Margin below recommended 30% threshold. Consider additional risk factors.
+          </p>
+        )}
+        {!isValid && (
+          <p style={{ marginTop: '12px', color: '#6b7280' }}>
+            Margin of safety cannot be calculated due to missing data.
           </p>
         )}
       </div>

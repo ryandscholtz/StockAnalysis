@@ -66,11 +66,13 @@ class FinancialDataAgent:
         if not company_data.cashflow or len(company_data.cashflow) < 3:
             missing['cashflow'].append('insufficient_periods')
         
-        # Check key metrics
-        if not company_data.shares_outstanding:
+        # Check key metrics - use is None to allow 0 values
+        if company_data.shares_outstanding is None:
             missing['key_metrics'].append('shares_outstanding')
-        if not company_data.market_cap:
-            missing['key_metrics'].append('market_cap')
+        if company_data.market_cap is None:
+            # Only mark as missing if it can't be calculated from price * shares
+            if not (company_data.current_price and company_data.shares_outstanding):
+                missing['key_metrics'].append('market_cap')
         
         return missing
     

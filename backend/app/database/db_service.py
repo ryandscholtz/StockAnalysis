@@ -8,8 +8,9 @@ from datetime import datetime, date
 from typing import Optional, Dict, List
 from pathlib import Path
 import os
+import json
 
-from app.database.models import Base, StockAnalysis, BatchJob
+from app.database.models import Base, StockAnalysis, BatchJob, AIExtractedFinancialData, PDFJob, Watchlist
 
 
 class DatabaseService:
@@ -87,6 +88,28 @@ class DatabaseService:
                     StockAnalysis.analysis_date == analysis_date
                 )
             ).first()
+            
+            if result:
+                return result.to_dict()
+            return None
+        finally:
+            session.close()
+    
+    def get_latest_analysis(self, ticker: str) -> Optional[Dict]:
+        """
+        Get the latest analysis for a ticker (most recent analysis_date)
+        
+        Args:
+            ticker: Stock ticker symbol
+        
+        Returns:
+            Latest analysis data dictionary or None
+        """
+        session = self.get_session()
+        try:
+            result = session.query(StockAnalysis).filter(
+                StockAnalysis.ticker == ticker.upper()
+            ).order_by(StockAnalysis.analysis_date.desc()).first()
             
             if result:
                 return result.to_dict()
@@ -195,6 +218,12 @@ class DatabaseService:
                 existing.analyzed_at = datetime.utcnow()
                 existing.status = 'success'
                 existing.error_message = None
+                # New fields
+                existing.business_type = analysis_data.get('businessType')
+                analysis_weights = analysis_data.get('analysisWeights')
+                if analysis_weights:
+                    import json
+                    existing.analysis_weights = json.dumps(analysis_weights) if isinstance(analysis_weights, dict) else analysis_weights
             else:
                 # Create new record
                 new_analysis = StockAnalysis(
@@ -224,7 +253,9 @@ class DatabaseService:
                     ps_ratio=ps_ratio,
                     revenue_growth_1y=revenue_growth,
                     earnings_growth_1y=earnings_growth,
-                    status='success'
+                    status='success',
+                    business_type=analysis_data.get('businessType'),
+                    analysis_weights=json.dumps(analysis_data.get('analysisWeights')) if analysis_data.get('analysisWeights') else None
                 )
                 session.add(new_analysis)
             
@@ -388,4 +419,341 @@ class DatabaseService:
     def complete_batch_job(self, job_id: int) -> bool:
         """Mark batch job as completed"""
         return self.update_batch_job(job_id, status='completed', completed_at=datetime.utcnow())
+    
+    # PDF Job Management
+    def create_pdf_job(self, ticker: str, filename: str = None, total_pages: int = 0) -> int:
+        """
+        Create a new PDF processing job
+        
+        Args:
+            ticker: Stock ticker symbol
+            filename: PDF filename (optional)
+            total_pages: Total number of pages in PDF
+        
+        Returns:
+            PDF job ID
+        """
+        session = self.get_session()
+        try:
+            job = PDFJob(
+                ticker=ticker.upper(),
+                filename=filename,
+                total_pages=total_pages,
+                status='running'
+            )
+            session.add(job)
+            session.commit()
+            return job.id
+        finally:
+            session.close()
+    
+    def get_pdf_job(self, job_id: int) -> Optional[Dict]:
+        """Get PDF job by ID"""
+        session = self.get_session()
+        try:
+            job = session.query(PDFJob).filter(PDFJob.id == job_id).first()
+            if job:
+                return job.to_dict()
+            return None
+        finally:
+            session.close()
+    
+    def update_pdf_job(self, job_id: int, **kwargs) -> bool:
+        """
+        Update PDF job progress
+        
+        Args:
+            job_id: PDF job ID
+            **kwargs: Fields to update (pages_processed, current_page, current_task, status, etc.)
+        
+        Returns:
+            True if updated successfully
+        """
+        session = self.get_session()
+        try:
+            job = session.query(PDFJob).filter(PDFJob.id == job_id).first()
+            if job:
+                for key, value in kwargs.items():
+                    if hasattr(job, key):
+                        setattr(job, key, value)
+                session.commit()
+                return True
+            return False
+        except Exception as e:
+            session.rollback()
+            print(f"Error updating PDF job {job_id}: {e}")
+            return False
+        finally:
+            session.close()
+    
+    def complete_pdf_job(self, job_id: int, result: Dict = None, extraction_details: Dict = None) -> bool:
+        """Mark PDF job as completed with results"""
+        return self.update_pdf_job(
+            job_id,
+            status='completed',
+            completed_at=datetime.utcnow(),
+            result=result,
+            extraction_details=extraction_details
+        )
+    
+    def fail_pdf_job(self, job_id: int, error_message: str) -> bool:
+        """Mark PDF job as failed"""
+        return self.update_pdf_job(
+            job_id,
+            status='failed',
+            completed_at=datetime.utcnow(),
+            error_message=error_message
+        )
+    
+    def save_ai_extracted_data(self, 
+                               ticker: str,
+                               data_type: str,
+                               period: str,
+                               data: Dict,
+                               source: str = 'pdf_upload',
+                               extraction_method: str = 'llama_vision') -> bool:
+        """
+        Save AI-extracted financial data to database
+        
+        Args:
+            ticker: Stock ticker symbol
+            data_type: Type of data (income_statement, balance_sheet, cashflow, key_metrics)
+            period: Period identifier (YYYY-MM-DD or 'latest')
+            data: Financial data dictionary
+            source: Source of data (pdf_upload, manual_entry, etc.)
+            extraction_method: Method used (llama_vision, etc.)
+        
+        Returns:
+            True if saved successfully
+        """
+        session = self.get_session()
+        try:
+            ticker_upper = ticker.upper()
+            
+            # Check if record exists
+            existing = session.query(AIExtractedFinancialData).filter(
+                and_(
+                    AIExtractedFinancialData.ticker == ticker_upper,
+                    AIExtractedFinancialData.data_type == data_type,
+                    AIExtractedFinancialData.period == period
+                )
+            ).first()
+            
+            if existing:
+                # Update existing record
+                existing.data = data
+                existing.extracted_at = datetime.utcnow()
+                existing.source = source
+                existing.extraction_method = extraction_method
+            else:
+                # Create new record
+                new_record = AIExtractedFinancialData(
+                    ticker=ticker_upper,
+                    data_type=data_type,
+                    period=period,
+                    data=data,
+                    source=source,
+                    extraction_method=extraction_method
+                )
+                session.add(new_record)
+            
+            session.commit()
+            return True
+        except Exception as e:
+            session.rollback()
+            print(f"Error saving AI-extracted data for {ticker}: {e}")
+            return False
+        finally:
+            session.close()
+    
+    def get_ai_extracted_data(self, ticker: str, data_type: Optional[str] = None) -> Dict:
+        """
+        Get AI-extracted financial data for a ticker
+        
+        Args:
+            ticker: Stock ticker symbol
+            data_type: Optional filter for specific data type (income_statement, balance_sheet, etc.)
+        
+        Returns:
+            Dictionary organized by data_type and period
+        """
+        session = self.get_session()
+        try:
+            ticker_upper = ticker.upper()
+            
+            query = session.query(AIExtractedFinancialData).filter(
+                AIExtractedFinancialData.ticker == ticker_upper
+            )
+            
+            if data_type:
+                query = query.filter(AIExtractedFinancialData.data_type == data_type)
+            
+            records = query.all()
+            
+            # Organize by data_type and period
+            result = {
+                'income_statement': {},
+                'balance_sheet': {},
+                'cashflow': {},
+                'key_metrics': {}
+            }
+            
+            for record in records:
+                if record.data_type in result:
+                    result[record.data_type][record.period] = record.data
+            
+            # Remove empty sections
+            result = {k: v for k, v in result.items() if v}
+            
+            return result
+        except Exception as e:
+            print(f"Error getting AI-extracted data for {ticker}: {e}")
+            return {}
+        finally:
+            session.close()
+    
+    def has_ai_extracted_data(self, ticker: str) -> bool:
+        """Check if AI-extracted data exists for a ticker"""
+        session = self.get_session()
+        try:
+            ticker_upper = ticker.upper()
+            count = session.query(AIExtractedFinancialData).filter(
+                AIExtractedFinancialData.ticker == ticker_upper
+            ).count()
+            return count > 0
+        except Exception as e:
+            print(f"Error checking AI-extracted data for {ticker}: {e}")
+            return False
+        finally:
+            session.close()
+    
+    # Watchlist methods
+    def add_to_watchlist(self, ticker: str, company_name: Optional[str] = None, exchange: Optional[str] = None, notes: Optional[str] = None) -> bool:
+        """Add a stock to the watchlist"""
+        session = self.get_session()
+        try:
+            ticker_upper = ticker.upper()
+            # Check if already in watchlist
+            existing = session.query(Watchlist).filter(Watchlist.ticker == ticker_upper).first()
+            if existing:
+                # Update existing entry
+                if company_name:
+                    existing.company_name = company_name
+                if exchange:
+                    existing.exchange = exchange
+                if notes is not None:
+                    existing.notes = notes
+                existing.updated_at = datetime.utcnow()
+            else:
+                # Create new entry
+                watchlist_item = Watchlist(
+                    ticker=ticker_upper,
+                    company_name=company_name,
+                    exchange=exchange,
+                    notes=notes
+                )
+                session.add(watchlist_item)
+            session.commit()
+            return True
+        except Exception as e:
+            session.rollback()
+            print(f"Error adding to watchlist: {e}")
+            return False
+        finally:
+            session.close()
+    
+    def remove_from_watchlist(self, ticker: str) -> bool:
+        """Remove a stock from the watchlist"""
+        session = self.get_session()
+        try:
+            ticker_upper = ticker.upper()
+            watchlist_item = session.query(Watchlist).filter(Watchlist.ticker == ticker_upper).first()
+            if watchlist_item:
+                session.delete(watchlist_item)
+                session.commit()
+                return True
+            return False
+        except Exception as e:
+            session.rollback()
+            print(f"Error removing from watchlist: {e}")
+            return False
+        finally:
+            session.close()
+    
+    def get_watchlist(self) -> List[Dict]:
+        """Get all stocks in the watchlist"""
+        session = self.get_session()
+        try:
+            items = session.query(Watchlist).order_by(Watchlist.added_at.desc()).all()
+            return [item.to_dict() for item in items]
+        except Exception as e:
+            print(f"Error getting watchlist: {e}")
+            return []
+        finally:
+            session.close()
+    
+    def get_watchlist_item(self, ticker: str) -> Optional[Dict]:
+        """Get a specific watchlist item"""
+        session = self.get_session()
+        try:
+            ticker_upper = ticker.upper()
+            item = session.query(Watchlist).filter(Watchlist.ticker == ticker_upper).first()
+            if item:
+                return item.to_dict()
+            return None
+        except Exception as e:
+            print(f"Error getting watchlist item: {e}")
+            return None
+        finally:
+            session.close()
+    
+    def update_watchlist_item(self, ticker: str, company_name: Optional[str] = None, exchange: Optional[str] = None, notes: Optional[str] = None, 
+                              current_price: Optional[float] = None, fair_value: Optional[float] = None, 
+                              margin_of_safety_pct: Optional[float] = None, recommendation: Optional[str] = None,
+                              last_analyzed_at: Optional[datetime] = None) -> bool:
+        """Update a watchlist item with analysis data"""
+        session = self.get_session()
+        try:
+            ticker_upper = ticker.upper()
+            item = session.query(Watchlist).filter(Watchlist.ticker == ticker_upper).first()
+            if item:
+                if company_name is not None:
+                    item.company_name = company_name
+                if exchange is not None:
+                    item.exchange = exchange
+                if notes is not None:
+                    item.notes = notes
+                if current_price is not None:
+                    item.current_price = current_price
+                if fair_value is not None:
+                    item.fair_value = fair_value
+                if margin_of_safety_pct is not None:
+                    item.margin_of_safety_pct = margin_of_safety_pct
+                if recommendation is not None:
+                    item.recommendation = recommendation
+                if last_analyzed_at is not None:
+                    item.last_analyzed_at = last_analyzed_at
+                item.updated_at = datetime.utcnow()
+                session.commit()
+                return True
+            return False
+        except Exception as e:
+            session.rollback()
+            print(f"Error updating watchlist item: {e}")
+            return False
+        finally:
+            session.close()
+    
+    def is_in_watchlist(self, ticker: str) -> bool:
+        """Check if a ticker is in the watchlist"""
+        session = self.get_session()
+        try:
+            ticker_upper = ticker.upper()
+            count = session.query(Watchlist).filter(Watchlist.ticker == ticker_upper).count()
+            return count > 0
+        except Exception as e:
+            print(f"Error checking watchlist: {e}")
+            return False
+        finally:
+            session.close()
 

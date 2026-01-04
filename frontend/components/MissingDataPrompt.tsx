@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { MissingDataInfo } from '@/types/analysis'
 import { stockApi } from '@/lib/api'
 
@@ -38,14 +38,30 @@ export default function MissingDataPrompt({ ticker, missingData, onDataAdded }: 
     return fields[type] || []
   }
 
+  // Automatically set period to 'latest' when key_metrics is selected
+  useEffect(() => {
+    if (selectedDataType === 'key_metrics' && selectedPeriod !== 'latest') {
+      setSelectedPeriod('latest')
+    }
+  }, [selectedDataType, selectedPeriod])
+
   const handleFieldChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!selectedDataType || !selectedPeriod) {
-      setMessage('Please select data type and period')
+    
+    // Validate data type is selected
+    if (!selectedDataType) {
+      setMessage('Please select a data type')
+      return
+    }
+    
+    // For key_metrics, period should always be 'latest', for others it must be provided
+    const period = selectedDataType === 'key_metrics' ? 'latest' : selectedPeriod
+    if (!period) {
+      setMessage('Please enter a period (e.g., 2024-12-31)')
       return
     }
 
@@ -59,7 +75,19 @@ export default function MissingDataPrompt({ ticker, missingData, onDataAdded }: 
         if (value.trim()) {
           const numValue = parseFloat(value.replace(/,/g, ''))
           if (!isNaN(numValue)) {
-            numericData[key] = numValue
+            // Map display names to backend field names for key_metrics
+            if (selectedDataType === 'key_metrics') {
+              if (key === 'Shares Outstanding') {
+                numericData['shares_outstanding'] = numValue
+              } else if (key === 'Market Cap') {
+                numericData['market_cap'] = numValue
+              } else {
+                // Use the key as-is for other fields
+                numericData[key] = numValue
+              }
+            } else {
+              numericData[key] = numValue
+            }
           }
         }
       }
@@ -70,7 +98,9 @@ export default function MissingDataPrompt({ ticker, missingData, onDataAdded }: 
         return
       }
 
-      const result = await stockApi.addManualData(ticker, selectedDataType, selectedPeriod, numericData)
+      // Use 'latest' period for key_metrics
+      const period = selectedDataType === 'key_metrics' ? 'latest' : selectedPeriod
+      const result = await stockApi.addManualData(ticker, selectedDataType, period, numericData)
       setMessage(result.message || 'Data added successfully!')
       
       if (onDataAdded) {
@@ -170,8 +200,15 @@ export default function MissingDataPrompt({ ticker, missingData, onDataAdded }: 
             <select
               value={selectedDataType}
               onChange={(e) => {
-                setSelectedDataType(e.target.value)
+                const newDataType = e.target.value
+                setSelectedDataType(newDataType)
                 setFormData({})
+                // Set period to 'latest' for key_metrics, clear for others
+                if (newDataType === 'key_metrics') {
+                  setSelectedPeriod('latest')
+                } else {
+                  setSelectedPeriod('')
+                }
               }}
               style={{
                 width: '100%',
@@ -193,21 +230,33 @@ export default function MissingDataPrompt({ ticker, missingData, onDataAdded }: 
             <>
               <div style={{ marginBottom: '16px' }}>
                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>
-                  Period (e.g., 2024-12-31):
+                  {selectedDataType === 'key_metrics' ? 'Period (use "latest" for key metrics):' : 'Period (e.g., 2024-12-31):'}
                 </label>
                 <input
                   type="text"
-                  value={selectedPeriod}
-                  onChange={(e) => setSelectedPeriod(e.target.value)}
-                  placeholder="2024-12-31"
+                  value={selectedDataType === 'key_metrics' ? 'latest' : selectedPeriod}
+                  onChange={(e) => {
+                    if (selectedDataType !== 'key_metrics') {
+                      setSelectedPeriod(e.target.value)
+                    }
+                  }}
+                  placeholder={selectedDataType === 'key_metrics' ? 'latest' : '2024-12-31'}
+                  disabled={selectedDataType === 'key_metrics'}
                   style={{
                     width: '100%',
                     padding: '8px',
                     border: '1px solid #d1d5db',
                     borderRadius: '6px',
-                    fontSize: '14px'
+                    fontSize: '14px',
+                    backgroundColor: selectedDataType === 'key_metrics' ? '#f3f4f6' : 'white',
+                    color: selectedDataType === 'key_metrics' ? '#6b7280' : '#111827'
                   }}
                 />
+                {selectedDataType === 'key_metrics' && (
+                  <p style={{ marginTop: '4px', fontSize: '12px', color: '#6b7280' }}>
+                    Key metrics use period "latest" (not a date)
+                  </p>
+                )}
               </div>
 
               <div style={{ marginBottom: '16px' }}>

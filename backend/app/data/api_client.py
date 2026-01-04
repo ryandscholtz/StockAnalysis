@@ -22,12 +22,21 @@ class YahooFinanceClient:
         """Get yfinance Ticker object"""
         try:
             ticker = yf.Ticker(symbol)
-            # Try to access info to verify ticker is valid
-            # Use a timeout to avoid hanging
+            # For international tickers, try to verify with a lightweight check
+            # Some international tickers don't have fast_info, so we use history as a fallback
             try:
                 _ = ticker.fast_info  # Fast check
             except:
-                pass  # Some tickers don't have fast_info, that's okay
+                # For international tickers, try history as verification
+                try:
+                    hist = ticker.history(period="1d", timeout=10)
+                    if hist.empty:
+                        logger.warning(f"Ticker {symbol} exists but has no historical data")
+                    # If we get here without exception, ticker is valid
+                except Exception as hist_e:
+                    # If both fast_info and history fail, ticker might still be valid
+                    # (some tickers require different access methods)
+                    logger.debug(f"Could not verify ticker {symbol} with fast_info or history: {hist_e}")
             return ticker
         except Exception as e:
             logger.error(f"Error getting ticker {symbol}: {e}")
@@ -48,6 +57,18 @@ class YahooFinanceClient:
                 if price and price > 0:
                     logger.info(f"Got price from history: {price}")
                     return price
+            else:
+                # For international tickers, try longer period if 5d is empty
+                logger.debug("5-day history empty, trying longer period for international tickers...")
+                try:
+                    hist_longer = ticker.history(period="1mo", timeout=15)
+                    if not hist_longer.empty:
+                        price = float(hist_longer['Close'].iloc[-1])
+                        if price and price > 0:
+                            logger.info(f"Got price from longer history: {price}")
+                            return price
+                except Exception as e2:
+                    logger.debug(f"Longer history also failed: {e2}")
         except Exception as e:
             error_str = str(e).lower()
             if '429' not in error_str and 'too many requests' not in error_str:
@@ -173,7 +194,8 @@ class YahooFinanceClient:
             return None
     
     def search_tickers(self, query: str, max_results: int = 10) -> List[Dict]:
-        """Search for ticker symbols and company names using Yahoo Finance API"""
+        """Search for ticker symbols and company names using Yahoo Finance API
+        Filters out options contracts to return only stocks and ETFs"""
         try:
             import json
             import urllib.parse
@@ -193,17 +215,36 @@ class YahooFinanceClient:
             
             # Extract quotes from the response
             if 'quotes' in data and isinstance(data['quotes'], list):
-                for quote in data['quotes'][:max_results]:
+                for quote in data['quotes'][:max_results * 2]:  # Get more to filter options
                     ticker_symbol = quote.get('symbol', '')
                     company_name = quote.get('longname') or quote.get('shortname') or quote.get('name', '')
                     exchange = quote.get('exchange', '') or quote.get('exchDisp', '')
+                    quote_type = quote.get('quoteType', '').upper()
                     
-                    if ticker_symbol:
+                    # Filter out options contracts and other non-stock instruments
+                    # Options typically have: long tickers (15+ chars), exchange='OPR', quoteType='OPTION'
+                    # Also check if company name contains "call" or "put" which indicates options
+                    exchange_upper = str(exchange).upper()
+                    company_name_lower = str(company_name).lower()
+                    
+                    is_option = (
+                        quote_type == 'OPTION' or 
+                        exchange_upper == 'OPR' or
+                        (len(ticker_symbol) > 12 and any(char.isdigit() for char in ticker_symbol[-8:])) or  # Options have dates in ticker
+                        'call' in company_name_lower or
+                        'put' in company_name_lower
+                    )
+                    
+                    if ticker_symbol and not is_option:
                         results.append({
                             'ticker': str(ticker_symbol),
                             'companyName': str(company_name) if company_name else '',
                             'exchange': str(exchange) if exchange else ''
                         })
+                        
+                        # Stop once we have enough non-option results
+                        if len(results) >= max_results:
+                            break
             
             return results
         except Exception as e:

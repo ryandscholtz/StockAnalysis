@@ -41,11 +41,17 @@ export default function StockSearch({ onSearch }: StockSearchProps) {
       searchTimeoutRef.current = setTimeout(async () => {
         try {
           const results = await stockApi.searchTickers(ticker.trim())
+          console.log('Search results:', results) // Debug: verify data structure
           setSuggestions(results)
           setShowSuggestions(results.length > 0)
           setSelectedIndex(-1)
-        } catch (error) {
+        } catch (error: any) {
           console.error('Search error:', error)
+          // Show error message to user if it's a connection error
+          if (error.code === 'ERR_NETWORK' || error.code === 'ECONNREFUSED' || error.message?.includes('Cannot connect')) {
+            // Error will be shown via error state if needed
+            console.warn('Backend connection error:', error.message)
+          }
           setSuggestions([])
           setShowSuggestions(false)
         } finally {
@@ -106,16 +112,19 @@ export default function StockSearch({ onSearch }: StockSearchProps) {
   }
 
   const handleSelectSuggestion = (suggestion: SearchResult) => {
-    setTicker(suggestion.ticker)
+    // Set the ticker in the input field - this will be displayed
+    const selectedTicker = suggestion.ticker.toUpperCase()
+    setTicker(selectedTicker)
     setShowSuggestions(false)
     setSelectedIndex(-1)
     
     // Save to recent searches
-    const updated = [suggestion.ticker, ...recentSearches.filter(s => s !== suggestion.ticker)].slice(0, 5)
+    const updated = [selectedTicker, ...recentSearches.filter(s => s !== selectedTicker)].slice(0, 5)
     setRecentSearches(updated)
     localStorage.setItem('stockAnalysisRecentSearches', JSON.stringify(updated))
     
-    onSearch(suggestion.ticker)
+    // Trigger the search
+    onSearch(selectedTicker)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -152,9 +161,9 @@ export default function StockSearch({ onSearch }: StockSearchProps) {
               type="text"
               className="input"
               placeholder="Search by ticker or company name (e.g., AAPL or Apple)"
-              value={ticker}
+              value={ticker || ''}
               onChange={(e) => {
-                const value = e.target.value
+                const value = e.target.value || ''
                 setTicker(value)
                 setShowSuggestions(value.trim().length >= 1)
               }}
@@ -205,23 +214,38 @@ export default function StockSearch({ onSearch }: StockSearchProps) {
                         transition: 'background-color 0.15s'
                       }}
                     >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div>
-                          <div style={{ fontWeight: '600', fontSize: '16px', color: '#111827' }}>
-                            {suggestion.ticker}
-                          </div>
-                          {suggestion.companyName && (
-                            <div style={{ fontSize: '14px', color: '#6b7280', marginTop: '2px' }}>
-                              {suggestion.companyName}
-                            </div>
-                          )}
-                        </div>
+                      {/* Main line: TICKER (EXCHANGE) */}
+                      <div style={{ 
+                        fontWeight: '600', 
+                        fontSize: '16px', 
+                        color: '#111827',
+                        marginBottom: suggestion.companyName ? '4px' : '0',
+                        display: 'block'
+                      }}>
+                        {suggestion.ticker || 'N/A'}
                         {suggestion.exchange && (
-                          <div style={{ fontSize: '12px', color: '#9ca3af', textTransform: 'uppercase' }}>
-                            {suggestion.exchange}
-                          </div>
+                          <span style={{ 
+                            fontSize: '14px', 
+                            color: '#6b7280',
+                            fontWeight: '400',
+                            marginLeft: '8px'
+                          }}>
+                            ({suggestion.exchange})
+                          </span>
                         )}
                       </div>
+                      
+                      {/* Company name on second line if available */}
+                      {suggestion.companyName && (
+                        <div style={{ 
+                          fontSize: '13px', 
+                          color: '#6b7280',
+                          marginTop: '2px',
+                          display: 'block'
+                        }}>
+                          {suggestion.companyName}
+                        </div>
+                      )}
                     </div>
                   ))
                 )}

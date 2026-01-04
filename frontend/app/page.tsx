@@ -7,8 +7,8 @@ export default function Home() {
   const router = useRouter()
 
   useEffect(() => {
-    // Redirect to single-search page
-    router.push('/single-search')
+    // Redirect to watchlist page
+    router.push('/watchlist')
   }, [router])
 
   return (

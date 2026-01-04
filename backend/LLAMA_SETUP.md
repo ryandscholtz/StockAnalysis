@@ -24,6 +24,38 @@ This guide explains how to set up Llama (local or hosted) for PDF image extracti
    ```
    This starts the API server at `http://localhost:11434`
 
+4. **Configure Ollama for Concurrent Processing** (IMPORTANT for performance):
+   
+   By default, Ollama processes requests sequentially. To enable concurrent processing (which significantly speeds up PDF processing), set these environment variables before starting Ollama:
+   
+   **Windows (PowerShell):**
+   ```powershell
+   $env:OLLAMA_NUM_PARALLEL = "4"  # Number of parallel requests (adjust based on your GPU/CPU)
+   $env:OLLAMA_MAX_LOADED_MODELS = "1"  # Keep model loaded in memory
+   ollama serve
+   ```
+   
+   **Windows (Command Prompt):**
+   ```cmd
+   set OLLAMA_NUM_PARALLEL=4
+   set OLLAMA_MAX_LOADED_MODELS=1
+   ollama serve
+   ```
+   
+   **Linux/Mac:**
+   ```bash
+   export OLLAMA_NUM_PARALLEL=4
+   export OLLAMA_MAX_LOADED_MODELS=1
+   ollama serve
+   ```
+   
+   **Recommended values:**
+   - **GPU with 8GB+ VRAM**: `OLLAMA_NUM_PARALLEL=4` to `8`
+   - **GPU with 4-8GB VRAM**: `OLLAMA_NUM_PARALLEL=2` to `4`
+   - **CPU only**: `OLLAMA_NUM_PARALLEL=2` to `4` (depends on CPU cores)
+   
+   **Note**: Higher values use more memory/VRAM. Start with 4 and adjust based on your system.
+
 ### Configuration
 
 Add to your `.env` file:
@@ -102,6 +134,13 @@ ollama serve
 ### Out of memory
 - Use a smaller model: `llama3.2-vision:3b`
 - Or reduce concurrent requests in the code
+- Reduce `OLLAMA_NUM_PARALLEL` if set too high
+
+### Slow processing / Sequential processing
+- **Check if Ollama is configured for concurrent processing**: By default, Ollama processes requests one at a time
+- Set `OLLAMA_NUM_PARALLEL=4` (or higher) before starting Ollama
+- Verify by checking Ollama logs - you should see multiple requests being processed simultaneously
+- If requests are still sequential, restart Ollama with the environment variable set
 
 ## Switching Between Providers
 

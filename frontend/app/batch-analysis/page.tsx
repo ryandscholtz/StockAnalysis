@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { stockApi, SearchResult } from '@/lib/api'
+import MultiplePDFUpload from '@/components/MultiplePDFUpload'
+import { formatPrice, formatPercent, formatNumber } from '@/lib/currency'
 
 interface TickerCard {
   ticker: string
@@ -23,6 +25,8 @@ export default function BatchAnalysisPage() {
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [selectedIndex, setSelectedIndex] = useState(-1)
+  const [showPDFUpload, setShowPDFUpload] = useState(false)
+  const [uploadedTickers, setUploadedTickers] = useState<Set<string>>(new Set())
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const suggestionsRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -209,8 +213,44 @@ export default function BatchAnalysisPage() {
         Batch Stock Analysis
       </h1>
       <p style={{ fontSize: '16px', color: '#6b7280', marginBottom: '32px' }}>
-        Analyze multiple stocks at once. Search and add tickers to build your list.
+        Analyze multiple stocks at once. Search and add tickers, or upload PDF financial statements.
       </p>
+
+      {/* Toggle between ticker search and PDF upload */}
+      <div style={{ marginBottom: '32px', display: 'flex', gap: '16px', justifyContent: 'center' }}>
+        <button
+          onClick={() => setShowPDFUpload(false)}
+          style={{
+            padding: '12px 24px',
+            backgroundColor: !showPDFUpload ? '#2563eb' : '#e5e7eb',
+            color: !showPDFUpload ? 'white' : '#374151',
+            border: 'none',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            fontSize: '16px',
+            fontWeight: '500',
+            transition: 'all 0.2s'
+          }}
+        >
+          Add by Ticker Search
+        </button>
+        <button
+          onClick={() => setShowPDFUpload(true)}
+          style={{
+            padding: '12px 24px',
+            backgroundColor: showPDFUpload ? '#2563eb' : '#e5e7eb',
+            color: showPDFUpload ? 'white' : '#374151',
+            border: 'none',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            fontSize: '16px',
+            fontWeight: '500',
+            transition: 'all 0.2s'
+          }}
+        >
+          Upload PDF Statements
+        </button>
+      </div>
 
       {/* Toast Notifications - Fixed Position */}
       {/* Toast Notifications - Fixed Position (doesn't affect layout) */}
@@ -258,7 +298,25 @@ export default function BatchAnalysisPage() {
         </div>
       )}
 
+      {/* PDF Upload Section */}
+      {showPDFUpload && (
+        <MultiplePDFUpload
+          onItemComplete={(ticker) => {
+            setUploadedTickers(prev => new Set([...prev, ticker]))
+            // Auto-add ticker to the list if not already present
+            if (!tickers.some(t => t.ticker === ticker)) {
+              setTickers(prev => [...prev, { ticker: ticker.toUpperCase() }])
+            }
+          }}
+          onAllComplete={() => {
+            setSuccessMessage('All PDFs processed successfully! You can now run batch analysis.')
+            setTimeout(() => setSuccessMessage(null), 5000)
+          }}
+        />
+      )}
+
       {/* Add Ticker Section */}
+      {!showPDFUpload && (
       <div style={{ marginBottom: '32px' }}>
         <label htmlFor="ticker-search" style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#374151' }}>
           Add Ticker
@@ -366,6 +424,7 @@ export default function BatchAnalysisPage() {
           {!validating && tickers.length === 0 && 'Search for stocks to add them to your batch analysis list'}
         </p>
       </div>
+      )}
 
       {/* Ticker Cards */}
       {tickers.length > 0 && (
@@ -630,7 +689,7 @@ export default function BatchAnalysisPage() {
                         {stock.ticker}
                       </div>
                       <div style={{ fontSize: '14px', color: '#6b7280', lineHeight: '1.4' }}>
-                        {stock.company_name || 'N/A'}
+                        {stock.company_name || '-'}
                       </div>
                     </div>
                     {stock.recommendation && (
@@ -657,33 +716,23 @@ export default function BatchAnalysisPage() {
                         fontWeight: '700', 
                         color: color 
                       }}>
-                        {fairValuePct.toFixed(1)}%
+                        {formatPercent(fairValuePct, 1)}
                       </span>
                     </div>
                     
-                    {stock.current_price && stock.fair_value && (
-                      <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '8px' }}>
-                        <div>Price: ${stock.current_price.toFixed(2)}</div>
-                        <div>Fair Value: ${stock.fair_value.toFixed(2)}</div>
-                        {stock.margin_of_safety_pct !== null && stock.margin_of_safety_pct !== undefined && (
-                          <div style={{ marginTop: '4px', color: isGoodDeal ? '#10b981' : '#6b7280' }}>
-                            Margin: {stock.margin_of_safety_pct.toFixed(1)}%
-                          </div>
-                        )}
+                    <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '8px' }}>
+                      <div>Price: {formatPrice(stock.current_price)}</div>
+                      <div>Fair Value: {formatPrice(stock.fair_value)}</div>
+                      <div style={{ marginTop: '4px', color: isGoodDeal ? '#10b981' : '#6b7280' }}>
+                        Margin: {formatPercent(stock.margin_of_safety_pct, 1)}
                       </div>
-                    )}
+                    </div>
                   </div>
                   
-                  {(stock.financial_health_score || stock.business_quality_score) && (
-                    <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #e5e7eb', fontSize: '11px', color: '#9ca3af' }}>
-                      {stock.financial_health_score && (
-                        <span style={{ marginRight: '12px' }}>Health: {stock.financial_health_score.toFixed(0)}</span>
-                      )}
-                      {stock.business_quality_score && (
-                        <span>Quality: {stock.business_quality_score.toFixed(0)}</span>
-                      )}
-                    </div>
-                  )}
+                  <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #e5e7eb', fontSize: '11px', color: '#9ca3af' }}>
+                    <span style={{ marginRight: '12px' }}>Health: {formatNumber(stock.financial_health_score, 0)}</span>
+                    <span>Quality: {formatNumber(stock.business_quality_score, 0)}</span>
+                  </div>
                 </div>
               )
             })}

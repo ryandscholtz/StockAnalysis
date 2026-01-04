@@ -166,4 +166,69 @@ class AlphaVantageClient:
         except Exception as e:
             print(f"Error getting Alpha Vantage cash flow: {e}")
             return None
+    
+    def get_quote(self, symbol: str) -> Optional[Dict]:
+        """Get current quote (price and basic info) using GLOBAL_QUOTE endpoint"""
+        if not self.api_key:
+            return None
+        
+        try:
+            params = {
+                'function': 'GLOBAL_QUOTE',
+                'symbol': symbol,
+                'apikey': self.api_key
+            }
+            response = requests.get(self.base_url, params=params, timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if 'Global Quote' in data and data['Global Quote']:
+                    quote = data['Global Quote']
+                    # Alpha Vantage returns price as string, convert to float
+                    price_str = quote.get('05. price', '0')
+                    try:
+                        price = float(price_str) if price_str and price_str != 'None' else None
+                        if price and price > 0:
+                            return {
+                                'price': price,
+                                'market_cap': None,  # GLOBAL_QUOTE doesn't provide market cap
+                                'company_name': quote.get('01. symbol', symbol),
+                                'currency': 'USD'
+                            }
+                    except (ValueError, TypeError):
+                        pass
+            return None
+        except Exception as e:
+            print(f"Error getting Alpha Vantage quote: {e}")
+            return None
+    
+    def get_company_overview(self, symbol: str) -> Optional[Dict]:
+        """Get company overview (company info) using OVERVIEW endpoint"""
+        if not self.api_key:
+            return None
+        
+        try:
+            params = {
+                'function': 'OVERVIEW',
+                'symbol': symbol,
+                'apikey': self.api_key
+            }
+            response = requests.get(self.base_url, params=params, timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                # Check if we got valid data (not an error message)
+                if data and 'Symbol' in data and data.get('Symbol'):
+                    return {
+                        'companyName': data.get('Name', symbol),
+                        'sector': data.get('Sector'),
+                        'industry': data.get('Industry'),
+                        'website': None,  # OVERVIEW doesn't provide website
+                        'marketCap': data.get('MarketCapitalization'),  # String, may need conversion
+                        'description': data.get('Description')
+                    }
+            return None
+        except Exception as e:
+            print(f"Error getting Alpha Vantage company overview: {e}")
+            return None
 

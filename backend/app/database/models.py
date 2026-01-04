@@ -53,6 +53,10 @@ class StockAnalysis(Base):
     industry = Column(String(100), nullable=True, index=True)
     currency = Column(String(10), nullable=True)
     
+    # Analysis Configuration
+    business_type = Column(String(50), nullable=True, index=True)  # Detected or user-selected business type
+    analysis_weights = Column(JSON, nullable=True)  # Custom analysis weights if manually set
+    
     # Key Metrics (for filtering)
     pe_ratio = Column(Float, nullable=True, index=True)
     pb_ratio = Column(Float, nullable=True)
@@ -109,6 +113,9 @@ class StockAnalysis(Base):
             'ps_ratio': self.ps_ratio,
             'revenue_growth_1y': self.revenue_growth_1y,
             'earnings_growth_1y': self.earnings_growth_1y,
+            # Analysis Configuration
+            'business_type': self.business_type,
+            'analysis_weights': json.loads(self.analysis_weights) if self.analysis_weights else None,
             # Status
             'status': self.status,
             'error_message': self.error_message
@@ -145,3 +152,121 @@ class BatchJob(Base):
             'progress_pct': (self.processed_tickers / self.total_tickers * 100) if self.total_tickers > 0 else 0
         }
 
+
+class PDFJob(Base):
+    """Track PDF processing jobs"""
+    __tablename__ = 'pdf_jobs'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    ticker = Column(String(20), nullable=False, index=True)
+    filename = Column(String(255), nullable=True)
+    total_pages = Column(Integer, default=0, nullable=False)
+    pages_processed = Column(Integer, default=0, nullable=False)
+    started_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    completed_at = Column(DateTime, nullable=True)
+    status = Column(String(20), default='running', nullable=False, index=True)  # running, completed, failed, cancelled
+    error_message = Column(String(1000), nullable=True)
+    
+    # Results stored as JSON
+    result = Column(JSON, nullable=True)  # Final result when completed
+    extraction_details = Column(JSON, nullable=True)  # Detailed extraction info
+    
+    # Progress tracking
+    current_page = Column(Integer, default=0, nullable=False)
+    current_task = Column(String(500), nullable=True)  # Current processing task
+    
+    def to_dict(self) -> Dict:
+        """Convert to dictionary"""
+        progress_pct = (self.pages_processed / self.total_pages * 100) if self.total_pages > 0 else 0
+        return {
+            'job_id': self.id,  # Use 'job_id' to match Pydantic model
+            'ticker': self.ticker,
+            'filename': self.filename,
+            'total_pages': self.total_pages,
+            'pages_processed': self.pages_processed,
+            'current_page': self.current_page,
+            'current_task': self.current_task,
+            'started_at': self.started_at.isoformat() if self.started_at else None,
+            'completed_at': self.completed_at.isoformat() if self.completed_at else None,
+            'status': self.status,
+            'error_message': self.error_message,
+            'progress_pct': round(progress_pct, 1),
+            'result': self.result,
+            'extraction_details': self.extraction_details
+        }
+
+
+class AIExtractedFinancialData(Base):
+    """Store AI-extracted financial data from PDFs"""
+    __tablename__ = 'ai_extracted_financial_data'
+    
+    # Composite primary key (ticker + data_type + period)
+    ticker = Column(String(20), primary_key=True, nullable=False, index=True)
+    data_type = Column(String(20), primary_key=True, nullable=False)  # income_statement, balance_sheet, cashflow, key_metrics
+    period = Column(String(20), primary_key=True, nullable=False)  # YYYY-MM-DD or 'latest' for key_metrics
+    
+    # Financial data stored as JSON
+    data = Column(JSON, nullable=False)
+    
+    # Metadata
+    extracted_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    source = Column(String(50), default='pdf_upload', nullable=False)  # pdf_upload, manual_entry, etc.
+    extraction_method = Column(String(50), default='llama_vision', nullable=False)  # llama_vision, etc.
+    
+    # Indexes for common queries
+    __table_args__ = (
+        Index('idx_ticker_type', 'ticker', 'data_type'),
+        Index('idx_ticker_period', 'ticker', 'period'),
+        Index('idx_extracted_at', 'extracted_at'),
+    )
+    
+    def to_dict(self) -> Dict:
+        """Convert to dictionary"""
+        return {
+            'ticker': self.ticker,
+            'data_type': self.data_type,
+            'period': self.period,
+            'data': self.data,
+            'extracted_at': self.extracted_at.isoformat() if self.extracted_at else None,
+            'source': self.source,
+            'extraction_method': self.extraction_method
+        }
+
+
+class Watchlist(Base):
+    """User's watchlist of stocks to track"""
+    __tablename__ = 'watchlist'
+    
+    ticker = Column(String(20), primary_key=True, nullable=False, index=True)
+    company_name = Column(String(200), nullable=True)
+    exchange = Column(String(50), nullable=True)
+    
+    # Timestamps
+    added_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    
+    # User notes/notes (optional)
+    notes = Column(String(1000), nullable=True)
+    
+    # Quick access fields (cached from latest analysis)
+    current_price = Column(Float, nullable=True)
+    fair_value = Column(Float, nullable=True)
+    margin_of_safety_pct = Column(Float, nullable=True)
+    recommendation = Column(String(20), nullable=True)  # Strong Buy, Buy, Hold, Avoid
+    last_analyzed_at = Column(DateTime, nullable=True)
+    
+    def to_dict(self) -> Dict:
+        """Convert to dictionary"""
+        return {
+            'ticker': self.ticker,
+            'company_name': self.company_name,
+            'exchange': self.exchange,
+            'added_at': self.added_at.isoformat() if self.added_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'notes': self.notes,
+            'current_price': self.current_price,
+            'fair_value': self.fair_value,
+            'margin_of_safety_pct': self.margin_of_safety_pct,
+            'recommendation': self.recommendation,
+            'last_analyzed_at': self.last_analyzed_at.isoformat() if self.last_analyzed_at else None
+        }

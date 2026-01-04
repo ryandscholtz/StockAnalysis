@@ -30,13 +30,13 @@ try {
     cdk bootstrap
 }
 
-# Get private AWS account ID if not set
-if (-not $env:CDK_PRIVATE_ACCOUNT) {
-    Write-Host "⚠️  CDK_PRIVATE_ACCOUNT not set. Using default private account (771250468817)..." -ForegroundColor Yellow
-    $env:CDK_PRIVATE_ACCOUNT = '771250468817'
-    Write-Host "Using private account: $env:CDK_PRIVATE_ACCOUNT" -ForegroundColor Green
+# Get Cerebrum AWS account ID if not set
+if (-not $env:CDK_DEFAULT_ACCOUNT) {
+    Write-Host "⚠️  CDK_DEFAULT_ACCOUNT not set. Using default Cerebrum account (295202642810)..." -ForegroundColor Yellow
+    $env:CDK_DEFAULT_ACCOUNT = '295202642810'
+    Write-Host "Using Cerebrum account: $env:CDK_DEFAULT_ACCOUNT" -ForegroundColor Green
 } else {
-    Write-Host "Using private account: $env:CDK_PRIVATE_ACCOUNT" -ForegroundColor Green
+    Write-Host "Using Cerebrum account: $env:CDK_DEFAULT_ACCOUNT" -ForegroundColor Green
 }
 
 # Deploy

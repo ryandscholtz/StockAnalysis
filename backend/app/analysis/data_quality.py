@@ -42,33 +42,151 @@ class DataQualityAnalyzer:
     
     def _check_financial_statements(self):
         """Check if financial statements are missing or incomplete"""
-        if not self.company_data.income_statement or len(self.company_data.income_statement) < 3:
+        # Check income statement
+        if not self.company_data.income_statement:
             self.warnings.append(DataQualityWarning(
                 category='missing_data',
                 field='income_statement',
-                message='Insufficient income statement data (less than 3 periods). DCF and EPV calculations may be inaccurate.',
+                message='No income statement data available. DCF and EPV calculations cannot be performed.',
+                severity='high'
+            ))
+        elif len(self.company_data.income_statement) < 3:
+            self.warnings.append(DataQualityWarning(
+                category='missing_data',
+                field='income_statement',
+                message=f'Insufficient income statement data ({len(self.company_data.income_statement)} period(s), need 3+). DCF and EPV calculations may be inaccurate.',
                 severity='high'
             ))
         
-        if not self.company_data.balance_sheet or len(self.company_data.balance_sheet) < 3:
+        # Always check for key fields if income statement exists (even if < 3 periods)
+        if self.company_data.income_statement:
+            # Check for key income statement fields across all periods
+            required_fields = {
+                'Total Revenue': ['total revenue', 'revenue', 'net sales', 'sales'],
+                'Net Income': ['net income', 'net earnings', 'earnings'],
+                'Operating Income': ['operating income', 'operating profit', 'ebit'],
+                'EBIT': ['ebit', 'earnings before interest and tax']
+            }
+            
+            # Check all periods to see if field exists in any
+            for field_name, search_terms in required_fields.items():
+                found = False
+                for period_data in self.company_data.income_statement.values():
+                    if isinstance(period_data, dict):
+                        for key in period_data.keys():
+                            key_lower = str(key).lower()
+                            if any(term in key_lower for term in search_terms):
+                                found = True
+                                break
+                        if found:
+                            break
+                
+                if not found:
+                    self.warnings.append(DataQualityWarning(
+                        category='missing_data',
+                        field=field_name.lower().replace(' ', '_'),
+                        message=f'{field_name} not found in income statement. This may affect valuation accuracy.',
+                        severity='high' if field_name in ['Total Revenue', 'Net Income'] else 'medium'
+                    ))
+        
+        # Check balance sheet
+        if not self.company_data.balance_sheet:
             self.warnings.append(DataQualityWarning(
                 category='missing_data',
                 field='balance_sheet',
-                message='Insufficient balance sheet data (less than 3 periods). Asset-based valuation may be inaccurate.',
+                message='No balance sheet data available. Asset-based valuation cannot be performed.',
+                severity='high'
+            ))
+        elif len(self.company_data.balance_sheet) < 3:
+            self.warnings.append(DataQualityWarning(
+                category='missing_data',
+                field='balance_sheet',
+                message=f'Insufficient balance sheet data ({len(self.company_data.balance_sheet)} period(s), need 3+). Asset-based valuation may be inaccurate.',
                 severity='high'
             ))
         
-        if not self.company_data.cashflow or len(self.company_data.cashflow) < 3:
+        # Always check for key fields if balance sheet exists (even if < 3 periods)
+        if self.company_data.balance_sheet:
+            # Check for key balance sheet fields across all periods
+            required_fields = {
+                'Total Assets': ['total assets', 'assets'],
+                'Total Liabilities': ['total liabilities', 'liabilities'],
+                'Total Stockholder Equity': ['total stockholder equity', 'total equity', 'shareholders equity', 'stockholders equity'],
+                'Cash And Cash Equivalents': ['cash and cash equivalents', 'cash', 'cash equivalents'],
+                'Total Debt': ['total debt', 'debt', 'long term debt', 'short term debt']
+            }
+            
+            # Check all periods to see if field exists in any
+            for field_name, search_terms in required_fields.items():
+                found = False
+                for period_data in self.company_data.balance_sheet.values():
+                    if isinstance(period_data, dict):
+                        for key in period_data.keys():
+                            key_lower = str(key).lower()
+                            if any(term in key_lower for term in search_terms):
+                                found = True
+                                break
+                        if found:
+                            break
+                
+                if not found:
+                    self.warnings.append(DataQualityWarning(
+                        category='missing_data',
+                        field=field_name.lower().replace(' ', '_'),
+                        message=f'{field_name} not found in balance sheet. This may affect valuation accuracy.',
+                        severity='high' if field_name in ['Total Assets', 'Total Liabilities', 'Total Stockholder Equity'] else 'medium'
+                    ))
+        
+        # Check cash flow
+        if not self.company_data.cashflow:
             self.warnings.append(DataQualityWarning(
                 category='missing_data',
                 field='cashflow',
-                message='Insufficient cash flow data (less than 3 periods). DCF calculation may use estimated FCF from earnings (70% of net income).',
+                message='No cash flow data available. DCF calculation cannot be performed.',
                 severity='high'
             ))
+        elif len(self.company_data.cashflow) < 3:
+            self.warnings.append(DataQualityWarning(
+                category='missing_data',
+                field='cashflow',
+                message=f'Insufficient cash flow data ({len(self.company_data.cashflow)} period(s), need 3+). DCF calculation may use estimated FCF from earnings (70% of net income).',
+                severity='high'
+            ))
+        
+        # Always check for key fields if cash flow exists (even if < 3 periods)
+        if self.company_data.cashflow:
+            # Check for key cash flow fields across all periods
+            required_fields = {
+                'Operating Cash Flow': ['operating cash flow', 'cash from operating activities', 'operating activities'],
+                'Free Cash Flow': ['free cash flow', 'fcf'],
+                'Capital Expenditures': ['capital expenditures', 'capex', 'capital spending']
+            }
+            
+            # Check all periods to see if field exists in any
+            for field_name, search_terms in required_fields.items():
+                found = False
+                for period_data in self.company_data.cashflow.values():
+                    if isinstance(period_data, dict):
+                        for key in period_data.keys():
+                            key_lower = str(key).lower()
+                            if any(term in key_lower for term in search_terms):
+                                found = True
+                                break
+                        if found:
+                            break
+                
+                if not found:
+                    self.warnings.append(DataQualityWarning(
+                        category='missing_data',
+                        field=field_name.lower().replace(' ', '_'),
+                        message=f'{field_name} not found in cash flow statement. This may affect DCF valuation accuracy.',
+                        severity='high' if field_name == 'Operating Cash Flow' else 'medium'
+                    ))
     
     def _check_key_metrics(self):
         """Check for missing key metrics"""
-        if not self.company_data.shares_outstanding:
+        # Check shares_outstanding - use is None to allow 0 values
+        if self.company_data.shares_outstanding is None:
             self.warnings.append(DataQualityWarning(
                 category='missing_data',
                 field='shares_outstanding',
@@ -85,8 +203,13 @@ class DataQualityAnalyzer:
                 assumed_value=1.0
             ))
         
-        if not self.company_data.market_cap:
-            if not (self.company_data.current_price and self.company_data.shares_outstanding):
+        # Check market_cap - use is None to allow 0 values, but also try to calculate if possible
+        if self.company_data.market_cap is None:
+            # Try to calculate market cap if we have price and shares
+            if self.company_data.current_price and self.company_data.shares_outstanding:
+                # Market cap can be calculated, so don't warn
+                pass
+            else:
                 self.warnings.append(DataQualityWarning(
                     category='missing_data',
                     field='market_cap',
