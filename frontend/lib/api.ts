@@ -1,7 +1,7 @@
 import axios from 'axios'
 import { logApiEvent } from '@/components/DeveloperFeedback'
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -708,6 +708,11 @@ export const stockApi = {
     return response.data
   },
 
+  async getWatchlistLivePrices(): Promise<{ live_prices: Record<string, { price?: number; company_name?: string; error?: string; comment?: string; success?: boolean }> }> {
+    const response = await api.get<{ live_prices: Record<string, { price?: number; company_name?: string; error?: string; comment?: string; success?: boolean }> }>('/api/watchlist/live-prices')
+    return response.data
+  },
+
   async addToWatchlist(ticker: string, companyName?: string, exchange?: string, notes?: string): Promise<{ success: boolean; message: string }> {
     const params = new URLSearchParams()
     if (companyName) params.append('company_name', companyName)
@@ -723,8 +728,9 @@ export const stockApi = {
     return response.data
   },
 
-  async getWatchlistItem(ticker: string): Promise<WatchlistItemDetail> {
-    const response = await api.get<WatchlistItemDetail>(`/api/watchlist/${ticker}`)
+  async getWatchlistItem(ticker: string, forceRefresh: boolean = false): Promise<WatchlistItemDetail> {
+    const params = forceRefresh ? { force_refresh: true } : {}
+    const response = await api.get<WatchlistItemDetail>(`/api/watchlist/${ticker}`, { params })
     return response.data
   },
 
@@ -765,6 +771,15 @@ export interface WatchlistItem {
   margin_of_safety_pct?: number
   recommendation?: string
   last_analyzed_at?: string
+  analysis_date?: string
+  live_price?: number
+  price_error?: string
+  cache_info?: {
+    status: 'fresh' | 'stale' | 'missing'
+    needs_refresh: boolean
+    last_updated?: string
+    is_today: boolean
+  }
 }
 
 export interface WatchlistItemDetail {
@@ -777,5 +792,12 @@ export interface WatchlistItemDetail {
     key_metrics?: Record<string, number>
   }
   current_quote?: QuoteResponse
+  price_error?: string
+  cache_info?: {
+    status: 'fresh' | 'stale' | 'missing' | 'refreshed' | 'refresh_failed_using_cache' | 'refresh_failed_no_cache'
+    last_updated?: string
+    is_today: boolean
+    needs_refresh: boolean
+  }
 }
 

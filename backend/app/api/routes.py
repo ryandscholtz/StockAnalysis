@@ -30,6 +30,47 @@ from app.analysis.data_quality import DataQualityAnalyzer
 
 router = APIRouter()
 
+def _format_api_attempts_comment(api_attempts: list, success: bool = False) -> str:
+    """Format API attempts into a detailed comment for the frontend"""
+    if not api_attempts:
+        return "No API attempt details available"
+    
+    if success:
+        # For successful requests, show what worked
+        successful_attempts = [attempt for attempt in api_attempts if attempt.get('status') == 'success']
+        if successful_attempts:
+            methods = [attempt.get('method', 'Unknown method') for attempt in successful_attempts]
+            return f"✅ Success using: {', '.join(methods)}"
+        else:
+            return "✅ Success (method details unavailable)"
+    else:
+        # For failed requests, show detailed breakdown of what was tried
+        comment_parts = []
+        
+        # Group attempts by API
+        api_groups = {}
+        for attempt in api_attempts:
+            api_name = attempt.get('api', 'Unknown API')
+            if api_name not in api_groups:
+                api_groups[api_name] = []
+            api_groups[api_name].append(attempt)
+        
+        for api_name, attempts in api_groups.items():
+            failed_attempts = [a for a in attempts if a.get('status') == 'failed']
+            if failed_attempts:
+                errors = []
+                for attempt in failed_attempts:
+                    method = attempt.get('method', 'unknown')
+                    error = attempt.get('error', 'unknown error')
+                    errors.append(f"{method}: {error}")
+                
+                comment_parts.append(f"❌ {api_name} - {'; '.join(errors)}")
+        
+        if comment_parts:
+            return " | ".join(comment_parts)
+        else:
+            return "❌ All API methods failed (no details available)"
+
 # Test route to verify router is working
 @router.get("/test-batch-route")
 async def test_batch_route():
@@ -39,12 +80,10 @@ async def test_batch_route():
 @router.get("/version")
 async def get_version():
     """Get backend version information"""
-    from datetime import datetime
-    # Generate version timestamp in yymmdd-hh:mm format
-    version = datetime.now().strftime("%y%m%d-%H:%M")
+    from app.main import BUILD_TIMESTAMP
     return {
-        "version": version,
-        "build_time": version
+        "version": BUILD_TIMESTAMP,
+        "build_time": BUILD_TIMESTAMP
     }
 
 
@@ -640,35 +679,42 @@ async def analyze_stock(
     if not force_refresh:
         try:
             from app.database.db_service import DatabaseService
-            from datetime import date
+            from datetime import date, datetime
             db_service = DatabaseService(db_path="stock_analysis.db")
-            existing_analysis = db_service.get_analysis(ticker, date.today().isoformat())
+            
+            # First check if we have analysis for today
+            today = date.today().isoformat()
+            existing_analysis = db_service.get_analysis(ticker, today)
             
             if existing_analysis and existing_analysis.get('status') == 'success':
-                logger.info(f"Found existing analysis in database for {ticker}, returning cached result")
-                # Convert database dict to StockAnalysis model
+                logger.info(f"Found fresh analysis for {ticker} from today ({today}), returning cached result")
                 analysis_data = existing_analysis.get('analysis_data', {})
                 if analysis_data:
-                    # Create StockAnalysis from dict
                     from app.api.models import StockAnalysis
                     try:
                         cached_analysis = StockAnalysis(**analysis_data)
                         if stream:
-                            # For streaming, send cached result immediately
                             async def generate_cached():
-                                complete_data = {'type': 'complete', 'data': cached_analysis.model_dump(mode='json')}
+                                complete_data = {'type': 'complete', 'data': cached_analysis.model_dump(mode='json'), 'cached': True, 'cache_date': today}
                                 yield f"data: {json.dumps(complete_data)}\n\n"
                             return StreamingResponse(generate_cached(), media_type="text/event-stream")
                         else:
                             return cached_analysis
                     except Exception as e:
                         logger.warning(f"Error converting cached analysis to model: {e}, will run new analysis")
-                        # Fall through to run new analysis
+            else:
+                # Check if we have any analysis from a previous date
+                latest_analysis = db_service.get_latest_analysis(ticker)
+                if latest_analysis:
+                    analysis_date = latest_analysis.get('analysis_date')
+                    logger.info(f"Found analysis for {ticker} from {analysis_date}, but not from today ({today}). Running fresh analysis.")
+                else:
+                    logger.info(f"No previous analysis found for {ticker}. Running fresh analysis.")
+                    
         except Exception as e:
             logger.warning(f"Error checking database for cached analysis: {e}, will run new analysis")
             import traceback
             logger.warning(traceback.format_exc())
-            # Fall through to run new analysis
     
     if stream:
         # Stream progress via SSE
@@ -2712,55 +2758,192 @@ async def get_batch_results(
 # Watchlist endpoints
 @router.get("/watchlist")
 async def get_watchlist():
-    """Get all stocks in the watchlist"""
+    """Get all stocks in the watchlist - optimized for fast loading"""
     try:
         from app.database.db_service import DatabaseService
+        from datetime import date
         db_service = DatabaseService(db_path="stock_analysis.db")
         
         watchlist_items = db_service.get_watchlist()
+        today = date.today().isoformat()
         
-        # Enrich with latest analysis data if available
+        # Batch fetch all analysis data in one query for better performance
+        tickers = [item['ticker'] for item in watchlist_items]
+        latest_analyses = {}
+        
+        if tickers:
+            try:
+                # Use efficient batch query method
+                latest_analyses = db_service.get_latest_analyses_batch(tickers)
+            except Exception as e:
+                logger.warning(f"Error batch fetching analysis data: {e}")
+                latest_analyses = {}
+        
+        # Enrich items with cached analysis data only (no live API calls for performance)
         enriched_items = []
         for item in watchlist_items:
-            # Get latest analysis for this ticker
-            latest_analysis = db_service.get_latest_analysis(item['ticker'])
+            ticker = item['ticker']
+            latest_analysis = latest_analyses.get(ticker)
+            
+            # Determine cache status
+            cache_status = "missing"
+            needs_refresh = True
+            
             if latest_analysis:
+                analysis_date = latest_analysis.get('analysis_date')
+                if analysis_date == today:
+                    cache_status = "fresh"
+                    needs_refresh = False
+                else:
+                    cache_status = "stale"
+                    needs_refresh = True
+                
+                # Update item with essential analysis data only
                 item['current_price'] = latest_analysis.get('current_price')
                 item['fair_value'] = latest_analysis.get('fair_value')
                 item['margin_of_safety_pct'] = latest_analysis.get('margin_of_safety_pct')
                 item['recommendation'] = latest_analysis.get('recommendation')
                 item['last_analyzed_at'] = latest_analysis.get('analyzed_at')
+                item['analysis_date'] = analysis_date
+                item['financial_health_score'] = latest_analysis.get('financial_health_score')
+                item['business_quality_score'] = latest_analysis.get('business_quality_score')
             
-            # Get current quote for live price
-            price_error = None
-            try:
-                yahoo_client = YahooFinanceClient()
-                loop = asyncio.get_event_loop()
-                quote = await loop.run_in_executor(None, yahoo_client.get_quote, item['ticker'])
-                if quote:
-                    item['current_price'] = quote.get('price')
-                    item['company_name'] = item['company_name'] or quote.get('company_name', item['ticker'])
-                else:
-                    price_error = "Price data not available from API"
-            except Exception as e:
-                error_msg = str(e)
-                logger.warning(f"Could not get quote for {item['ticker']}: {error_msg}")
-                # Check if it's a rate limit or API issue
-                if '429' in error_msg or 'rate limit' in error_msg.lower() or 'too many requests' in error_msg.lower():
-                    price_error = "Price API rate limited - please try again later"
-                elif 'timeout' in error_msg.lower():
-                    price_error = "Price API timeout - please try again"
-                else:
-                    price_error = "Price data unavailable - API may be temporarily unavailable"
+            # Add cache information
+            item['cache_info'] = {
+                'status': cache_status,
+                'needs_refresh': needs_refresh,
+                'last_updated': latest_analysis.get('analysis_date') if latest_analysis else None,
+                'is_today': latest_analysis.get('analysis_date') == today if latest_analysis else False
+            }
             
-            if price_error:
-                item['price_error'] = price_error
+            # Note: Removed live price fetching for performance
+            # Live prices will be fetched on individual stock view or manual refresh
             
             enriched_items.append(item)
         
+        logger.info(f"Watchlist loaded: {len(enriched_items)} items (optimized - no live API calls)")
         return {"items": enriched_items, "total": len(enriched_items)}
+        
     except Exception as e:
         logger.error(f"Error getting watchlist: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/watchlist/live-prices")
+async def get_watchlist_live_prices():
+    """Get live prices for all watchlist items - separate endpoint for performance"""
+    try:
+        from app.database.db_service import DatabaseService
+        import concurrent.futures
+        import functools
+        
+        db_service = DatabaseService(db_path="stock_analysis.db")
+        
+        watchlist_items = db_service.get_watchlist()
+        tickers = [item['ticker'] for item in watchlist_items]
+        
+        live_prices = {}
+        yahoo_client = YahooFinanceClient()
+        
+        # Create a wrapper function with timeout for individual ticker calls
+        def get_quote_with_timeout(ticker, timeout_seconds=20):
+            """Get quote with a timeout to prevent hanging"""
+            try:
+                import signal
+                import time
+                
+                start_time = time.time()
+                result = yahoo_client.get_quote(ticker)
+                end_time = time.time()
+                
+                # Log timing for debugging
+                duration = end_time - start_time
+                logger.info(f"Quote for {ticker} took {duration:.2f} seconds")
+                
+                return result
+            except Exception as e:
+                logger.warning(f"Timeout or error getting quote for {ticker}: {e}")
+                return {
+                    'error': 'Timeout or API error',
+                    'error_detail': f'Request for {ticker} failed: {str(e)}',
+                    'symbol': ticker
+                }
+        
+        # Process tickers in parallel with a reasonable timeout
+        max_workers = min(4, len(tickers))  # Limit concurrent requests to avoid overwhelming API
+        
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submit all tasks
+            future_to_ticker = {
+                executor.submit(get_quote_with_timeout, ticker): ticker 
+                for ticker in tickers
+            }
+            
+            # Collect results with overall timeout
+            for future in concurrent.futures.as_completed(future_to_ticker, timeout=45):
+                ticker = future_to_ticker[future]
+                try:
+                    quote = future.result(timeout=25)  # Individual result timeout
+                    
+                    if quote:
+                        if quote.get('success'):
+                            # Successful quote
+                            live_prices[ticker] = {
+                                'price': quote.get('price'),
+                                'company_name': quote.get('company_name', ticker),
+                                'success': True,
+                                'comment': _format_api_attempts_comment(quote.get('api_attempts', []), success=True)
+                            }
+                            # Add warning if company info was partially unavailable
+                            if quote.get('info_warning'):
+                                live_prices[ticker]['comment'] += f" Warning: {quote.get('info_warning')}"
+                        else:
+                            # Quote returned with error details
+                            live_prices[ticker] = {
+                                'error': quote.get('error', 'Unknown error'),
+                                'success': False,
+                                'comment': _format_api_attempts_comment(quote.get('api_attempts', []), success=False)
+                            }
+                    else:
+                        # This shouldn't happen with the new implementation, but keep as fallback
+                        live_prices[ticker] = {
+                            'error': 'No data returned',
+                            'success': False,
+                            'comment': 'Yahoo Finance API returned empty response - ticker may not exist or be delisted'
+                        }
+                        
+                except concurrent.futures.TimeoutError:
+                    logger.warning(f"Timeout getting live price for {ticker}")
+                    live_prices[ticker] = {
+                        'error': 'Timeout',
+                        'success': False,
+                        'comment': f'Request for {ticker} timed out after 25 seconds - Yahoo Finance API may be slow or rate-limited'
+                    }
+                except Exception as e:
+                    error_msg = str(e)
+                    logger.warning(f"Error in future result for {ticker}: {error_msg}")
+                    live_prices[ticker] = {
+                        'error': 'Processing error',
+                        'success': False,
+                        'comment': f'Error processing request for {ticker}: {error_msg}'
+                    }
+        
+        # Handle any tickers that weren't processed (shouldn't happen with proper timeout handling)
+        for ticker in tickers:
+            if ticker not in live_prices:
+                live_prices[ticker] = {
+                    'error': 'Not processed',
+                    'success': False,
+                    'comment': f'Request for {ticker} was not completed within the timeout period'
+                }
+        
+        logger.info(f"Live prices completed for {len(live_prices)} tickers")
+        return {"live_prices": live_prices}
+        
+    except Exception as e:
+        logger.error(f"Error getting live prices: {e}")
         import traceback
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
@@ -2862,10 +3045,11 @@ async def remove_from_watchlist(ticker: str):
 
 
 @router.get("/watchlist/{ticker}")
-async def get_watchlist_item(ticker: str):
-    """Get detailed information for a watchlist item"""
+async def get_watchlist_item(ticker: str, force_refresh: bool = Query(False, description="Force refresh analysis data")):
+    """Get detailed information for a watchlist item with smart caching"""
     try:
         from app.database.db_service import DatabaseService
+        from datetime import date, datetime
         db_service = DatabaseService(db_path="stock_analysis.db")
         
         # Get watchlist item
@@ -2873,38 +3057,116 @@ async def get_watchlist_item(ticker: str):
         if not watchlist_item:
             raise HTTPException(status_code=404, detail="Stock not found in watchlist")
         
-        # Get latest analysis
-        latest_analysis = db_service.get_latest_analysis(ticker.upper())
+        # Check if we need to refresh analysis data
+        should_refresh_analysis = force_refresh
+        analysis_cache_status = "fresh"
+        
+        if not force_refresh:
+            # Check if analysis exists for today
+            today = date.today().isoformat()
+            existing_analysis = db_service.get_analysis(ticker.upper(), today)
+            
+            if not existing_analysis or existing_analysis.get('status') != 'success':
+                # No analysis for today, check latest analysis
+                latest_analysis = db_service.get_latest_analysis(ticker.upper())
+                if latest_analysis:
+                    # Check if latest analysis is from today
+                    analysis_date = latest_analysis.get('analysis_date')
+                    if analysis_date != today:
+                        should_refresh_analysis = True
+                        analysis_cache_status = "stale"
+                        logger.info(f"Analysis for {ticker} is from {analysis_date}, will refresh")
+                    else:
+                        analysis_cache_status = "fresh"
+                else:
+                    should_refresh_analysis = True
+                    analysis_cache_status = "missing"
+                    logger.info(f"No analysis found for {ticker}, will refresh")
+        
+        # Get or refresh analysis data
+        if should_refresh_analysis:
+            logger.info(f"Refreshing analysis for {ticker} (cache_status: {analysis_cache_status})")
+            try:
+                # Run new analysis
+                analysis = await _analyze_stock_with_progress(ticker.upper())
+                
+                # Save to database
+                from datetime import date
+                db_service.save_analysis(
+                    ticker=ticker.upper(),
+                    analysis_date=date.today().isoformat(),
+                    analysis_data=analysis.model_dump(mode='json'),
+                    # Extract key fields for indexing
+                    current_price=analysis.currentPrice,
+                    fair_value=analysis.fairValue,
+                    margin_of_safety_pct=analysis.marginOfSafety,
+                    recommendation=analysis.recommendation,
+                    financial_health_score=analysis.financialHealthScore,
+                    business_quality_score=analysis.businessQualityScore,
+                    management_quality_score=analysis.managementQualityScore,
+                    market_cap=analysis.marketCap,
+                    sector=analysis.sector,
+                    industry=analysis.industry,
+                    pe_ratio=analysis.priceRatios.pe if analysis.priceRatios else None,
+                    pb_ratio=analysis.priceRatios.pb if analysis.priceRatios else None,
+                    ps_ratio=analysis.priceRatios.ps if analysis.priceRatios else None,
+                    revenue_growth_1y=analysis.growthMetrics.revenueGrowth1Y if analysis.growthMetrics else None,
+                    earnings_growth_1y=analysis.growthMetrics.earningsGrowth1Y if analysis.growthMetrics else None,
+                    exchange=analysis.exchange,
+                    company_name=analysis.companyName,
+                    currency=analysis.currency
+                )
+                
+                # Update watchlist item with latest analysis data
+                db_service.update_watchlist_item(
+                    ticker=ticker.upper(),
+                    current_price=analysis.currentPrice,
+                    fair_value=analysis.fairValue,
+                    margin_of_safety_pct=analysis.marginOfSafety,
+                    recommendation=analysis.recommendation,
+                    last_analyzed_at=datetime.utcnow()
+                )
+                
+                latest_analysis = analysis.model_dump(mode='json')
+                analysis_cache_status = "refreshed"
+                
+            except Exception as e:
+                logger.error(f"Error refreshing analysis for {ticker}: {e}")
+                # Fall back to latest cached analysis if available
+                latest_analysis = db_service.get_latest_analysis(ticker.upper())
+                if latest_analysis:
+                    analysis_cache_status = "refresh_failed_using_cache"
+                else:
+                    analysis_cache_status = "refresh_failed_no_cache"
+                    latest_analysis = None
+        else:
+            # Use cached analysis
+            latest_analysis = db_service.get_latest_analysis(ticker.upper())
         
         # Get all AI-extracted financial data
         ai_data = db_service.get_ai_extracted_data(ticker.upper())
         
         # Transform key_metrics structure: flatten 'latest' period for frontend
-        # Database returns: {'key_metrics': {'latest': {'shares_outstanding': ..., 'market_cap': ...}}}
-        # Frontend expects: {'key_metrics': {'shares_outstanding': ..., 'market_cap': ...}}
         if 'key_metrics' in ai_data and 'latest' in ai_data['key_metrics']:
             ai_data['key_metrics'] = ai_data['key_metrics']['latest']
         
-        # Get current quote
+        # Get current quote (always fresh for price updates)
         current_quote = None
         price_error = None
-        current_quote = None
         try:
             # Try Yahoo Finance first
             yahoo_client = YahooFinanceClient()
             loop = asyncio.get_event_loop()
             current_quote = await loop.run_in_executor(None, yahoo_client.get_quote, ticker.upper())
             
-            # If Yahoo Finance fails, try backup sources including Google Finance
+            # If Yahoo Finance fails, try backup sources
             if not current_quote:
                 logger.debug(f"Yahoo Finance failed for {ticker}, trying backup sources...")
                 from app.data.backup_clients import BackupDataFetcher
                 backup_fetcher = BackupDataFetcher()
                 
-                # Try to get price from backup sources
                 backup_price = backup_fetcher.get_current_price(ticker)
                 if backup_price:
-                    # Create a quote-like object from backup price
                     backup_info = backup_fetcher.get_company_info(ticker)
                     current_quote = {
                         'ticker': ticker.upper(),
@@ -2917,8 +3179,7 @@ async def get_watchlist_item(ticker: str):
         except Exception as e:
             error_msg = str(e)
             logger.warning(f"Could not get quote for {ticker}: {error_msg}")
-            # Check if it's a rate limit or API issue
-            if '429' in error_msg or 'rate limit' in error_msg.lower() or 'too many requests' in error_msg.lower():
+            if '429' in error_msg or 'rate limit' in error_msg.lower():
                 price_error = "Price API rate limited - please try again later"
             elif 'timeout' in error_msg.lower():
                 price_error = "Price API timeout - please try again"
@@ -2930,7 +3191,13 @@ async def get_watchlist_item(ticker: str):
             "latest_analysis": latest_analysis,
             "ai_extracted_data": ai_data,
             "current_quote": current_quote,
-            "price_error": price_error
+            "price_error": price_error,
+            "cache_info": {
+                "status": analysis_cache_status,
+                "last_updated": latest_analysis.get('analysis_date') if latest_analysis else None,
+                "is_today": latest_analysis.get('analysis_date') == date.today().isoformat() if latest_analysis else False,
+                "needs_refresh": analysis_cache_status in ["stale", "missing", "refresh_failed_no_cache"]
+            }
         }
     except HTTPException:
         raise
@@ -2984,22 +3251,35 @@ async def auto_assign_business_type(ticker: str):
         from app.ai.business_type_detector import BusinessTypeDetector
         from app.config.analysis_weights import AnalysisWeightPresets
         
-        # Fetch company information
+        # Try to fetch company information
         yahoo_client = YahooFinanceClient()
         loop = asyncio.get_event_loop()
-        quote = await loop.run_in_executor(None, yahoo_client.get_quote, ticker.upper())
         
-        if not quote:
-            raise HTTPException(status_code=404, detail=f"Could not fetch company information for {ticker}")
+        quote = None
+        try:
+            quote = await loop.run_in_executor(None, yahoo_client.get_quote, ticker.upper())
+        except Exception as e:
+            logger.warning(f"Could not get quote for {ticker}: {e}")
         
-        # Prepare company info for AI detection
-        company_info = {
-            'company_name': quote.get('company_name', ticker.upper()),
-            'sector': quote.get('sector'),
-            'industry': quote.get('industry'),
-            'description': quote.get('long_business_summary') or quote.get('business_summary', ''),
-            'business_summary': quote.get('long_business_summary') or quote.get('business_summary', '')
-        }
+        # Prepare company info for AI detection (with fallback for missing data)
+        if quote:
+            company_info = {
+                'company_name': quote.get('company_name', ticker.upper()),
+                'sector': quote.get('sector'),
+                'industry': quote.get('industry'),
+                'description': quote.get('long_business_summary') or quote.get('business_summary', ''),
+                'business_summary': quote.get('long_business_summary') or quote.get('business_summary', '')
+            }
+        else:
+            # Fallback: use minimal info when Yahoo Finance is unavailable
+            logger.info(f"Yahoo Finance unavailable for {ticker}, using minimal company info")
+            company_info = {
+                'company_name': ticker.upper(),
+                'sector': None,
+                'industry': None,
+                'description': f"Company with ticker symbol {ticker.upper()}",
+                'business_summary': f"Company with ticker symbol {ticker.upper()}"
+            }
         
         # Use AI detector with fallback
         detector = BusinessTypeDetector()
@@ -3012,13 +3292,18 @@ async def auto_assign_business_type(ticker: str):
         # Get weights for the detected type
         weights = AnalysisWeightPresets.get_preset(detected_business_type)
         
+        # Determine the source of detection
+        data_source = "Yahoo Finance + AI" if quote else "Rule-based (Yahoo Finance unavailable)"
+        
         return {
             "success": True,
             "ticker": ticker.upper(),
             "detected_business_type": detected_business_type.value,
             "business_type_display": detected_business_type.value.replace('_', ' ').title(),
             "weights": weights.to_dict(),
-            "message": f"Auto-detected business type: {detected_business_type.value.replace('_', ' ').title()}"
+            "message": f"Auto-detected business type: {detected_business_type.value.replace('_', ' ').title()}",
+            "data_source": data_source,
+            "company_info_available": quote is not None
         }
     except HTTPException:
         raise

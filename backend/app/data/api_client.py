@@ -42,6 +42,134 @@ class YahooFinanceClient:
             logger.error(f"Error getting ticker {symbol}: {e}")
             return None
     
+    def _get_current_price_with_tracking(self, ticker: yf.Ticker, symbol: str) -> List[Dict]:
+        """Get current price with detailed tracking of each method attempted - optimized for speed"""
+        import concurrent.futures
+        import threading
+        
+        price_attempts = []
+        
+        def try_history_5d():
+            """Try 5-day history with timeout"""
+            attempt = {
+                'api': 'Yahoo Finance Historical Data',
+                'method': 'ticker.history(period="5d")',
+                'status': 'attempting',
+                'details': f'Fetching 5-day price history for {symbol}'
+            }
+            
+            try:
+                hist = ticker.history(period="5d", timeout=3)  # 3 second timeout
+                if not hist.empty:
+                    price = float(hist['Close'].iloc[-1])
+                    if price and price > 0:
+                        attempt.update({
+                            'status': 'success',
+                            'price': price,
+                            'details': f'Retrieved price {price} from 5-day history (most recent close)'
+                        })
+                        return attempt, price
+                    else:
+                        attempt.update({
+                            'status': 'failed',
+                            'error': 'Invalid price value',
+                            'details': f'History returned price {price} which is invalid (≤0)'
+                        })
+                else:
+                    attempt.update({
+                        'status': 'failed',
+                        'error': 'Empty history data',
+                        'details': '5-day history returned empty DataFrame'
+                    })
+            except Exception as e:
+                error_str = str(e)
+                attempt.update({
+                    'status': 'failed',
+                    'error': error_str,
+                    'details': f'Exception during 5-day history: {error_str}'
+                })
+            
+            return attempt, None
+        
+        def try_fast_info():
+            """Try fast_info with timeout"""
+            attempt = {
+                'api': 'Yahoo Finance Fast Info',
+                'method': 'ticker.fast_info.lastPrice',
+                'status': 'attempting',
+                'details': f'Fetching current price from fast_info for {symbol}'
+            }
+            
+            try:
+                fast_info = ticker.fast_info
+                if hasattr(fast_info, 'lastPrice') and fast_info.lastPrice:
+                    price = float(fast_info.lastPrice)
+                    if price and price > 0:
+                        attempt.update({
+                            'status': 'success',
+                            'price': price,
+                            'details': f'Retrieved price {price} from fast_info.lastPrice'
+                        })
+                        return attempt, price
+                    else:
+                        attempt.update({
+                            'status': 'failed',
+                            'error': 'Invalid price value',
+                            'details': f'fast_info returned price {price} which is invalid (≤0)'
+                        })
+                else:
+                    attempt.update({
+                        'status': 'failed',
+                        'error': 'No lastPrice in fast_info',
+                        'details': 'fast_info object does not contain lastPrice or it is None'
+                    })
+            except Exception as e:
+                error_str = str(e)
+                attempt.update({
+                    'status': 'failed',
+                    'error': error_str,
+                    'details': f'Exception during fast_info access: {error_str}'
+                })
+            
+            return attempt, None
+        
+        # Try methods in parallel with 2-second timeout each
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            # Submit both methods simultaneously
+            future_history = executor.submit(try_history_5d)
+            future_fast_info = executor.submit(try_fast_info)
+            
+            # Wait for results with timeout
+            try:
+                # Check history first (usually faster)
+                history_attempt, history_price = future_history.result(timeout=3)
+                price_attempts.append(history_attempt)
+                
+                if history_price:
+                    # Cancel the other future if we got a price
+                    future_fast_info.cancel()
+                    return price_attempts
+                
+                # If history failed, try fast_info
+                fast_info_attempt, fast_info_price = future_fast_info.result(timeout=2)
+                price_attempts.append(fast_info_attempt)
+                
+                if fast_info_price:
+                    return price_attempts
+                    
+            except concurrent.futures.TimeoutError:
+                # If both methods timeout, add timeout attempts
+                price_attempts.append({
+                    'api': 'Yahoo Finance',
+                    'method': 'parallel_timeout',
+                    'status': 'failed',
+                    'error': 'Timeout',
+                    'details': 'Both history and fast_info methods timed out after 3 seconds'
+                })
+        
+        # If we get here, both methods failed
+        return price_attempts
+
     def get_current_price(self, ticker: yf.Ticker) -> Optional[float]:
         """Get current stock price with retry logic for rate limiting"""
         import time
@@ -114,6 +242,424 @@ class YahooFinanceClient:
         
         logger.error("Could not get current price from any source")
         return None
+    
+    def get_quote(self, symbol: str) -> Optional[Dict]:
+        """Get current quote (price and basic info) for a ticker symbol with detailed API attempt tracking"""
+        import time
+        start_time = time.time()
+        api_attempts = []  # Track all API attempts and their results
+        
+        try:
+            # Step 1: Try Yahoo Finance first (primary source) - max 5 seconds
+            yahoo_attempts = self._try_yahoo_finance(symbol)
+            api_attempts.extend(yahoo_attempts)
+            
+            # Check if Yahoo Finance succeeded
+            for attempt in yahoo_attempts:
+                if attempt.get('status') == 'success' and attempt.get('price'):
+                    # Yahoo Finance succeeded - get company info and return
+                    return self._build_successful_response(symbol, attempt.get('price'), api_attempts)
+            
+            # Check if we have time left (max 10 seconds total)
+            elapsed_time = time.time() - start_time
+            if elapsed_time >= 9:  # Leave 1 second buffer
+                api_attempts.append({
+                    'api': 'Timeout Handler',
+                    'method': 'overall_timeout_check',
+                    'status': 'failed',
+                    'error': 'Overall timeout reached',
+                    'details': f'Reached 9-second limit after Yahoo Finance, skipping backup APIs'
+                })
+                return self._build_failure_response(symbol, api_attempts)
+            
+            # Step 2: Yahoo Finance failed, try backup APIs (Google Finance first, then others)
+            backup_attempts = self._try_backup_apis(symbol)
+            api_attempts.extend(backup_attempts)
+            
+            # Check if any backup API succeeded
+            for attempt in backup_attempts:
+                if attempt.get('status') == 'success' and attempt.get('price'):
+                    # Backup API succeeded
+                    return self._build_successful_response(symbol, attempt.get('price'), api_attempts, 
+                                                         company_name=attempt.get('company_name'),
+                                                         market_cap=attempt.get('market_cap'))
+            
+            # All APIs failed - compile detailed failure report
+            return self._build_failure_response(symbol, api_attempts)
+            
+        except Exception as e:
+            error_msg = str(e)
+            logger.error(f"Error getting quote for {symbol}: {e}")
+            
+            # Add the exception to attempts log
+            api_attempts.append({
+                'api': 'General Error Handler',
+                'method': 'get_quote()',
+                'status': 'failed',
+                'error': error_msg,
+                'details': f'Unexpected exception during quote retrieval: {error_msg}'
+            })
+            
+            return self._build_failure_response(symbol, api_attempts, error_msg)
+
+    def _try_yahoo_finance(self, symbol: str) -> List[Dict]:
+        """Try Yahoo Finance API with detailed tracking"""
+        yahoo_attempts = []
+        
+        # Step 1: Try to create ticker object
+        yahoo_attempts.append({
+            'api': 'Yahoo Finance',
+            'method': 'yf.Ticker() creation',
+            'status': 'attempting',
+            'details': f'Creating ticker object for {symbol}'
+        })
+        
+        try:
+            ticker = self.get_ticker(symbol)
+            if not ticker:
+                yahoo_attempts[-1].update({
+                    'status': 'failed',
+                    'error': 'Could not create ticker object',
+                    'details': f'yf.Ticker({symbol}) returned None - symbol may not exist or be invalid'
+                })
+                return yahoo_attempts
+            
+            yahoo_attempts[-1].update({
+                'status': 'success',
+                'details': f'Successfully created ticker object for {symbol}'
+            })
+            
+            # Step 2: Try to get current price using multiple Yahoo Finance methods
+            price_attempts = self._get_current_price_with_tracking(ticker, symbol)
+            yahoo_attempts.extend(price_attempts)
+            
+            # Check if any Yahoo Finance price method succeeded
+            for attempt in price_attempts:
+                if attempt.get('status') == 'success' and attempt.get('price'):
+                    return yahoo_attempts  # Success with Yahoo Finance
+            
+            return yahoo_attempts
+            
+        except Exception as e:
+            yahoo_attempts[-1].update({
+                'status': 'failed',
+                'error': str(e),
+                'details': f'Exception during Yahoo Finance ticker creation: {str(e)}'
+            })
+            return yahoo_attempts
+
+    def _try_backup_apis(self, symbol: str) -> List[Dict]:
+        """Try backup APIs when Yahoo Finance fails - optimized for speed"""
+        backup_attempts = []
+        
+        try:
+            from app.data.backup_clients import BackupDataFetcher
+            backup_fetcher = BackupDataFetcher()
+            
+            # Try Google Finance FIRST (web scraping - no API key needed, most reliable)
+            backup_attempts.append({
+                'api': 'Google Finance',
+                'method': 'web_scraping',
+                'status': 'attempting',
+                'details': f'Fetching quote from Google Finance (web scraping) for {symbol}'
+            })
+            
+            try:
+                # Set a 3-second timeout for Google Finance
+                import signal
+                
+                def timeout_handler(signum, frame):
+                    raise TimeoutError("Google Finance request timed out")
+                
+                # Use signal for timeout on non-Windows systems, or try-except for Windows
+                try:
+                    signal.signal(signal.SIGALRM, timeout_handler)
+                    signal.alarm(3)  # 3 second timeout
+                    quote = backup_fetcher.google_finance_client.get_quote(symbol)
+                    signal.alarm(0)  # Cancel alarm
+                except (AttributeError, OSError):
+                    # Windows doesn't support SIGALRM, use basic timeout
+                    quote = backup_fetcher.google_finance_client.get_quote(symbol)
+                
+                if quote and quote.get('price'):
+                    backup_attempts[-1].update({
+                        'status': 'success',
+                        'price': float(quote['price']),
+                        'company_name': quote.get('company_name', symbol),
+                        'market_cap': quote.get('market_cap'),
+                        'details': f'Successfully retrieved price {quote["price"]} from Google Finance web scraping'
+                    })
+                    return backup_attempts  # Success, return early
+                else:
+                    backup_attempts[-1].update({
+                        'status': 'failed',
+                        'error': 'No price data returned',
+                        'details': 'Google Finance web scraping returned empty or invalid quote data'
+                    })
+            except TimeoutError:
+                backup_attempts[-1].update({
+                    'status': 'failed',
+                    'error': 'Timeout after 3 seconds',
+                    'details': 'Google Finance web scraping timed out'
+                })
+            except Exception as e:
+                backup_attempts[-1].update({
+                    'status': 'failed',
+                    'error': str(e),
+                    'details': f'Exception during Google Finance web scraping: {str(e)}'
+                })
+            
+            # If Google Finance succeeded, return early
+            if backup_attempts[-1].get('status') == 'success':
+                return backup_attempts
+            
+            # Try other APIs in parallel with short timeouts
+            import concurrent.futures
+            
+            def try_alpha_vantage():
+                if not (backup_fetcher.alpha_vantage_client and backup_fetcher.alpha_vantage_client.api_key):
+                    return None
+                
+                attempt = {
+                    'api': 'Alpha Vantage',
+                    'method': 'get_quote()',
+                    'status': 'attempting',
+                    'details': f'Fetching quote from Alpha Vantage for {symbol}'
+                }
+                
+                try:
+                    quote = backup_fetcher.alpha_vantage_client.get_quote(symbol)
+                    if quote and quote.get('price'):
+                        attempt.update({
+                            'status': 'success',
+                            'price': float(quote['price']),
+                            'company_name': quote.get('company_name', symbol),
+                            'market_cap': quote.get('market_cap'),
+                            'details': f'Successfully retrieved price {quote["price"]} from Alpha Vantage'
+                        })
+                        return attempt, float(quote['price'])
+                    else:
+                        attempt.update({
+                            'status': 'failed',
+                            'error': 'No price data returned',
+                            'details': 'Alpha Vantage returned empty or invalid quote data'
+                        })
+                except Exception as e:
+                    attempt.update({
+                        'status': 'failed',
+                        'error': str(e),
+                        'details': f'Exception during Alpha Vantage request: {str(e)}'
+                    })
+                
+                return attempt, None
+            
+            def try_fmp():
+                if not backup_fetcher.fmp_client.api_key:
+                    return None
+                
+                attempt = {
+                    'api': 'Financial Modeling Prep',
+                    'method': 'get_quote()',
+                    'status': 'attempting',
+                    'details': f'Fetching quote from Financial Modeling Prep for {symbol}'
+                }
+                
+                try:
+                    quote = backup_fetcher.fmp_client.get_quote(symbol)
+                    if quote and quote.get('price'):
+                        attempt.update({
+                            'status': 'success',
+                            'price': float(quote['price']),
+                            'company_name': quote.get('company_name', symbol),
+                            'market_cap': quote.get('market_cap'),
+                            'details': f'Successfully retrieved price {quote["price"]} from Financial Modeling Prep'
+                        })
+                        return attempt, float(quote['price'])
+                    else:
+                        attempt.update({
+                            'status': 'failed',
+                            'error': 'No price data returned',
+                            'details': 'Financial Modeling Prep returned empty or invalid quote data'
+                        })
+                except Exception as e:
+                    attempt.update({
+                        'status': 'failed',
+                        'error': str(e),
+                        'details': f'Exception during Financial Modeling Prep request: {str(e)}'
+                    })
+                
+                return attempt, None
+            
+            # Run remaining APIs in parallel with 2-second timeout each
+            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+                futures = []
+                
+                # Submit available APIs
+                if backup_fetcher.alpha_vantage_client and backup_fetcher.alpha_vantage_client.api_key:
+                    futures.append(executor.submit(try_alpha_vantage))
+                
+                if backup_fetcher.fmp_client.api_key:
+                    futures.append(executor.submit(try_fmp))
+                
+                # Wait for results with timeout
+                for future in concurrent.futures.as_completed(futures, timeout=3):
+                    try:
+                        result = future.result()
+                        if result:
+                            attempt, price = result
+                            backup_attempts.append(attempt)
+                            if price:  # Success
+                                # Cancel remaining futures
+                                for f in futures:
+                                    f.cancel()
+                                return backup_attempts
+                    except Exception as e:
+                        backup_attempts.append({
+                            'api': 'Parallel API',
+                            'method': 'concurrent_execution',
+                            'status': 'failed',
+                            'error': str(e),
+                            'details': f'Exception during parallel API execution: {str(e)}'
+                        })
+            
+            # Try MarketStack as last resort (if available)
+            if backup_fetcher.marketstack_client.api_key:
+                backup_attempts.append({
+                    'api': 'MarketStack',
+                    'method': 'get_intraday()',
+                    'status': 'attempting',
+                    'details': f'Fetching intraday data from MarketStack for {symbol}'
+                })
+                
+                try:
+                    intraday = backup_fetcher.marketstack_client.get_intraday(symbol)
+                    if intraday and intraday.get('price'):
+                        backup_attempts[-1].update({
+                            'status': 'success',
+                            'price': float(intraday['price']),
+                            'company_name': symbol,  # MarketStack doesn't provide company name in intraday
+                            'details': f'Successfully retrieved price {intraday["price"]} from MarketStack intraday data'
+                        })
+                        return backup_attempts  # Success, return early
+                    else:
+                        backup_attempts[-1].update({
+                            'status': 'failed',
+                            'error': 'No price data returned',
+                            'details': 'MarketStack returned empty or invalid intraday data'
+                        })
+                except Exception as e:
+                    backup_attempts[-1].update({
+                        'status': 'failed',
+                        'error': str(e),
+                        'details': f'Exception during MarketStack request: {str(e)}'
+                    })
+            
+            return backup_attempts
+            
+        except ImportError as e:
+            backup_attempts.append({
+                'api': 'Backup APIs',
+                'method': 'import_backup_clients',
+                'status': 'failed',
+                'error': 'Import error',
+                'details': f'Could not import backup clients: {str(e)}'
+            })
+            return backup_attempts
+        except Exception as e:
+            backup_attempts.append({
+                'api': 'Backup APIs',
+                'method': 'general_error',
+                'status': 'failed',
+                'error': str(e),
+                'details': f'Unexpected error during backup API attempts: {str(e)}'
+            })
+            return backup_attempts
+
+    def _build_successful_response(self, symbol: str, price: float, api_attempts: List[Dict], 
+                                 company_name: str = None, market_cap: float = None) -> Dict:
+        """Build successful response with all available data"""
+        # Try to get additional company info from Yahoo Finance if not provided
+        if not company_name:
+            try:
+                ticker = self.get_ticker(symbol)
+                if ticker:
+                    info = ticker.info
+                    if info:
+                        company_name = info.get('longName') or info.get('shortName') or symbol
+                        if not market_cap:
+                            market_cap = info.get('marketCap')
+            except:
+                pass
+        
+        # Compile success report
+        successful_methods = [attempt['method'] for attempt in api_attempts if attempt.get('status') == 'success']
+        successful_apis = list(set([attempt['api'] for attempt in api_attempts if attempt.get('status') == 'success']))
+        
+        result = {
+            'price': price,
+            'company_name': company_name or symbol,
+            'market_cap': market_cap,
+            'currency': 'USD',  # Default
+            'symbol': symbol,
+            'sector': None,
+            'industry': None,
+            'long_business_summary': '',
+            'business_summary': '',
+            'success': True,
+            'error_detail': f"Successfully fetched data for {symbol} using: {', '.join(successful_apis)}",
+            'api_attempts': api_attempts
+        }
+        
+        logger.info(f"Successfully got quote for {symbol}: price={price}, APIs used: {', '.join(successful_apis)}")
+        return result
+
+    def _build_failure_response(self, symbol: str, api_attempts: List[Dict], exception_msg: str = None) -> Dict:
+        """Build failure response with detailed error information"""
+        # Compile detailed failure report
+        failed_apis = list(set([attempt['api'] for attempt in api_attempts if attempt.get('status') == 'failed']))
+        attempted_apis = list(set([attempt['api'] for attempt in api_attempts]))
+        
+        # Create a more user-friendly error message
+        if not attempted_apis:
+            error_detail = f"No price data sources were available for {symbol}"
+        else:
+            # Show which APIs were tried and their order
+            api_order = []
+            for attempt in api_attempts:
+                api_name = attempt['api']
+                if api_name not in api_order:
+                    api_order.append(api_name)
+            
+            error_detail = f"Unable to fetch price for {symbol}. Tried {len(api_order)} data sources in order: {' → '.join(api_order)}"
+            
+            # Add specific failure reasons for key APIs
+            key_failures = []
+            for attempt in api_attempts:
+                if attempt.get('status') == 'failed' and attempt['api'] in ['Google Finance', 'Yahoo Finance']:
+                    error_reason = attempt.get('error', 'Unknown error')
+                    key_failures.append(f"{attempt['api']}: {error_reason}")
+            
+            if key_failures:
+                error_detail += f". Key failures: {'; '.join(key_failures)}"
+        
+        if exception_msg:
+            error_detail += f". System error: {exception_msg}"
+        
+        # Provide helpful suggestions
+        suggestions = []
+        if symbol and len(symbol) > 5:
+            suggestions.append("Try using just the ticker symbol (e.g., 'AAPL' instead of 'AAPL.US')")
+        if '.' in symbol:
+            suggestions.append("For international stocks, try the local ticker format")
+        suggestions.append("Check if the ticker symbol is correct and the market is open")
+        
+        return {
+            'error': f'Failed to get price data for {symbol}',
+            'error_detail': error_detail,
+            'suggestions': suggestions,
+            'symbol': symbol,
+            'api_attempts': api_attempts
+        }
     
     def get_company_info(self, ticker: yf.Ticker) -> Dict:
         """Get company information"""

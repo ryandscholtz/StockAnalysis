@@ -38,7 +38,6 @@ export default function WatchlistDetailPage() {
   useEffect(() => {
     if (ticker) {
       loadWatchlistData()
-      loadAnalysis()
     }
   }, [ticker])
 
@@ -65,15 +64,31 @@ export default function WatchlistDetailPage() {
     return normalized.toUpperCase()
   }
 
-  const loadWatchlistData = async () => {
+  const loadWatchlistData = async (forceRefresh: boolean = false) => {
     try {
-      const result = await stockApi.getWatchlistItem(ticker)
+      const result = await stockApi.getWatchlistItem(ticker, forceRefresh)
       setWatchlistData(result)
       // Handle null, undefined, or string "null" values
       const notesValue = result.watchlist_item.notes
       setNotes(notesValue && notesValue !== 'null' && notesValue !== 'undefined' ? notesValue : '')
+      
+      // If we got fresh analysis data, update the analysis state
+      if (result.latest_analysis && !analyzing) {
+        setAnalysis(result.latest_analysis)
+        if (result.latest_analysis.analysisWeights) {
+          setAnalysisWeights(result.latest_analysis.analysisWeights)
+        }
+        if (result.latest_analysis.businessType) {
+          setBusinessType(result.latest_analysis.businessType)
+        }
+      }
+      
+      // Set loading to false after successfully loading data
+      setLoading(false)
     } catch (err: any) {
       console.error('Error loading watchlist data:', err)
+      // Set loading to false even on error
+      setLoading(false)
       // Set error state if needed
       if (err.code === 'ERR_NETWORK' || err.code === 'ECONNREFUSED' || err.message?.includes('Cannot connect')) {
         setError(err.message || 'Cannot connect to backend server')
@@ -133,6 +148,20 @@ export default function WatchlistDetailPage() {
     setAnalyzing(true)
     setError('')
     await loadAnalysis()
+  }
+
+  const handleRefreshData = async () => {
+    setLoading(true)
+    setError('')
+    try {
+      // Force refresh both watchlist data and analysis
+      await loadWatchlistData(true)
+      // loadWatchlistData now handles setLoading(false) internally
+    } catch (err: any) {
+      console.error('Refresh error:', err)
+      setError(err.message || 'Failed to refresh data')
+      setLoading(false) // Ensure loading is set to false on error
+    }
   }
 
   const handleSaveNotes = async () => {
@@ -368,6 +397,55 @@ export default function WatchlistDetailPage() {
             )}
           </div>
           <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+            {/* Cache Status Indicator */}
+            {watchlistData?.cache_info && (
+              <div style={{
+                padding: '8px 12px',
+                borderRadius: '6px',
+                fontSize: '12px',
+                fontWeight: '500',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                backgroundColor: watchlistData.cache_info.status === 'fresh' ? '#dcfce7' : 
+                                watchlistData.cache_info.status === 'stale' ? '#fef3c7' : '#fee2e2',
+                color: watchlistData.cache_info.status === 'fresh' ? '#166534' : 
+                       watchlistData.cache_info.status === 'stale' ? '#92400e' : '#991b1b'
+              }}>
+                {watchlistData.cache_info.status === 'fresh' && '✅ Fresh'}
+                {watchlistData.cache_info.status === 'stale' && '⏰ Stale'}
+                {watchlistData.cache_info.status === 'missing' && '❌ No Data'}
+                {watchlistData.cache_info.status === 'refreshed' && '🔄 Refreshed'}
+                {watchlistData.cache_info.last_updated && (
+                  <span style={{ fontSize: '11px', opacity: 0.8 }}>
+                    ({watchlistData.cache_info.last_updated})
+                  </span>
+                )}
+              </div>
+            )}
+            
+            {/* Refresh Button */}
+            <button
+              onClick={handleRefreshData}
+              disabled={loading || analyzing}
+              style={{
+                padding: '10px 20px',
+                backgroundColor: '#059669',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                fontSize: '14px',
+                fontWeight: '500',
+                cursor: (loading || analyzing) ? 'not-allowed' : 'pointer',
+                opacity: (loading || analyzing) ? 0.5 : 1,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              🔄 {loading ? 'Refreshing...' : 'Refresh Data'}
+            </button>
+            
             <button
               onClick={() => setShowWeightsConfig(!showWeightsConfig)}
               style={{

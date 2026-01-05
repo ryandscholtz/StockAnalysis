@@ -692,6 +692,42 @@ class DatabaseService:
         finally:
             session.close()
     
+    def get_latest_analyses_batch(self, tickers: List[str]) -> Dict[str, Dict]:
+        """Get latest analysis for multiple tickers in one efficient query"""
+        session = self.get_session()
+        try:
+            from sqlalchemy import and_
+            latest_analyses = {}
+            
+            # Get latest analysis for each ticker
+            for ticker in tickers:
+                ticker_upper = ticker.upper()
+                latest = session.query(StockAnalysis).filter(
+                    StockAnalysis.ticker == ticker_upper
+                ).order_by(StockAnalysis.analysis_date.desc()).first()
+                
+                if latest:
+                    latest_analyses[ticker_upper] = {
+                        'analysis_date': latest.analysis_date,
+                        'current_price': latest.current_price,
+                        'fair_value': latest.fair_value,
+                        'margin_of_safety_pct': latest.margin_of_safety_pct,
+                        'recommendation': latest.recommendation,
+                        'analyzed_at': latest.analyzed_at.isoformat() if latest.analyzed_at else None,
+                        'financial_health_score': latest.financial_health_score,
+                        'business_quality_score': latest.business_quality_score,
+                        'market_cap': latest.market_cap,
+                        'sector': latest.sector,
+                        'industry': latest.industry
+                    }
+            
+            return latest_analyses
+        except Exception as e:
+            print(f"Error getting latest analyses batch: {e}")
+            return {}
+        finally:
+            session.close()
+    
     def get_watchlist_item(self, ticker: str) -> Optional[Dict]:
         """Get a specific watchlist item"""
         session = self.get_session()

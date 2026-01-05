@@ -37,7 +37,7 @@ class CORSResponseMiddleware(BaseHTTPMiddleware):
         
         # Get origin from request
         origin = request.headers.get("origin")
-        allowed_origins = ["http://localhost:3000", "http://localhost:3001", "http://localhost:3003"]
+        allowed_origins = ["http://localhost:3000", "http://localhost:3001", "http://localhost:3003", "http://127.0.0.1:3000", "http://127.0.0.1:3001", "http://127.0.0.1:3003"]
         
         # Add CORS headers if origin is allowed
         if origin in allowed_origins:
@@ -58,8 +58,11 @@ app.add_middleware(
     # Allow local frontend dev servers
     allow_origins=[
         "http://localhost:3000",
-        "http://localhost:3001",
+        "http://localhost:3001", 
         "http://localhost:3003",
+        "http://127.0.0.1:3000",  # Add 127.0.0.1 variants
+        "http://127.0.0.1:3001",
+        "http://127.0.0.1:3003",
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"],
@@ -76,7 +79,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     
     # Get origin from request
     origin = request.headers.get("origin")
-    allowed_origins = ["http://localhost:3000", "http://localhost:3001", "http://localhost:3003"]
+    allowed_origins = ["http://localhost:3000", "http://localhost:3001", "http://localhost:3003", "http://127.0.0.1:3000", "http://127.0.0.1:3001", "http://127.0.0.1:3003"]
     
     headers = {}
     if origin in allowed_origins:
@@ -96,7 +99,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     """Ensure CORS headers on HTTP exceptions"""
     origin = request.headers.get("origin")
-    allowed_origins = ["http://localhost:3000", "http://localhost:3001", "http://localhost:3003"]
+    allowed_origins = ["http://localhost:3000", "http://localhost:3001", "http://localhost:3003", "http://127.0.0.1:3000", "http://127.0.0.1:3001", "http://127.0.0.1:3003"]
     
     headers = {}
     if origin in allowed_origins:
@@ -114,6 +117,10 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
 
 # Include API routes
 app.include_router(router, prefix="/api")
+
+# Include optimized routes with different prefix to avoid conflicts
+from app.api.optimized_routes import router as optimized_router
+app.include_router(optimized_router, prefix="/api")
 
 
 @app.get("/")

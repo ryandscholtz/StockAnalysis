@@ -186,17 +186,15 @@ class TextractExtractor:
     
     def extract_financial_data(self, pdf_bytes: bytes, ticker: str) -> Tuple[Dict[str, Any], str]:
         """
-        Extract financial data from PDF using Textract only (no OpenAI)
+        Extract financial data from PDF using Textract with OCR fallback
         This method:
-        1. Uses Textract to extract text and structured tables
-        2. Parses the structured tables directly to extract financial data
+        1. Tries Textract first (fast, accurate for supported PDFs)
+        2. Falls back to OCR if Textract fails (slower but works with image-based PDFs)
         
         Returns: (structured_data, raw_text)
-        - structured_data: Extracted financial data
-        - raw_text: Raw text extracted by Textract
         """
         try:
-            # Step 1: Extract text and tables using Textract (processes entire PDF at once)
+            # Step 1: Try Textract first
             logger.info(f"Extracting financial data from PDF for {ticker} using AWS Textract...")
             logger.info("✓ Textract processes the entire PDF at once - NO per-page processing or image conversion needed")
             
@@ -222,16 +220,133 @@ class TextractExtractor:
             logger.info(f"Parsing {len(tables)} tables to extract financial data for {ticker}...")
             structured_data = self._extract_financial_data_from_tables(tables, text, ticker)
             
-            logger.info(f"Extraction complete. Found {len(structured_data.get('income_statement', {}))} income periods, "
+            logger.info(f"Textract extraction complete. Found {len(structured_data.get('income_statement', {}))} income periods, "
                       f"{len(structured_data.get('balance_sheet', {}))} balance periods, "
                       f"{len(structured_data.get('cashflow', {}))} cashflow periods")
             
             return structured_data, text
             
+        except ClientError as e:
+            error_code = e.response['Error']['Code']
+            if error_code == 'UnsupportedDocumentException':
+                logger.warning(f"Textract failed with UnsupportedDocumentException: {e}")
+                logger.info("⚠️ FALLBACK: PDF format not supported by Textract, falling back to OCR...")
+                return self._extract_financial_data_with_ocr(pdf_bytes, ticker)
+            else:
+                logger.error(f"Textract error: {e}")
+                logger.info("⚠️ FALLBACK: Textract error, falling back to OCR...")
+                return self._extract_financial_data_with_ocr(pdf_bytes, ticker)
         except Exception as e:
             logger.error(f"Error extracting financial data with Textract: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
+            logger.info("⚠️ FALLBACK: Textract failed, falling back to OCR...")
+            return self._extract_financial_data_with_ocr(pdf_bytes, ticker)
+    
+    def _extract_financial_data_with_ocr(self, pdf_bytes: bytes, ticker: str) -> Tuple[Dict[str, Any], str]:
+        """
+        Extract financial data using OCR fallback for image-based or unsupported PDFs
+        """
+        try:
+            # Check if OCR is available
+            from pdf2image import convert_from_bytes
+            import pytesseract
+            from PIL import Image, ImageEnhance, ImageFilter
+        except ImportError:
+            logger.error("OCR libraries not available. Install with: pip install pytesseract pdf2image Pillow")
+            logger.error("Also install Tesseract OCR from: https://github.com/tesseract-ocr/tesseract")
+            # Return empty data
+            return {
+                "income_statement": {},
+                "balance_sheet": {},
+                "cashflow": {},
+                "key_metrics": {}
+            }, ""
+        
+        logger.info(f"⚠️ FALLBACK MODE: Using OCR to extract financial data for {ticker}")
+        logger.info("⚠️ NOTE: OCR converts PDF pages to images - this is SLOW but works with image-based/scanned PDFs")
+        
+        # Configure Tesseract for Windows
+        import platform
+        if platform.system() == "Windows":
+            tesseract_paths = [
+                r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+                r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+            ]
+            for path in tesseract_paths:
+                import os
+                if os.path.exists(path):
+                    pytesseract.pytesseract.tesseract_cmd = path
+                    logger.info(f"Using Tesseract at: {path}")
+                    break
+        
+        try:
+            # Convert PDF to images
+            logger.info("Converting PDF to images for OCR...")
+            images = convert_from_bytes(pdf_bytes, dpi=300)  # High DPI for better OCR
+            logger.info(f"✓ Converted PDF to {len(images)} images")
+            
+            if not images:
+                raise Exception("No images could be extracted from PDF")
+            
+            # Process each page with OCR
+            text_parts = []
+            successful_pages = 0
+            
+            for i, image in enumerate(images):
+                try:
+                    logger.info(f"Processing page {i+1}/{len(images)} with OCR...")
+                    
+                    # Enhance image for better OCR
+                    if image.mode != 'L':
+                        image = image.convert('L')
+                    
+                    # Enhance contrast
+                    enhancer = ImageEnhance.Contrast(image)
+                    image = enhancer.enhance(1.5)
+                    
+                    # Sharpen image
+                    image = image.filter(ImageFilter.SHARPEN)
+                    
+                    # Scale up for better OCR (if image is small)
+                    width, height = image.size
+                    if width < 1000 or height < 1000:
+                        scale_factor = max(1000 / width, 1000 / height)
+                        new_size = (int(width * scale_factor), int(height * scale_factor))
+                        image = image.resize(new_size, Image.Resampling.LANCZOS)
+                        logger.debug(f"Scaled image from {width}x{height} to {new_size[0]}x{new_size[1]}")
+                    
+                    # Perform OCR
+                    page_text = pytesseract.image_to_string(image, lang='eng')
+                    
+                    if page_text and len(page_text.strip()) > 10:
+                        text_parts.append(f"=== Page {i+1} ===\n{page_text}")
+                        successful_pages += 1
+                        logger.info(f"✓ OCR extracted {len(page_text)} characters from page {i+1}")
+                    else:
+                        logger.warning(f"⚠️ OCR found minimal text on page {i+1}")
+                        
+                except Exception as e:
+                    logger.error(f"✗ OCR failed for page {i+1}: {e}")
+                    continue
+            
+            if not text_parts:
+                logger.error("OCR did not extract any text from PDF images")
+                return {
+                    "income_statement": {},
+                    "balance_sheet": {},
+                    "cashflow": {},
+                    "key_metrics": {}
+                }, ""
+            
+            full_text = "\n\n".join(text_parts)
+            logger.info(f"✓ OCR completed: {successful_pages}/{len(images)} pages, {len(full_text)} total characters")
+            
+            # Extract financial data from OCR text using pattern matching
+            structured_data = self._extract_financial_data_from_ocr_text(full_text, ticker)
+            
+            return structured_data, full_text
+            
+        except Exception as e:
+            logger.error(f"OCR extraction failed: {e}")
             # Return empty data
             return {
                 "income_statement": {},
@@ -432,3 +547,127 @@ class TextractExtractor:
         except (ValueError, TypeError):
             return None
 
+    
+    def _extract_financial_data_from_ocr_text(self, text: str, ticker: str) -> Dict[str, Any]:
+        """
+        Extract financial data from OCR text using pattern matching
+        This method looks for financial statement patterns in the OCR-extracted text
+        """
+        import re
+        from datetime import datetime
+        
+        result = {
+            "income_statement": {},
+            "balance_sheet": {},
+            "cashflow": {},
+            "key_metrics": {}
+        }
+        
+        logger.info(f"Extracting financial data from {len(text)} characters of OCR text for {ticker}")
+        
+        # Financial field patterns (more flexible for OCR text)
+        income_patterns = {
+            'Total Revenue': [
+                r'(?:net\s+operating\s+revenues?|total\s+revenues?|net\s+sales|revenues?|sales)\s*[\$]?\s*([\d,]+(?:\.\d+)?)',
+                r'revenues?\s*[\$]?\s*([\d,]+(?:\.\d+)?)'
+            ],
+            'Net Income': [
+                r'(?:net\s+income|net\s+earnings|consolidated\s+net\s+income)\s*[\$]?\s*([\d,]+(?:\.\d+)?)',
+                r'net\s+income.*?[\$]?\s*([\d,]+(?:\.\d+)?)'
+            ],
+            'Operating Income': [
+                r'operating\s+income\s*[\$]?\s*([\d,]+(?:\.\d+)?)',
+                r'income\s+from\s+operations\s*[\$]?\s*([\d,]+(?:\.\d+)?)'
+            ],
+            'Gross Profit': [
+                r'gross\s+profit\s*[\$]?\s*([\d,]+(?:\.\d+)?)'
+            ]
+        }
+        
+        balance_patterns = {
+            'Total Assets': [
+                r'total\s+assets\s*[\$]?\s*([\d,]+(?:\.\d+)?)'
+            ],
+            'Total Stockholder Equity': [
+                r'(?:total\s+)?(?:stockholders?|shareholders?)\s+equity\s*[\$]?\s*([\d,]+(?:\.\d+)?)',
+                r'equity\s*[\$]?\s*([\d,]+(?:\.\d+)?)'
+            ]
+        }
+        
+        # Extract years from text
+        years = re.findall(r'\b(20\d{2})\b', text)
+        unique_years = sorted(list(set(years)), reverse=True)[:5]  # Get up to 5 most recent years
+        
+        if unique_years:
+            logger.info(f"Found years in OCR text: {unique_years}")
+        else:
+            # Default to current year if no years found
+            current_year = datetime.now().year
+            unique_years = [str(current_year)]
+            logger.warning(f"No years found in OCR text, using current year: {current_year}")
+        
+        # Look for financial data patterns
+        text_lower = text.lower()
+        
+        # Extract income statement data
+        for field_name, patterns in income_patterns.items():
+            for pattern in patterns:
+                matches = re.findall(pattern, text_lower, re.IGNORECASE | re.MULTILINE)
+                if matches:
+                    # Use the most recent year as the period
+                    period = f"{unique_years[0]}-12-31" if unique_years else "latest"
+                    if period not in result['income_statement']:
+                        result['income_statement'][period] = {}
+                    
+                    # Parse the first numeric match
+                    value = self._parse_numeric_value(matches[0])
+                    if value is not None:
+                        result['income_statement'][period][field_name] = value
+                        logger.info(f"Extracted {field_name}: ${value:,.0f} for {period}")
+                    break
+        
+        # Extract balance sheet data
+        for field_name, patterns in balance_patterns.items():
+            for pattern in patterns:
+                matches = re.findall(pattern, text_lower, re.IGNORECASE | re.MULTILINE)
+                if matches:
+                    period = f"{unique_years[0]}-12-31" if unique_years else "latest"
+                    if period not in result['balance_sheet']:
+                        result['balance_sheet'][period] = {}
+                    
+                    value = self._parse_numeric_value(matches[0])
+                    if value is not None:
+                        result['balance_sheet'][period][field_name] = value
+                        logger.info(f"Extracted {field_name}: ${value:,.0f} for {period}")
+                    break
+        
+        # Look for shares outstanding
+        shares_patterns = [
+            r'shares?\s+outstanding[:\s]*([\d,]+(?:\.\d+)?)',
+            r'weighted\s+average\s+shares?\s+outstanding[:\s]*([\d,]+(?:\.\d+)?)'
+        ]
+        
+        for pattern in shares_patterns:
+            matches = re.findall(pattern, text_lower, re.IGNORECASE)
+            if matches:
+                shares = self._parse_numeric_value(matches[0])
+                if shares is not None:
+                    result['key_metrics']['Shares Outstanding'] = shares
+                    logger.info(f"Extracted Shares Outstanding: {shares:,.0f}")
+                break
+        
+        # Summary
+        total_periods = (
+            len(result['income_statement']) + 
+            len(result['balance_sheet']) + 
+            len(result['cashflow']) +
+            (1 if result['key_metrics'] else 0)
+        )
+        
+        logger.info(f"OCR extraction summary for {ticker}: {total_periods} total data points extracted")
+        logger.info(f"  Income statement: {len(result['income_statement'])} periods")
+        logger.info(f"  Balance sheet: {len(result['balance_sheet'])} periods") 
+        logger.info(f"  Cash flow: {len(result['cashflow'])} periods")
+        logger.info(f"  Key metrics: {len(result['key_metrics'])} items")
+        
+        return result

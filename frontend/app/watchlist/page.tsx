@@ -9,6 +9,8 @@ export default function WatchlistPage() {
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string>('')
+  const [refreshingPrices, setRefreshingPrices] = useState(false)
+  const [livePrices, setLivePrices] = useState<Record<string, { price?: number; company_name?: string; error?: string; comment?: string; success?: boolean }>>({})
 
   useEffect(() => {
     loadWatchlist()
@@ -18,14 +20,114 @@ export default function WatchlistPage() {
     try {
       setLoading(true)
       setError('')
+      
+      console.log('🔄 Loading watchlist...')
+      const startTime = Date.now()
+      
+      // Try cached endpoint first for instant response
+      try {
+        console.log('📦 Trying cached endpoint...')
+        const cacheStartTime = Date.now()
+        const cachedResponse = await fetch('http://127.0.0.1:8000/api/cache/watchlist')
+        const cacheTime = Date.now() - cacheStartTime
+        console.log(`📦 Cache response: ${cachedResponse.status} in ${cacheTime}ms`)
+        
+        if (cachedResponse.ok) {
+          const cachedData = await cachedResponse.json()
+          console.log(`✅ Cache success: ${cachedData.items?.length || 0} items in ${Date.now() - startTime}ms total`)
+          setWatchlist(cachedData.items)
+          setLoading(false)
+          return // Success with cached data
+        } else {
+          console.log(`❌ Cache failed: ${cachedResponse.status} ${cachedResponse.statusText}`)
+        }
+      } catch (cacheError) {
+        console.log('❌ Cache error:', cacheError)
+        console.log('🔄 Falling back to regular endpoint')
+      }
+      
+      // Fallback to regular endpoint
+      console.log('🌐 Trying regular endpoint...')
+      const regularStartTime = Date.now()
       const result = await stockApi.getWatchlist()
+      const regularTime = Date.now() - regularStartTime
+      console.log(`🌐 Regular endpoint: ${result.items?.length || 0} items in ${regularTime}ms`)
+      console.log(`✅ Total time: ${Date.now() - startTime}ms`)
       setWatchlist(result.items)
     } catch (err: any) {
+      console.log('❌ Final error:', err)
       // Use formatted error message (from api.ts interceptor)
       setError(err.message || 'Failed to load watchlist')
       console.error('Error loading watchlist:', err)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const refreshLivePrices = async () => {
+    try {
+      setRefreshingPrices(true)
+      
+      // Try the new async endpoint first
+      try {
+        const asyncResponse = await fetch('http://127.0.0.1:8000/api/watchlist/live-prices-async')
+        if (asyncResponse.ok) {
+          const asyncData = await asyncResponse.json()
+          
+          // If we got cached results immediately
+          if ('live_prices' in asyncData) {
+            setLivePrices(asyncData.live_prices)
+            return
+          }
+          
+          // If we got a task ID, poll for results
+          if ('task_id' in asyncData) {
+            const taskId = asyncData.task_id
+            
+            // Poll for results every 2 seconds
+            const pollInterval = setInterval(async () => {
+              try {
+                const statusResponse = await fetch(`http://127.0.0.1:8000/api/tasks/${taskId}`)
+                if (statusResponse.ok) {
+                  const statusData = await statusResponse.json()
+                  
+                  if (statusData.status === 'completed' && statusData.result) {
+                    clearInterval(pollInterval)
+                    setLivePrices(statusData.result.live_prices)
+                    return
+                  } else if (statusData.status === 'failed') {
+                    clearInterval(pollInterval)
+                    console.error('Background task failed:', statusData.error)
+                    // Fall back to old endpoint
+                    throw new Error('Background task failed')
+                  }
+                }
+              } catch (pollError) {
+                clearInterval(pollInterval)
+                throw pollError
+              }
+            }, 2000)
+            
+            // Set timeout to prevent infinite polling
+            setTimeout(() => {
+              clearInterval(pollInterval)
+            }, 60000) // 1 minute timeout
+            
+            return
+          }
+        }
+      } catch (asyncError) {
+        console.log('Async endpoint failed, falling back to sync endpoint')
+      }
+      
+      // Fallback to original endpoint
+      const result = await stockApi.getWatchlistLivePrices()
+      setLivePrices(result.live_prices)
+    } catch (err: any) {
+      console.error('Error refreshing live prices:', err)
+      // Don't show error for live prices - it's optional
+    } finally {
+      setRefreshingPrices(false)
     }
   }
 
@@ -84,24 +186,46 @@ export default function WatchlistPage() {
         <h1 style={{ fontSize: '28px', fontWeight: '700', color: '#111827', margin: 0 }}>
           📊 Watchlist
         </h1>
-        <button
-          onClick={() => router.push('/watchlist/add')}
-          style={{
-            padding: '10px 20px',
-            backgroundColor: '#2563eb',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            fontSize: '14px',
-            fontWeight: '500',
-            cursor: 'pointer',
-            transition: 'background-color 0.2s'
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#1d4ed8' }}
-          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#2563eb' }}
-        >
-          + Add Stock
-        </button>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <button
+            onClick={refreshLivePrices}
+            disabled={refreshingPrices || loading}
+            style={{
+              padding: '10px 20px',
+              backgroundColor: '#059669',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              fontSize: '14px',
+              fontWeight: '500',
+              cursor: (refreshingPrices || loading) ? 'not-allowed' : 'pointer',
+              opacity: (refreshingPrices || loading) ? 0.5 : 1,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            🔄 {refreshingPrices ? 'Refreshing...' : 'Refresh Prices'}
+          </button>
+          <button
+            onClick={() => router.push('/watchlist/add')}
+            style={{
+              padding: '10px 20px',
+              backgroundColor: '#2563eb',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              fontSize: '14px',
+              fontWeight: '500',
+              cursor: 'pointer',
+              transition: 'background-color 0.2s'
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#1d4ed8' }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#2563eb' }}
+          >
+            + Add Stock
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -193,6 +317,23 @@ export default function WatchlistPage() {
                         {item.recommendation}
                       </span>
                     )}
+                    {/* Cache status indicator */}
+                    {item.cache_info && (
+                      <span style={{
+                        padding: '2px 8px',
+                        borderRadius: '8px',
+                        fontSize: '10px',
+                        fontWeight: '500',
+                        backgroundColor: item.cache_info.status === 'fresh' ? '#dcfce7' : 
+                                        item.cache_info.status === 'stale' ? '#fef3c7' : '#fee2e2',
+                        color: item.cache_info.status === 'fresh' ? '#166534' : 
+                               item.cache_info.status === 'stale' ? '#92400e' : '#991b1b'
+                      }}>
+                        {item.cache_info.status === 'fresh' && '✅ Fresh'}
+                        {item.cache_info.status === 'stale' && '⏰ Stale'}
+                        {item.cache_info.status === 'missing' && '❌ No Data'}
+                      </span>
+                    )}
                   </div>
                   
                   {item.company_name && (
@@ -207,22 +348,91 @@ export default function WatchlistPage() {
                     gap: '16px',
                     marginTop: '16px'
                   }}>
-                    {/* Show price if valid, or show error message if price fetch failed */}
-                    {item.current_price && Math.abs(item.current_price - 1.0) > 0.01 ? (
-                      <div>
-                        <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>Current Price</div>
-                        <div style={{ fontSize: '16px', fontWeight: '600', color: '#111827' }}>
-                          {formatPrice(item.current_price)}
-                        </div>
-                      </div>
-                    ) : (item as any).price_error ? (
-                      <div>
-                        <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>Current Price</div>
-                        <div style={{ fontSize: '14px', fontWeight: '500', color: '#dc2626' }}>
-                          ⚠️ {(item as any).price_error}
-                        </div>
-                      </div>
-                    ) : null}
+                    {/* Show live price if available, otherwise cached price */}
+                    {(() => {
+                      const livePrice = livePrices[item.ticker]?.price
+                      const cachedPrice = item.current_price
+                      const priceError = livePrices[item.ticker]?.error
+                      
+                      // Show live price if available and valid
+                      if (livePrice && Math.abs(livePrice - 1.0) > 0.01) {
+                        return (
+                          <div>
+                            <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>
+                              Current Price 
+                              <span style={{ color: '#059669', fontSize: '10px', marginLeft: '4px' }}>● LIVE</span>
+                            </div>
+                            <div style={{ fontSize: '16px', fontWeight: '600', color: '#111827' }}>
+                              {formatPrice(livePrice)}
+                            </div>
+                            {/* Show success comment if available */}
+                            {livePrices[item.ticker]?.comment && livePrices[item.ticker]?.success && (
+                              <div style={{ 
+                                fontSize: '10px', 
+                                color: '#059669', 
+                                marginTop: '2px',
+                                fontStyle: 'italic'
+                              }}>
+                                ✓ {livePrices[item.ticker].comment}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      }
+                      // Show cached price if available and valid
+                      else if (cachedPrice && Math.abs(cachedPrice - 1.0) > 0.01) {
+                        return (
+                          <div>
+                            <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>
+                              Current Price
+                              {item.cache_info?.last_updated && (
+                                <span style={{ fontSize: '10px', marginLeft: '4px' }}>
+                                  ({item.cache_info.last_updated})
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ fontSize: '16px', fontWeight: '600', color: '#111827' }}>
+                              {formatPrice(cachedPrice)}
+                            </div>
+                          </div>
+                        )
+                      }
+                      // Show error if live price fetch failed
+                      else if (priceError) {
+                        return (
+                          <div>
+                            <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>Current Price</div>
+                            <div style={{ fontSize: '14px', fontWeight: '500', color: '#dc2626' }}>
+                              ⚠️ {priceError}
+                            </div>
+                            {/* Show detailed error comment if available */}
+                            {livePrices[item.ticker]?.comment && (
+                              <div style={{ 
+                                fontSize: '11px', 
+                                color: '#6b7280', 
+                                marginTop: '2px',
+                                fontStyle: 'italic',
+                                lineHeight: '1.3'
+                              }}>
+                                {livePrices[item.ticker].comment}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      }
+                      // Show cached price error if available
+                      else if ((item as any).price_error) {
+                        return (
+                          <div>
+                            <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>Current Price</div>
+                            <div style={{ fontSize: '14px', fontWeight: '500', color: '#dc2626' }}>
+                              ⚠️ {(item as any).price_error}
+                            </div>
+                          </div>
+                        )
+                      }
+                      return null
+                    })()}
                     <div>
                       <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>Fair Value</div>
                       <div style={{ fontSize: '16px', fontWeight: '600', color: '#111827' }}>

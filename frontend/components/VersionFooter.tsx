@@ -4,33 +4,30 @@ import { useEffect, useState } from 'react'
 
 interface VersionInfo {
   backend: string | null
-  frontend: string
+  frontend: string | null
 }
 
 export default function VersionFooter() {
   const [versionInfo, setVersionInfo] = useState<VersionInfo>({
     backend: null,
-    frontend: new Date().toLocaleString('en-US', {
-      year: '2-digit',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    }).replace(/\//g, '').replace(', ', '-').replace(' ', '-')
+    frontend: null
   })
+  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
-    // Format frontend version in yymmdd-hh:mm format
-    const now = new Date()
-    const year = now.getFullYear().toString().slice(-2)
-    const month = String(now.getMonth() + 1).padStart(2, '0')
-    const day = String(now.getDate()).padStart(2, '0')
-    const hours = String(now.getHours()).padStart(2, '0')
-    const minutes = String(now.getMinutes()).padStart(2, '0')
-    const frontendVersion = `${year}${month}${day}-${hours}:${minutes}`
-    
-    setVersionInfo(prev => ({ ...prev, frontend: frontendVersion }))
+    // Generate frontend version only on client side to avoid hydration mismatch
+    const generateFrontendVersion = () => {
+      const now = new Date()
+      const year = now.getFullYear().toString().slice(-2)
+      const month = String(now.getMonth() + 1).padStart(2, '0')
+      const day = String(now.getDate()).padStart(2, '0')
+      const hours = String(now.getHours()).padStart(2, '0')
+      const minutes = String(now.getMinutes()).padStart(2, '0')
+      return `${year}${month}${day}-${hours}:${minutes}`
+    }
+
+    setMounted(true)
+    setVersionInfo(prev => ({ ...prev, frontend: generateFrontendVersion() }))
 
     // Fetch backend version
     const fetchBackendVersion = async () => {
@@ -57,6 +54,31 @@ export default function VersionFooter() {
     fetchBackendVersion()
   }, [])
 
+  // Don't render anything until mounted to avoid hydration mismatch
+  if (!mounted) {
+    return (
+      <footer style={{
+        marginTop: 'auto',
+        padding: '12px 20px',
+        backgroundColor: '#f9fafb',
+        borderTop: '1px solid #e5e7eb',
+        fontSize: '12px',
+        color: '#6b7280',
+        textAlign: 'center'
+      }}>
+        <div style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          gap: '16px',
+          flexWrap: 'wrap'
+        }}>
+          <span>Loading versions...</span>
+        </div>
+      </footer>
+    )
+  }
+
   return (
     <footer style={{
       marginTop: 'auto',
@@ -79,11 +101,12 @@ export default function VersionFooter() {
             Backend: <span style={{ fontFamily: 'monospace', fontWeight: '500' }}>{versionInfo.backend}</span>
           </span>
         )}
-        <span>
-          Frontend: <span style={{ fontFamily: 'monospace', fontWeight: '500' }}>{versionInfo.frontend}</span>
-        </span>
+        {versionInfo.frontend && (
+          <span>
+            Frontend: <span style={{ fontFamily: 'monospace', fontWeight: '500' }}>{versionInfo.frontend}</span>
+          </span>
+        )}
       </div>
     </footer>
   )
 }
-
