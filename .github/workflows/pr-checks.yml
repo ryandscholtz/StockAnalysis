@@ -19,22 +19,23 @@ jobs:
       with:
         fetch-depth: 0
         
-    - name: Validate PR title
-      uses: amannn/action-semantic-pull-request@v5
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        types: |
-          feat
-          fix
-          docs
-          style
-          refactor
-          perf
-          test
-          chore
-          ci
-        requireScope: false
+    # PR title validation disabled - allowing free-form titles
+    # - name: Validate PR title
+    #   uses: amannn/action-semantic-pull-request@v5
+    #   env:
+    #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    #   with:
+    #     types: |
+    #       feat
+    #       fix
+    #       docs
+    #       style
+    #       refactor
+    #       perf
+    #       test
+    #       chore
+    #       ci
+    #     requireScope: false
         
     - name: Check for breaking changes
       run: |

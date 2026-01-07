@@ -336,18 +336,23 @@ def cache_async_result(key_prefix: str, ttl_minutes: int = 60):
     """Decorator to cache async function results"""
     def decorator(func):
         async def wrapper(*args, **kwargs):
-            # Generate cache key
-            cache_key = cache_manager._generate_key(key_prefix, args=args, kwargs=kwargs)
+            try:
+                # Generate cache key
+                cache_key = cache_manager._generate_key(key_prefix, args=args, kwargs=kwargs)
 
-            # Try to get from cache
-            cached_result = cache_manager.get(cache_key)
-            if cached_result is not None:
-                return cached_result
+                # Try to get from cache
+                cached_result = cache_manager.get(cache_key)
+                if cached_result is not None:
+                    return cached_result
 
-            # Execute function and cache result
-            result = await func(*args, **kwargs)
-            cache_manager.set(cache_key, result, ttl_minutes)
-            return result
+                # Execute function and cache result
+                result = await func(*args, **kwargs)
+                cache_manager.set(cache_key, result, ttl_minutes)
+                return result
+            except Exception as e:
+                logger.error(f"Error in cache_async_result for {key_prefix}: {e}")
+                # Execute function without caching if cache fails
+                return await func(*args, **kwargs)
 
         return wrapper
     return decorator

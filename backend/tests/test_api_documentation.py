@@ -102,8 +102,9 @@ class TestAPIDocumentation:
         for path, methods in paths.items():
             for method, details in methods.items():
                 if method.upper() in ["GET", "POST", "PUT", "DELETE", "PATCH"]:
-                    assert "responses" in details, (f"Endpoint {
-                        method.upper()} {path} missing response documentation")
+                    assert "responses" in details, (
+                        f"Endpoint {method.upper()} {path} missing response documentation"
+                    )
 
                     responses = details["responses"]
                     assert len(responses) > 0, (

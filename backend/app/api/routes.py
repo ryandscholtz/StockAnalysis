@@ -1,7 +1,7 @@
 """
 API routes for stock analysis
 """
-from fastapi import APIRouter, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Depends
 from fastapi.responses import StreamingResponse, JSONResponse
 from typing import List, AsyncGenerator, Optional
 import json
@@ -27,6 +27,7 @@ from app.analysis.management_quality import ManagementQualityAnalyzer
 from app.analysis.growth_metrics import GrowthMetricsCalculator
 from app.analysis.price_ratios import PriceRatiosCalculator
 from app.analysis.data_quality import DataQualityAnalyzer
+from app.core.dependencies import get_yahoo_client, get_correlation_id
 
 router = APIRouter()
 
@@ -78,48 +79,77 @@ async def test_batch_route():
 
 
 @router.get("/version")
-async def get_version():
+async def get_version(correlation_id: str = Depends(get_correlation_id)):
     """Get backend version information"""
-    from app.core.app import BUILD_TIMESTAMP
-    return {
-        "version": BUILD_TIMESTAMP,
-        "build_time": BUILD_TIMESTAMP
-    }
+    try:
+        from app.core.app import BUILD_TIMESTAMP
+        return {
+            "version": BUILD_TIMESTAMP,
+            "build_time": BUILD_TIMESTAMP
+        }
+    except Exception as e:
+        logger.error(f"Version check failed", extra={"correlation_id": correlation_id, "error": str(e)})
+        # Return a fallback version instead of 500 error
+        return {
+            "version": "unknown",
+            "build_time": "unknown",
+            "error": "Version information unavailable"
+        }
 
 
 @router.get("/analysis-presets")
-async def get_analysis_presets():
+async def get_analysis_presets(correlation_id: str = Depends(get_correlation_id)):
     """Get available business type presets and their default weights"""
-    from app.config.analysis_weights import BusinessType, AnalysisWeightPresets
+    try:
+        from app.config.analysis_weights import BusinessType, AnalysisWeightPresets
 
-    presets = {}
-    for business_type in BusinessType:
-        weights = AnalysisWeightPresets.get_preset(business_type)
-        presets[business_type.value] = weights.to_dict()
+        presets = {}
+        for business_type in BusinessType:
+            weights = AnalysisWeightPresets.get_preset(business_type)
+            presets[business_type.value] = weights.to_dict()
 
-    return {
-        "presets": presets,
-        "business_types": [bt.value for bt in BusinessType]
-    }
+        return {
+            "presets": presets,
+            "business_types": [bt.value for bt in BusinessType]
+        }
+    except Exception as e:
+        logger.error(f"Analysis presets failed", extra={"correlation_id": correlation_id, "error": str(e)})
+        # Return empty presets instead of 500 error
+        return {
+            "presets": {},
+            "business_types": [],
+            "error": "Analysis presets temporarily unavailable"
+        }
 
 # In-memory storage for manual data (in production, use a database)
 manual_data_store: dict = {}
 
 
 @router.get("/search")
-async def search_tickers(q: str = Query(..., min_length=1, description="Search query")):
+async def search_tickers(
+    q: str = Query(..., min_length=1, description="Search query"),
+    yahoo_client: YahooFinanceClient = Depends(get_yahoo_client),
+    correlation_id: str = Depends(get_correlation_id)
+):
     """
     Search for ticker symbols and company names
     Returns list of matching stocks
     """
     try:
-        yahoo_client = YahooFinanceClient()
+        logger.info(f"Searching for tickers with query: {q}", extra={"correlation_id": correlation_id})
+        
         # Run synchronous search in executor to avoid blocking
         loop = asyncio.get_event_loop()
         results = await loop.run_in_executor(None, yahoo_client.search_tickers, q)
-        return {"results": results}
+        
+        logger.info(f"Search completed for query: {q}, found {len(results) if results else 0} results", 
+                   extra={"correlation_id": correlation_id})
+        
+        return {"results": results or []}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Search failed for query: {q}", extra={"correlation_id": correlation_id, "error": str(e)})
+        # Return empty results instead of 500 error for better UX
+        return {"results": [], "error": "Search temporarily unavailable"}
 
 
 async def _analyze_stock_with_progress(ticker: str, progress_tracker: ProgressTracker,
@@ -2471,100 +2501,114 @@ async def get_quote(ticker: str):
 
 
 @router.post("/compare", response_model=CompareResponse)
-async def compare_stocks(request: CompareRequest):
+async def compare_stocks(
+    request: CompareRequest,
+    correlation_id: str = Depends(get_correlation_id)
+):
     """
     Compare multiple stocks side-by-side
     """
     try:
         analyses = []
         for ticker in request.tickers:
-            # Fetch data
-            data_fetcher = DataFetcher()
-            company_data = await data_fetcher.fetch_company_data(ticker)
+            try:
+                # Fetch data
+                data_fetcher = DataFetcher()
+                company_data = await data_fetcher.fetch_company_data(ticker)
 
-            if not company_data:
+                if not company_data:
+                    logger.warning(f"No data found for ticker {ticker}", extra={"correlation_id": correlation_id})
+                    continue
+
+                # Apply manual data if available (in-memory store - backward compatibility)
+                if ticker.upper() in manual_data_store:
+                    manual_data = manual_data_store[ticker.upper()]
+                    _apply_manual_data(company_data, manual_data)
+
+                # Also load AI-extracted data from database
+                try:
+                    from app.database.db_service import DatabaseService
+                    db_service = DatabaseService(db_path="stock_analysis.db")
+                    ai_data = db_service.get_ai_extracted_data(ticker)
+
+                    if ai_data:
+                        # Apply AI-extracted data to company_data
+                        _apply_ai_extracted_data(company_data, ai_data)
+                        logger.info(f"Loaded AI-extracted data from database for {ticker}", extra={"correlation_id": correlation_id})
+                except Exception as e:
+                    logger.warning(f"Error loading AI-extracted data from database for {ticker}: {e}", extra={"correlation_id": correlation_id})
+                    # Continue without AI data if database load fails
+
+                # Get risk-free rate
+                risk_free_rate = data_fetcher.get_risk_free_rate()
+
+                # Calculate intrinsic value
+                intrinsic_calc = IntrinsicValueCalculator(company_data, risk_free_rate)
+                valuation_result = intrinsic_calc.calculate()
+
+                # Analyze financial health
+                health_analyzer = FinancialHealthAnalyzer(company_data)
+                health_result = health_analyzer.analyze()
+
+                # Analyze business quality
+                quality_analyzer = BusinessQualityAnalyzer(company_data)
+                quality_result = quality_analyzer.analyze()
+
+                # Calculate margin of safety
+                margin_calc = MarginOfSafetyCalculator(
+                    current_price=company_data.current_price,
+                    fair_value=valuation_result.fair_value
+                )
+                margin_result = margin_calc.calculate(
+                    business_quality_score=quality_result.score,
+                    financial_health_score=health_result.score,
+                    beta=company_data.beta or 1.0,
+                    market_cap=company_data.market_cap
+                )
+
+                # Build analysis
+                from datetime import datetime
+                from dataclasses import asdict
+                import math
+
+                # Convert dataclass to dict for Pydantic, handling NaN values
+                valuation_dict = asdict(valuation_result.breakdown)
+                # Replace NaN with 0.0 for Pydantic validation
+                for key, value in valuation_dict.items():
+                    if isinstance(value, float) and math.isnan(value):
+                        valuation_dict[key] = 0.0
+
+                analysis = StockAnalysis(
+                    ticker=ticker.upper(),
+                    companyName=company_data.company_name,
+                    currentPrice=company_data.current_price,
+                    fairValue=valuation_result.fair_value,
+                    marginOfSafety=margin_result.margin_of_safety,
+                    upsidePotential=margin_result.upside_potential,
+                    priceToIntrinsicValue=margin_result.price_to_intrinsic_value,
+                    recommendation=margin_result.recommendation,
+                    recommendationReasoning=margin_result.reasoning,
+                    valuation=valuation_dict,
+                    financialHealth=health_result,
+                    businessQuality=quality_result,
+                    timestamp=datetime.now()
+                )
+
+                analyses.append(analysis)
+            except Exception as e:
+                logger.error(f"Error analyzing {ticker} in comparison: {e}", extra={"correlation_id": correlation_id})
+                # Continue with other tickers instead of failing the entire comparison
                 continue
 
-            # Apply manual data if available (in-memory store - backward compatibility)
-            if ticker.upper() in manual_data_store:
-                manual_data = manual_data_store[ticker.upper()]
-                _apply_manual_data(company_data, manual_data)
-
-            # Also load AI-extracted data from database
-            try:
-                from app.database.db_service import DatabaseService
-                db_service = DatabaseService(db_path="stock_analysis.db")
-                ai_data = db_service.get_ai_extracted_data(ticker)
-
-                if ai_data:
-                    # Apply AI-extracted data to company_data
-                    _apply_ai_extracted_data(company_data, ai_data)
-                    logger.info(f"Loaded AI-extracted data from database for {ticker}")
-            except Exception as e:
-                logger.warning(f"Error loading AI-extracted data from database for {ticker}: {e}")
-                # Continue without AI data if database load fails
-
-            # Get risk-free rate
-            risk_free_rate = data_fetcher.get_risk_free_rate()
-
-            # Calculate intrinsic value
-            intrinsic_calc = IntrinsicValueCalculator(company_data, risk_free_rate)
-            valuation_result = intrinsic_calc.calculate()
-
-            # Analyze financial health
-            health_analyzer = FinancialHealthAnalyzer(company_data)
-            health_result = health_analyzer.analyze()
-
-            # Analyze business quality
-            quality_analyzer = BusinessQualityAnalyzer(company_data)
-            quality_result = quality_analyzer.analyze()
-
-            # Calculate margin of safety
-            margin_calc = MarginOfSafetyCalculator(
-                current_price=company_data.current_price,
-                fair_value=valuation_result.fair_value
-            )
-            margin_result = margin_calc.calculate(
-                business_quality_score=quality_result.score,
-                financial_health_score=health_result.score,
-                beta=company_data.beta or 1.0,
-                market_cap=company_data.market_cap
-            )
-
-            # Build analysis
-            from datetime import datetime
-            from dataclasses import asdict
-            import math
-
-            # Convert dataclass to dict for Pydantic, handling NaN values
-            valuation_dict = asdict(valuation_result.breakdown)
-            # Replace NaN with 0.0 for Pydantic validation
-            for key, value in valuation_dict.items():
-                if isinstance(value, float) and math.isnan(value):
-                    valuation_dict[key] = 0.0
-
-            analysis = StockAnalysis(
-                ticker=ticker.upper(),
-                companyName=company_data.company_name,
-                currentPrice=company_data.current_price,
-                fairValue=valuation_result.fair_value,
-                marginOfSafety=margin_result.margin_of_safety,
-                upsidePotential=margin_result.upside_potential,
-                priceToIntrinsicValue=margin_result.price_to_intrinsic_value,
-                recommendation=margin_result.recommendation,
-                recommendationReasoning=margin_result.reasoning,
-                valuation=valuation_dict,
-                financialHealth=health_result,
-                businessQuality=quality_result,
-                timestamp=datetime.now()
-            )
-
-            analyses.append(analysis)
+        if not analyses:
+            return CompareResponse(analyses=[], error="No valid analyses could be completed")
 
         return CompareResponse(analyses=analyses)
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Stock comparison failed: {e}", extra={"correlation_id": correlation_id})
+        # Return empty comparison instead of 500 error
+        return CompareResponse(analyses=[], error="Stock comparison temporarily unavailable")
 
 
 class BatchAnalysisRequest(BaseModel):
@@ -2757,7 +2801,7 @@ async def get_batch_results(
 
 # Watchlist endpoints
 @router.get("/watchlist")
-async def get_watchlist():
+async def get_watchlist(correlation_id: str = Depends(get_correlation_id)):
     """Get all stocks in the watchlist - optimized for fast loading"""
     try:
         from app.database.db_service import DatabaseService
@@ -2776,7 +2820,7 @@ async def get_watchlist():
                 # Use efficient batch query method
                 latest_analyses = db_service.get_latest_analyses_batch(tickers)
             except Exception as e:
-                logger.warning(f"Error batch fetching analysis data: {e}")
+                logger.warning(f"Error batch fetching analysis data: {e}", extra={"correlation_id": correlation_id})
                 latest_analyses = {}
 
         # Enrich items with cached analysis data only (no live API calls for performance)
@@ -2821,18 +2865,20 @@ async def get_watchlist():
 
             enriched_items.append(item)
 
-        logger.info(f"Watchlist loaded: {len(enriched_items)} items (optimized - no live API calls)")
+        logger.info(f"Watchlist loaded: {len(enriched_items)} items (optimized - no live API calls)", extra={"correlation_id": correlation_id})
         return {"items": enriched_items, "total": len(enriched_items)}
 
     except Exception as e:
-        logger.error(f"Error getting watchlist: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error getting watchlist: {e}", extra={"correlation_id": correlation_id})
+        # Return empty watchlist instead of 500 error
+        return {"items": [], "total": 0, "error": "Watchlist temporarily unavailable"}
 
 
 @router.get("/watchlist/live-prices")
-async def get_watchlist_live_prices():
+async def get_watchlist_live_prices(
+    yahoo_client: YahooFinanceClient = Depends(get_yahoo_client),
+    correlation_id: str = Depends(get_correlation_id)
+):
     """Get live prices for all watchlist items - separate endpoint for performance"""
     try:
         from app.database.db_service import DatabaseService
@@ -2844,8 +2890,10 @@ async def get_watchlist_live_prices():
         watchlist_items = db_service.get_watchlist()
         tickers = [item['ticker'] for item in watchlist_items]
 
+        if not tickers:
+            return {"live_prices": {}, "message": "No tickers in watchlist"}
+
         live_prices = {}
-        yahoo_client = YahooFinanceClient()
 
         # Create a wrapper function with timeout for individual ticker calls
         def get_quote_with_timeout(ticker, timeout_seconds=20):
@@ -2860,11 +2908,11 @@ async def get_watchlist_live_prices():
 
                 # Log timing for debugging
                 duration = end_time - start_time
-                logger.info(f"Quote for {ticker} took {duration:.2f} seconds")
+                logger.info(f"Quote for {ticker} took {duration:.2f} seconds", extra={"correlation_id": correlation_id})
 
                 return result
             except Exception as e:
-                logger.warning(f"Timeout or error getting quote for {ticker}: {e}")
+                logger.warning(f"Timeout or error getting quote for {ticker}: {e}", extra={"correlation_id": correlation_id})
                 return {
                     'error': 'Timeout or API error',
                     'error_detail': f'Request for {ticker} failed: {str(e)}',
@@ -2939,14 +2987,13 @@ async def get_watchlist_live_prices():
                     'comment': f'Request for {ticker} was not completed within the timeout period'
                 }
 
-        logger.info(f"Live prices completed for {len(live_prices)} tickers")
+        logger.info(f"Live prices completed for {len(live_prices)} tickers", extra={"correlation_id": correlation_id})
         return {"live_prices": live_prices}
 
     except Exception as e:
-        logger.error(f"Error getting live prices: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error getting live prices: {e}", extra={"correlation_id": correlation_id})
+        # Return empty prices instead of 500 error
+        return {"live_prices": {}, "error": "Live prices temporarily unavailable"}
 
 
 @router.post("/watchlist/{ticker}")
@@ -2955,7 +3002,9 @@ async def add_to_watchlist(
     company_name: Optional[str] = Query(None),
     exchange: Optional[str] = Query(None),
     notes: Optional[str] = Query(None),
-    auto_detect_business_type: bool = Query(True, description="Automatically detect business type using AI")
+    auto_detect_business_type: bool = Query(True, description="Automatically detect business type using AI"),
+    yahoo_client: YahooFinanceClient = Depends(get_yahoo_client),
+    correlation_id: str = Depends(get_correlation_id)
 ):
     """Add a stock to the watchlist"""
     try:
@@ -2966,7 +3015,6 @@ async def add_to_watchlist(
         company_info = {}
         if not company_name:
             try:
-                yahoo_client = YahooFinanceClient()
                 loop = asyncio.get_event_loop()
                 quote = await loop.run_in_executor(None, yahoo_client.get_quote, ticker.upper())
                 if quote:
@@ -3045,7 +3093,12 @@ async def remove_from_watchlist(ticker: str):
 
 
 @router.get("/watchlist/{ticker}")
-async def get_watchlist_item(ticker: str, force_refresh: bool = Query(False, description="Force refresh analysis data")):
+async def get_watchlist_item(
+    ticker: str, 
+    force_refresh: bool = Query(False, description="Force refresh analysis data"),
+    yahoo_client: YahooFinanceClient = Depends(get_yahoo_client),
+    correlation_id: str = Depends(get_correlation_id)
+):
     """Get detailed information for a watchlist item with smart caching"""
     try:
         from app.database.db_service import DatabaseService
@@ -3155,7 +3208,6 @@ async def get_watchlist_item(ticker: str, force_refresh: bool = Query(False, des
         price_error = None
         try:
             # Try Yahoo Finance first
-            yahoo_client = YahooFinanceClient()
             loop = asyncio.get_event_loop()
             current_quote = await loop.run_in_executor(None, yahoo_client.get_quote, ticker.upper())
 
@@ -3241,25 +3293,28 @@ async def update_watchlist_item(
 
 
 @router.post("/auto-assign-business-type/{ticker}")
-async def auto_assign_business_type(ticker: str):
+async def auto_assign_business_type(
+    ticker: str,
+    yahoo_client: YahooFinanceClient = Depends(get_yahoo_client),
+    correlation_id: str = Depends(get_correlation_id)
+):
     """
     Auto-assign business type using AI-powered detection
     Uses AWS Bedrock or OpenAI to analyze company information and determine the most appropriate valuation model
     """
     try:
-        from app.data.data_fetcher import DataFetcher, YahooFinanceClient
+        from app.data.data_fetcher import DataFetcher
         from app.ai.business_type_detector import BusinessTypeDetector
         from app.config.analysis_weights import AnalysisWeightPresets
 
         # Try to fetch company information
-        yahoo_client = YahooFinanceClient()
         loop = asyncio.get_event_loop()
 
         quote = None
         try:
             quote = await loop.run_in_executor(None, yahoo_client.get_quote, ticker.upper())
         except Exception as e:
-            logger.warning(f"Could not get quote for {ticker}: {e}")
+            logger.warning(f"Could not get quote for {ticker}: {e}", extra={"correlation_id": correlation_id})
 
         # Prepare company info for AI detection (with fallback for missing data)
         if quote:

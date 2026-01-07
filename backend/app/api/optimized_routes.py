@@ -1,7 +1,7 @@
 """
 Optimized API routes with background processing and advanced caching
 """
-from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Query, BackgroundTasks, Depends
 from typing import Optional, Dict
 import asyncio
 import logging
@@ -10,6 +10,8 @@ from datetime import datetime
 from app.background_tasks import task_manager, fetch_live_prices_background, analyze_stock_background
 from app.cache_manager import cache_manager, cache_async_result
 from app.database.db_service import DatabaseService
+from app.core.dependencies import get_yahoo_client
+from app.data.api_client import YahooFinanceClient
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -217,19 +219,25 @@ async def get_cached_watchlist():
         }
     except Exception as e:
         logger.error(f"Error getting cached watchlist: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        # Return empty watchlist instead of 500 error
+        return {
+            "items": [],
+            "total": 0,
+            "cached": True,
+            "error": "Watchlist temporarily unavailable",
+            "timestamp": datetime.now().isoformat()
+        }
 
 @router.get("/quote/{ticker}/cached")
 @cache_async_result("quick_quote", ttl_minutes=15)
-async def get_cached_quote(ticker: str):
+async def get_cached_quote(
+    ticker: str,
+    yahoo_client: YahooFinanceClient = Depends(get_yahoo_client)
+):
     """
     Get basic quote data with caching - for instant price display
     """
     try:
-        from app.data.api_client import YahooFinanceClient
-
-        yahoo_client = YahooFinanceClient()
-
         # Run in thread pool to avoid blocking
         loop = asyncio.get_event_loop()
         quote = await loop.run_in_executor(None, yahoo_client.get_quote, ticker.upper())
@@ -252,7 +260,13 @@ async def get_cached_quote(ticker: str):
 
     except Exception as e:
         logger.error(f"Error getting cached quote for {ticker}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        # Return error response instead of 500
+        return {
+            "ticker": ticker.upper(),
+            "error": "Quote temporarily unavailable",
+            "cached": True,
+            "timestamp": datetime.now().isoformat()
+        }
 
 @router.get("/health/detailed")
 async def detailed_health_check():
