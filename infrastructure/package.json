@@ -1,24 +1,50 @@
 {
   "name": "stock-analysis-infrastructure",
-  "version": "1.0.0",
-  "description": "CDK infrastructure for Stock Analysis application",
+  "version": "2.0.0",
+  "description": "Modern CDK infrastructure for Stock Analysis application with monitoring and security",
   "scripts": {
     "build": "tsc",
     "watch": "tsc -w",
     "cdk": "cdk",
     "deploy": "cdk deploy",
+    "deploy:dev": "cdk deploy --context environment=development",
+    "deploy:staging": "cdk deploy --context environment=staging", 
+    "deploy:prod": "cdk deploy --context environment=production",
     "synth": "cdk synth",
-    "diff": "cdk diff"
+    "diff": "cdk diff",
+    "destroy": "cdk destroy",
+    "bootstrap": "cdk bootstrap",
+    "test": "jest",
+    "lint": "eslint . --ext .ts"
   },
   "dependencies": {
     "aws-cdk-lib": "^2.100.0",
-    "constructs": "^10.0.0"
+    "constructs": "^10.0.0",
+    "source-map-support": "^0.5.21"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "@types/jest": "^29.5.0",
     "typescript": "^5.0.0",
     "ts-node": "^10.9.0",
-    "aws-cdk": "^2.100.0"
-  }
+    "aws-cdk": "^2.100.0",
+    "jest": "^29.5.0",
+    "ts-jest": "^29.1.0",
+    "eslint": "^8.40.0",
+    "@typescript-eslint/eslint-plugin": "^5.59.0",
+    "@typescript-eslint/parser": "^5.59.0"
+  },
+  "keywords": [
+    "aws",
+    "cdk",
+    "infrastructure",
+    "stock-analysis",
+    "serverless",
+    "lambda",
+    "api-gateway",
+    "dynamodb"
+  ],
+  "author": "Stock Analysis Team",
+  "license": "MIT"
 }
 

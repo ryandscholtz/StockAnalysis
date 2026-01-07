@@ -8,6 +8,8 @@ import PyPDF2
 import pdfplumber
 import io
 
+from app.core.xray_middleware import trace_function, create_external_api_subsegment, end_subsegment
+
 logger = logging.getLogger(__name__)
 
 # OCR imports (optional - only needed for scanned PDFs)
@@ -860,6 +862,7 @@ PDF Text ({len(pdf_text)} characters):
 {pdf_text}
 """
     
+    @trace_function(name="ai.openai_extract", annotations={"operation": "extract", "service": "openai"})
     def _extract_with_openai(self, prompt: str) -> Tuple[Dict[str, Any], str]:
         """Extract using OpenAI API. Returns (parsed_data, raw_response)"""
         try:
@@ -896,6 +899,7 @@ PDF Text ({len(pdf_text)} characters):
             logger.error(f"OpenAI extraction failed: {e}")
             raise
     
+    @trace_function(name="ai.llama_vision_extract_async", annotations={"operation": "extract", "service": "ollama"})
     async def _extract_with_llama_vision_async(self, prompt: str, image_base64: str) -> Tuple[Dict[str, Any], str]:
         """Extract using Llama/Ollama API with vision (image input) - Simplified version. Returns (parsed_data, raw_response)"""
         import requests
@@ -998,6 +1002,7 @@ PDF Text ({len(pdf_text)} characters):
             logger.error(f"Invalid JSON response: {str(e)}, content preview: {content[:500] if 'content' in locals() else 'N/A'}")
             raise ValueError(f"Invalid JSON response: {str(e)}")
     
+    @trace_function(name="ai.llama_vision_extract", annotations={"operation": "extract", "service": "ollama"})
     def _extract_with_llama_vision(self, prompt: str, image_base64: str) -> Tuple[Dict[str, Any], str]:
         """Extract using Llama/Ollama API with vision (image input) - SYNC VERSION (kept for backward compatibility). Returns (parsed_data, raw_response)"""
         try:

@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\LocalCache\local-packages\Python312\site-packages\PyPDF2\generic\__init__.py
+# hypothesis_version: 6.149.1
+
+['4.0.0', 'AnnotationBuilder', 'ArrayObject', 'Bookmark', 'BooleanObject', 'ByteStringObject', 'ContentStream', 'DecodedStreamObject', 'Destination', 'DictionaryObject', 'EncodedStreamObject', 'Field', 'Fit', 'FloatObject', 'IndirectObject', 'Mathieu Fenniak', 'NameObject', 'NullObject', 'NumberObject', 'OutlineFontFlag', 'OutlineItem', 'PAGE_FIT', 'PdfObject', 'RectangleObject', 'StreamObject', 'TextStringObject', 'TreeObject', 'createStringObject', 'create_string_object', 'hex_to_rgb', 'readStringFromStream', 'read_object']

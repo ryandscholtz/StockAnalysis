@@ -1,0 +1,241 @@
+name: Hotfix Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy hotfix to'
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      hotfix-description:
+        description: 'Description of the hotfix'
+        required: true
+        type: string
+      skip-tests:
+        description: 'Skip tests (emergency only)'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  NODE_VERSION: '18'
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  validate-hotfix:
+    name: Validate Hotfix Request
+    runs-on: ubuntu-latest
+    
+    outputs:
+      approved: ${{ steps.validation.outputs.approved }}
+      
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Validate hotfix request
+      id: validation
+      run: |
+        echo "Validating hotfix request..."
+        echo "Environment: ${{ github.event.inputs.environment }}"
+        echo "Description: ${{ github.event.inputs.hotfix-description }}"
+        echo "Skip tests: ${{ github.event.inputs.skip-tests }}"
+        
+        # Validate branch (should be hotfix/* or main for production)
+        current_branch="${{ github.ref_name }}"
+        
+        if [[ "${{ github.event.inputs.environment }}" == "production" ]]; then
+          if [[ ! "$current_branch" =~ ^(hotfix/|main$) ]]; then
+            echo "❌ Production hotfixes must be from 'main' or 'hotfix/*' branches"
+            echo "Current branch: $current_branch"
+            exit 1
+          fi
+        fi
+        
+        echo "✅ Hotfix validation passed"
+        echo "approved=true" >> $GITHUB_OUTPUT
+        
+    - name: Create hotfix issue
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const issue = await github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: `🚨 HOTFIX: ${{ github.event.inputs.hotfix-description }}`,
+            body: `
+            ## Hotfix Deployment Request
+            
+            **Environment:** ${{ github.event.inputs.environment }}
+            **Branch:** ${{ github.ref_name }}
+            **Commit:** ${{ github.sha }}
+            **Skip Tests:** ${{ github.event.inputs.skip-tests }}
+            
+            **Description:**
+            ${{ github.event.inputs.hotfix-description }}
+            
+            **Initiated by:** @${{ github.actor }}
+            **Timestamp:** ${new Date().toISOString()}
+            
+            ---
+            
+            This issue tracks the hotfix deployment process.
+            `,
+            labels: ['hotfix', 'deployment', '${{ github.event.inputs.environment }}']
+          });
+          
+          console.log(`Created hotfix tracking issue: ${issue.data.html_url}`);
+
+  emergency-tests:
+    name: Emergency Tests
+    runs-on: ubuntu-latest
+    needs: validate-hotfix
+    if: needs.validate-hotfix.outputs.approved == 'true' && github.event.inputs.skip-tests != 'true'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        
+    - name: Install Python dependencies
+      working-directory: ./backend
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt -r requirements-test.txt
+        
+    - name: Install Node dependencies
+      working-directory: ./frontend
+      run: npm ci
+      
+    - name: Run critical backend tests
+      working-directory: ./backend
+      run: |
+        # Run only critical tests for hotfix
+        pytest tests/ -m "not slow" --tb=short -x
+        
+    - name: Run critical frontend tests
+      working-directory: ./frontend
+      run: |
+        npm test -- --passWithNoTests --watchAll=false --testPathPattern="critical"
+        
+    - name: Quick security scan
+      working-directory: ./backend
+      run: |
+        bandit -r app/ -ll  # Only high and medium severity
+
+  hotfix-deploy:
+    name: Deploy Hotfix
+    uses: ./.github/workflows/deploy.yml
+    needs: [validate-hotfix, emergency-tests]
+    if: always() && needs.validate-hotfix.outputs.approved == 'true' && (needs.emergency-tests.result == 'success' || github.event.inputs.skip-tests == 'true')
+    with:
+      environment: ${{ github.event.inputs.environment }}
+      aws-region: us-east-1
+    secrets:
+      AWS_ACCESS_KEY_ID: ${{ github.event.inputs.environment == 'production' && secrets.AWS_ACCESS_KEY_ID_PROD || secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ github.event.inputs.environment == 'production' && secrets.AWS_SECRET_ACCESS_KEY_PROD || secrets.AWS_SECRET_ACCESS_KEY }}
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  post-hotfix-validation:
+    name: Post-Hotfix Validation
+    runs-on: ubuntu-latest
+    needs: hotfix-deploy
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Extended health checks
+      run: |
+        echo "Running extended health checks..."
+        # Add comprehensive health check logic here
+        
+    - name: Monitor for errors
+      run: |
+        echo "Monitoring for errors in the first 5 minutes..."
+        # Add error monitoring logic here
+        sleep 300  # Wait 5 minutes
+        
+    - name: Create follow-up tasks
+      uses: actions/github-script@v6
+      with:
+        script: |
+          // Create follow-up issue for proper testing
+          const followUp = await github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: `📋 Follow-up: Complete testing for hotfix - ${{ github.event.inputs.hotfix-description }}`,
+            body: `
+            ## Post-Hotfix Follow-up Tasks
+            
+            This hotfix was deployed with ${{ github.event.inputs.skip-tests == 'true' && 'SKIPPED' || 'LIMITED' }} testing.
+            
+            **Original Hotfix:** ${{ github.event.inputs.hotfix-description }}
+            **Environment:** ${{ github.event.inputs.environment }}
+            **Deployed:** ${new Date().toISOString()}
+            
+            ### Required Follow-up Actions:
+            
+            - [ ] Run complete test suite
+            - [ ] Perform thorough regression testing
+            - [ ] Update documentation if needed
+            - [ ] Review and improve hotfix process
+            - [ ] Schedule proper release with full testing
+            
+            **Priority:** High
+            **Assignee:** @${{ github.actor }}
+            `,
+            labels: ['follow-up', 'testing', 'hotfix'],
+            assignees: ['${{ github.actor }}']
+          });
+          
+          console.log(`Created follow-up issue: ${followUp.data.html_url}`);
+
+  notify-completion:
+    name: Notify Hotfix Completion
+    runs-on: ubuntu-latest
+    needs: [hotfix-deploy, post-hotfix-validation]
+    if: always()
+    
+    steps:
+    - name: Notify success
+      if: needs.hotfix-deploy.result == 'success' && needs.post-hotfix-validation.result == 'success'
+      uses: 8398a7/action-slack@v3
+      with:
+        status: success
+        text: |
+          🚨✅ HOTFIX DEPLOYED SUCCESSFULLY
+          
+          **Environment:** ${{ github.event.inputs.environment }}
+          **Description:** ${{ github.event.inputs.hotfix-description }}
+          **Branch:** ${{ github.ref_name }}
+          **Tests Skipped:** ${{ github.event.inputs.skip-tests }}
+          
+          Please monitor the application closely.
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        
+    - name: Notify failure
+      if: needs.hotfix-deploy.result == 'failure' || needs.post-hotfix-validation.result == 'failure'
+      uses: 8398a7/action-slack@v3
+      with:
+        status: failure
+        text: |
+          🚨❌ HOTFIX DEPLOYMENT FAILED
+          
+          **Environment:** ${{ github.event.inputs.environment }}
+          **Description:** ${{ github.event.inputs.hotfix-description }}
+          **Branch:** ${{ github.ref_name }}
+          
+          IMMEDIATE ACTION REQUIRED!
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

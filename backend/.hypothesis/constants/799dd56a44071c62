@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Documents\GitHub\StockAnalysis\backend\app\utils\ec2_manager.py
+# hypothesis_version: 6.149.0
+
+['120', '15', 'AWS_PROFILE', 'AWS_REGION', 'Cerebrum', 'Delay', 'EC2_AUTO_STOP', 'Instances', 'MaxAttempts', 'Name', 'PublicIpAddress', 'Reservations', 'State', 'ec2', 'eu-west-1', 'i-056dc6971b402f0b2', 'instance_running', 'running', 'stopped', 'stopping', 'true']

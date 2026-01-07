@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\LocalCache\local-packages\Python312\site-packages\PyPDF2\generic\_rectangle.py
+# hypothesis_version: 6.149.1
+
+['3.0.0', 'RectangleObject', 'bottom', 'ensureIsNumber', 'getHeight', 'getLowerLeft', 'getLowerLeft_x', 'getLowerLeft_y', 'getLowerRight', 'getLowerRight_x', 'getLowerRight_y', 'getUpperLeft', 'getUpperLeft_x', 'getUpperLeft_y', 'getUpperRight', 'getUpperRight_x', 'getUpperRight_y', 'getWidth', 'height', 'left', 'lowerLeft', 'lowerRight', 'lower_left', 'lower_right', 'right', 'setLowerLeft', 'setLowerRight', 'setUpperLeft', 'setUpperRight', 'top', 'upperLeft', 'upperRight', 'upper_left', 'upper_right', 'width']

@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\LocalCache\local-packages\Python312\site-packages\pydantic\errors.py
+# hypothesis_version: 6.149.1
+
+[".*'(.+?)'", 'PydanticErrorCodes', 'PydanticImportError', 'PydanticUserError', 'config-both', 'custom-json-schema', 'discriminator-alias', 'import-error', 'removed-kwargs', 'root-model-extra', 'typed-dict-version', 'undefined-annotation', 'validator-no-fields', 'validator-signature']

@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Documents\GitHub\StockAnalysis\backend\app\api\models.py
+# hypothesis_version: 6.149.0
+
+[-100.0, 0.0, 0.2, 0.4, 1.0, 100.0, 200, 'asset_weight', 'companyName', 'currentPrice', 'dcf_weight', 'epv_weight', 'fairValue', 'marginOfSafety', 'marketCap', 'ticker', 'upsidePotential']

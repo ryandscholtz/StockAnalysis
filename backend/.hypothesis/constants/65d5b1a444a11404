@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\LocalCache\local-packages\Python312\site-packages\PyPDF2\generic\_base.py
+# hypothesis_version: 6.149.1
+
+[b' ', b'#', b'#23', b'#28', b'#29', b'#2F', b'(', b')', b'.', b'/', b'<', b'>', b'R', b'[^+-.0-9]', b'\\s+|[\\(\\)<>\\[\\]{}/%]', b'fals', b'false', b'null', b'true', '#', '%s', '%s:%s', '(', ')', '/', '0', '0.0', '3.0.0', 'BooleanObject', 'ByteStringObject', 'Code Not Found', 'False', 'FloatObject', 'IndirectObject', 'Mathieu Fenniak', 'NameObject', 'NullObject', 'NumberObject', 'PdfObject', 'TextStringObject', 'True', '\\%03o', 'charmap', 'clone PdfObject', 'gbk', 'getObject', 'get_object', 'hashlib._Hash', 'indirect_reference', 'name read error', 'pdfdocencoding', 'readFromStream', 'read_from_stream', 'utf-16be', 'utf-8', 'utf8', 'writeToStream', 'write_to_stream', '~']

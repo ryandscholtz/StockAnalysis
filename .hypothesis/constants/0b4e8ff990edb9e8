@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Documents\GitHub\StockAnalysis\backend\app\core\exceptions.py
+# hypothesis_version: 6.149.0
+
+[400, 422, 500, 502, 'Validation failed', 'authentication', 'authorization', 'business_logic', 'cache', 'category', 'client_ip', 'correlation_id', 'database', 'detail', 'details', 'error', 'error_category', 'error_message', 'errors', 'exception_message', 'exception_type', 'external_api', 'field', 'http_error', 'internal', 'message', 'not_found', 'operation', 'request_method', 'request_path', 'service', 'status_code', 'user-agent', 'user_agent', 'validation', 'validation_details', 'validation_errors', 'value', 'x-correlation-id']

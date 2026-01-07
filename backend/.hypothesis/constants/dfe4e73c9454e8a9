@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Documents\GitHub\StockAnalysis\backend\app\services\data_lineage_service.py
+# hypothesis_version: 6.150.0
+
+['Source not found', 'aggregation', 'calculation', 'created_at', 'downstream', 'enrichment', 'executed_at', 'execution_time_ms', 'extraction', 'filtering', 'id', 'leaf_sources', 'location', 'name', 'parameters', 'root_sources', 'source', 'source_types', 'total_sources', 'transformation_types', 'transformations', 'type', 'upstream', 'validation']

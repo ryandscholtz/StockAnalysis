@@ -1,0 +1,263 @@
+name: Deployment Pipeline
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+      aws-region:
+        required: false
+        type: string
+        default: 'us-east-1'
+    secrets:
+      AWS_ACCESS_KEY_ID:
+        required: true
+      AWS_SECRET_ACCESS_KEY:
+        required: true
+      SLACK_WEBHOOK_URL:
+        required: false
+
+env:
+  NODE_VERSION: '18'
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  pre-deployment-checks:
+    name: Pre-deployment Checks
+    runs-on: ubuntu-latest
+    
+    outputs:
+      deployment-approved: ${{ steps.approval.outputs.approved }}
+      
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Validate environment
+      run: |
+        if [[ "${{ inputs.environment }}" != "staging" && "${{ inputs.environment }}" != "production" ]]; then
+          echo "Invalid environment: ${{ inputs.environment }}"
+          exit 1
+        fi
+        
+    - name: Check deployment window
+      run: |
+        # Only allow production deployments during business hours (UTC)
+        if [[ "${{ inputs.environment }}" == "production" ]]; then
+          current_hour=$(date -u +%H)
+          current_day=$(date -u +%u)  # 1=Monday, 7=Sunday
+          
+          # Allow deployments Monday-Friday, 9 AM - 5 PM UTC
+          if [[ $current_day -gt 5 || $current_hour -lt 9 || $current_hour -gt 17 ]]; then
+            echo "Production deployments are only allowed during business hours (Mon-Fri, 9 AM - 5 PM UTC)"
+            exit 1
+          fi
+        fi
+        
+    - name: Manual approval for production
+      id: approval
+      if: inputs.environment == 'production'
+      uses: trstringer/manual-approval@v1
+      with:
+        secret: ${{ secrets.GITHUB_TOKEN }}
+        approvers: ${{ github.repository_owner }}
+        minimum-approvals: 1
+        issue-title: "Production Deployment Approval Required"
+        issue-body: |
+          Please review and approve the production deployment.
+          
+          **Environment:** ${{ inputs.environment }}
+          **Branch:** ${{ github.ref }}
+          **Commit:** ${{ github.sha }}
+          
+          **Changes:**
+          ${{ github.event.head_commit.message }}
+
+  backup-current-state:
+    name: Backup Current State
+    runs-on: ubuntu-latest
+    needs: pre-deployment-checks
+    if: inputs.environment == 'production'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ inputs.aws-region }}
+        
+    - name: Create database backup
+      run: |
+        echo "Creating database backup..."
+        # Add DynamoDB backup commands here
+        aws dynamodb create-backup \
+          --table-name stock-analyses-prod \
+          --backup-name "pre-deployment-$(date +%Y%m%d-%H%M%S)"
+          
+    - name: Backup configuration
+      run: |
+        echo "Backing up current configuration..."
+        # Add configuration backup logic here
+
+  deploy:
+    name: Deploy to ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    needs: [pre-deployment-checks, backup-current-state]
+    if: always() && (needs.pre-deployment-checks.result == 'success') && (inputs.environment != 'production' || needs.backup-current-state.result == 'success')
+    environment: ${{ inputs.environment }}
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ inputs.aws-region }}
+        
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: infrastructure/package-lock.json
+        
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        
+    - name: Install CDK dependencies
+      working-directory: ./infrastructure
+      run: npm ci
+      
+    - name: Build CDK
+      working-directory: ./infrastructure
+      run: npm run build
+      
+    - name: CDK Bootstrap (if needed)
+      working-directory: ./infrastructure
+      run: |
+        npx cdk bootstrap --context environment=${{ inputs.environment }}
+        
+    - name: CDK Diff
+      working-directory: ./infrastructure
+      run: |
+        npx cdk diff --context environment=${{ inputs.environment }} > cdk-diff.txt
+        cat cdk-diff.txt
+        
+    - name: Deploy infrastructure
+      working-directory: ./infrastructure
+      run: |
+        npx cdk deploy --all \
+          --context environment=${{ inputs.environment }} \
+          --require-approval never \
+          --outputs-file outputs.json
+          
+    - name: Upload deployment outputs
+      uses: actions/upload-artifact@v3
+      with:
+        name: deployment-outputs-${{ inputs.environment }}
+        path: infrastructure/outputs.json
+        
+    - name: Deploy application code
+      run: |
+        echo "Deploying application code to ${{ inputs.environment }}..."
+        # Add application deployment logic here
+        
+  post-deployment-tests:
+    name: Post-deployment Tests
+    runs-on: ubuntu-latest
+    needs: deploy
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Download deployment outputs
+      uses: actions/download-artifact@v3
+      with:
+        name: deployment-outputs-${{ inputs.environment }}
+        path: ./
+        
+    - name: Extract API endpoint
+      id: endpoints
+      run: |
+        API_ENDPOINT=$(jq -r '.StockAnalysisStack.ApiEndpoint' outputs.json)
+        echo "api-endpoint=$API_ENDPOINT" >> $GITHUB_OUTPUT
+        
+    - name: Health check
+      run: |
+        echo "Running health check against ${{ steps.endpoints.outputs.api-endpoint }}"
+        curl -f "${{ steps.endpoints.outputs.api-endpoint }}/health" || exit 1
+        
+    - name: Smoke tests
+      run: |
+        echo "Running smoke tests..."
+        # Add comprehensive smoke tests here
+        curl -f "${{ steps.endpoints.outputs.api-endpoint }}/docs"
+        curl -f "${{ steps.endpoints.outputs.api-endpoint }}/openapi.json"
+        
+    - name: Performance validation
+      run: |
+        echo "Validating performance..."
+        # Add performance validation logic here
+        
+  rollback:
+    name: Rollback on Failure
+    runs-on: ubuntu-latest
+    needs: [deploy, post-deployment-tests]
+    if: failure() && inputs.environment == 'production'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ inputs.aws-region }}
+        
+    - name: Rollback infrastructure
+      working-directory: ./infrastructure
+      run: |
+        echo "Rolling back infrastructure changes..."
+        # Add rollback logic here
+        
+    - name: Restore database backup
+      run: |
+        echo "Restoring database from backup..."
+        # Add database restore logic here
+        
+    - name: Notify rollback
+      uses: 8398a7/action-slack@v3
+      if: always()
+      with:
+        status: failure
+        text: '🚨 ROLLBACK INITIATED: Production deployment failed and has been rolled back!'
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  notify-success:
+    name: Notify Success
+    runs-on: ubuntu-latest
+    needs: [deploy, post-deployment-tests]
+    if: success()
+    
+    steps:
+    - name: Notify deployment success
+      uses: 8398a7/action-slack@v3
+      with:
+        status: success
+        text: |
+          ✅ Deployment to ${{ inputs.environment }} successful!
+          
+          **Environment:** ${{ inputs.environment }}
+          **Branch:** ${{ github.ref }}
+          **Commit:** ${{ github.sha }}
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

@@ -10,6 +10,8 @@ from decimal import Decimal
 import json
 import os
 
+from app.core.xray_middleware import create_database_subsegment, end_subsegment, trace_function
+
 
 class DynamoDBService:
     """DynamoDB service for storing stock analyses"""
@@ -57,6 +59,7 @@ class DynamoDBService:
             return [self._convert_from_dynamo(item) for item in value]
         return value
     
+    @trace_function(name="dynamodb.has_analysis_today", annotations={"operation": "get_item", "table": "stock-analyses"})
     def has_analysis_today(self, ticker: str, analysis_date: Optional[str] = None) -> bool:
         """
         Check if stock has been analyzed today
@@ -84,6 +87,7 @@ class DynamoDBService:
             print(f"Error checking analysis: {e}")
             return False
     
+    @trace_function(name="dynamodb.get_analysis", annotations={"operation": "get_item", "table": "stock-analyses"})
     def get_analysis(self, ticker: str, analysis_date: Optional[str] = None) -> Optional[Dict]:
         """
         Get analysis for a ticker
@@ -119,6 +123,7 @@ class DynamoDBService:
             print(f"Error getting analysis: {e}")
             return None
     
+    @trace_function(name="dynamodb.save_analysis", annotations={"operation": "put_item", "table": "stock-analyses"})
     def save_analysis(self,
                      ticker: str,
                      analysis_data: Dict,

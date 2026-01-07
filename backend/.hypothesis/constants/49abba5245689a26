@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Documents\GitHub\StockAnalysis\backend\app\valuation\earnings_power.py
+# hypothesis_version: 6.149.1
+
+[-0.02, -0.01, 0.0, 0.02, 0.04, 0.05, 0.06, 0.1, 0.15, 0.21, 0.5, 50.0, 1000000000, 'Cash', 'Earnings Before Tax', 'Income Before Tax', 'Net Income', 'NetIncome', 'Revenue', 'Tax Expense', 'Tax Provision', 'Total Revenue', 'diluted', 'earnings', 'expense', 'income', 'net income', 'netIncome', 'net_income', 'netincome', 'per share', 'profit', 'revenue']

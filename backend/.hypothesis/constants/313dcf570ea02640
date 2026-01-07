@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Documents\GitHub\StockAnalysis\backend\app\valuation\asset_based.py
+# hypothesis_version: 6.149.1
+
+[0.0, 0.5, 0.6, 0.85, 2.0, 'Accounts Receivable', 'Cash', 'Good Will', 'Goodwill', 'Intangible Assets', 'Inventory', 'Net PPE', 'Net Receivables', 'Revenue', 'Shareholders Equity', 'Stockholders Equity', 'Total Assets', 'Total Liabilities', 'Total Revenue', 'asset_heavy', 'asset_light', 'book', 'liquidation', 'tangible', 'unknown']

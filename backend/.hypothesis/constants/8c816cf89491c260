@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\LocalCache\local-packages\Python312\site-packages\appdirs.py
+# hypothesis_version: 6.149.1
+
+[255, 1024, '\x00', '%s: %s', '-- app dirs %s --', '.', '/etc/xdg', '/usr/local/share', '/usr/share', '1.0', '1.4.4', 'AppData', 'CSIDL_APPDATA', 'CSIDL_COMMON_APPDATA', 'CSIDL_LOCAL_APPDATA', 'Cache', 'Common AppData', 'Local AppData', 'Logs', 'Mac', 'MyApp', 'MyCompany', 'Windows', 'XDG_CACHE_HOME', 'XDG_CONFIG_DIRS', 'XDG_CONFIG_HOME', 'XDG_DATA_DIRS', 'XDG_DATA_HOME', 'XDG_STATE_HOME', '__main__', 'c', 'darwin', 'java', 'linux2', 'log', 'site_config_dir', 'site_data_dir', 'user_cache_dir', 'user_config_dir', 'user_data_dir', 'user_log_dir', 'user_state_dir', 'win32', '~/.cache', '~/.config', '~/.local/share', '~/.local/state', '~/Library/Caches', '~/Library/Logs']

@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\LocalCache\local-packages\Python312\site-packages\sqlalchemy\event\attr.py
+# hypothesis_version: 6.149.1
+
+['_Dispatch[_ET]', '_T', '__weakref__', '_clslevel', '_exec_once', '_exec_once_mutex', '_exec_w_sync_once', '_legacy_signatures', 'arg_names', 'clsname', 'has_kw', 'legacy_signatures', 'listeners', 'local', 'name', 'parent', 'parent_dispatch', 'parent_listeners', 'propagate', 'ref']

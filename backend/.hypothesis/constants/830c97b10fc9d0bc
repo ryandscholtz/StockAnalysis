@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Documents\GitHub\StockAnalysis\backend\app\analysis\price_ratios.py
+# hypothesis_version: 6.149.1
+
+[0.01, 100.0, 1000, '.JO', 'C', 'Capital Expenditure', 'Capital Expenditures', 'CapitalExpenditures', 'Cash', 'Depreciation', 'EBIT', 'EBITDA', 'GBPX', 'GBX', 'Long Term Debt', 'Net Income', 'Net Sales', 'Operating Cash Flow', 'Operating Income', 'OperatingCashFlow', 'Revenue', 'Sales', 'Shareholders Equity', 'Stockholders Equity', 'Total Debt', 'Total Equity', 'Total Revenue', 'X', 'ZAC', 'ZAR', 'ZARC', 'priceToBook', 'priceToEarnings', 'priceToFCF', 'priceToSales']

@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Documents\GitHub\StockAnalysis\backend\app\services\event_service.py
+# hypothesis_version: 6.149.0
+
+[1.0, 'Event', 'Unknown error', 'affected_data', 'analysis', 'cache_keys', 'cache_manager', 'completed', 'correlation_id', 'data', 'data.quality.issue', 'data_quality_handler', 'error', 'event_id', 'event_type', 'eventbridge', 'failed', 'issue', 'reason', 'retry_count', 'source', 'status', 'ticker', 'timestamp']

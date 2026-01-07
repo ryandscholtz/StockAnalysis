@@ -1,0 +1,102 @@
+name: Dependency Updates
+
+on:
+  schedule:
+    - cron: '0 2 * * 1'  # Every Monday at 2 AM UTC
+  workflow_dispatch:
+
+jobs:
+  update-python-dependencies:
+    name: Update Python Dependencies
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install pip-tools
+      run: |
+        python -m pip install --upgrade pip pip-tools
+        
+    - name: Update requirements
+      working-directory: ./backend
+      run: |
+        pip-compile --upgrade requirements.in
+        pip-compile --upgrade requirements-test.in
+        
+    - name: Create Pull Request
+      uses: peter-evans/create-pull-request@v5
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        commit-message: 'chore: update Python dependencies'
+        title: 'chore: update Python dependencies'
+        body: |
+          Automated dependency update for Python packages.
+          
+          Please review the changes and ensure all tests pass before merging.
+        branch: chore/update-python-deps
+        delete-branch: true
+
+  update-node-dependencies:
+    name: Update Node Dependencies
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        
+    - name: Update frontend dependencies
+      working-directory: ./frontend
+      run: |
+        npx npm-check-updates -u
+        npm install
+        
+    - name: Update infrastructure dependencies
+      working-directory: ./infrastructure
+      run: |
+        npx npm-check-updates -u
+        npm install
+        
+    - name: Create Pull Request
+      uses: peter-evans/create-pull-request@v5
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        commit-message: 'chore: update Node.js dependencies'
+        title: 'chore: update Node.js dependencies'
+        body: |
+          Automated dependency update for Node.js packages.
+          
+          Please review the changes and ensure all tests pass before merging.
+        branch: chore/update-node-deps
+        delete-branch: true
+
+  security-updates:
+    name: Security Updates
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Run Dependabot security updates
+      uses: github/dependabot-action@v1
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Check for security advisories
+      run: |
+        echo "Checking for security advisories..."
+        # Add security advisory checking logic here

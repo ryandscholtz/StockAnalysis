@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Documents\GitHub\StockAnalysis\backend\app\api\progress.py
+# hypothesis_version: 6.149.1
+
+[0.05, 100, 'progress', 'step', 'task', 'total', 'type']

@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Documents\GitHub\StockAnalysis\backend\app\analysis\business_quality.py
+# hypothesis_version: 6.149.1
+
+[0.0, 0.1, 0.2, 0.4, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 10.0, 20.0, 100.0, 100, 1000000000, 10000000000, 100000000000, 'Brand Strength', 'Capital Expenditures', 'Cost Advantages', 'Cost Of Goods Sold', 'Cost Of Revenue', 'EBIT', 'Market Leader', 'Moderate Position', 'Network Effects', 'Operating Income', 'Regulatory Barriers', 'Revenue', 'Strong Position', 'Total Revenue', 'Weak Position', 'banking', 'brand', 'cost', 'insurance', 'internet', 'network', 'pharmaceutical', 'platform', 'regulatory', 'social media', 'software', 'technology', 'telecommunications', 'utilities']

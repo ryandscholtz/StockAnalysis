@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Documents\GitHub\StockAnalysis\backend\app\database\unified_service.py
+# hypothesis_version: 6.149.1
+
+['base_delay', 'environment', 'error', 'exponential_backoff', 'healthy', 'jitter', 'max_attempts', 'max_delay', 'repository_type', 'retry_policy', 'status', 'timestamp', 'unhealthy']

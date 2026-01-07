@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\LocalCache\local-packages\Python312\site-packages\pydantic\_internal\_std_types_schema.py
+# hypothesis_version: 6.149.1
+
+[', ', 'An enumeration.', 'allow_inf_nan', 'decimal_places', 'description', 'enum', 'expected', 'format', 'integer', 'ipv4', 'ipv4interface', 'ipv4network', 'ipv6', 'ipv6interface', 'ipv6network', 'max_digits', 'max_length', 'min_length', 'numeric', 'path', 'path_type', 'serialization', 'strict', 'string', 'title', 'type', 'use_enum_values']

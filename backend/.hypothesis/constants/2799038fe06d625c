@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Documents\GitHub\StockAnalysis\backend\app\core\dependencies.py
+# hypothesis_version: 6.149.1
+
+['DataFetcher', 'YahooFinance', 'dependency_injection', 'initialization', 'stock_analysis.db', 'x-correlation-id']

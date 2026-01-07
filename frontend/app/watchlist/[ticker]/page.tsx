@@ -322,7 +322,7 @@ export default function WatchlistDetailPage() {
   }
 
   const companyName = analysis?.companyName || watchlistData?.watchlist_item.company_name || ticker
-  const rawPrice = analysis?.currentPrice || watchlistData?.current_quote?.price || watchlistData?.watchlist_item.current_price
+  const rawPrice = analysis?.currentPrice || watchlistData?.current_quote?.currentPrice || watchlistData?.watchlist_item.current_price
   // Hide price if it's exactly 1.0 (placeholder value when price cannot be fetched)
   const currentPrice = (rawPrice && Math.abs(rawPrice - 1.0) > 0.01) ? rawPrice : null
   const priceError = watchlistData?.price_error || null

@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\LocalCache\local-packages\Python312\site-packages\pandas\io\xml.py
+# hypothesis_version: 6.149.1
+
+['*', './*', '<', '<?xml', '[1]/*', 'end', 'etree', 'getprevious', 'ignore', 'infer', 'lxml', 'lxml.etree', 'path_or_buffer', 'r', 'read', 'start', 'storage_options', 'utf-8', '}']

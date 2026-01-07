@@ -1,0 +1,26 @@
+{
+  "BATCH1": {
+    "ticker": "BATCH1",
+    "timestamp": "2026-01-07T17:33:42.662344",
+    "error": "1 validation error for StockAnalysis\nfairValue\n  Input should be greater than 0 [type=greater_than, input_value=0.0, input_type=float]\n    For further information visit https://errors.pydantic.dev/2.5/v/greater_than",
+    "error_type": "ValidationError",
+    "status": "error",
+    "source": "new_analysis"
+  },
+  "BATCH2": {
+    "ticker": "BATCH2",
+    "timestamp": "2026-01-07T17:33:42.673326",
+    "error": "1 validation error for StockAnalysis\nfairValue\n  Input should be greater than 0 [type=greater_than, input_value=0.0, input_type=float]\n    For further information visit https://errors.pydantic.dev/2.5/v/greater_than",
+    "error_type": "ValidationError",
+    "status": "error",
+    "source": "new_analysis"
+  },
+  "BATCH3": {
+    "ticker": "BATCH3",
+    "timestamp": "2026-01-07T17:33:42.682453",
+    "error": "1 validation error for StockAnalysis\nfairValue\n  Input should be greater than 0 [type=greater_than, input_value=0.0, input_type=float]\n    For further information visit https://errors.pydantic.dev/2.5/v/greater_than",
+    "error_type": "ValidationError",
+    "status": "error",
+    "source": "new_analysis"
+  }
+}

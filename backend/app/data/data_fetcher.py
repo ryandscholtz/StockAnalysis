@@ -52,7 +52,8 @@ class DataFetcher:
     async def fetch_company_data(self, ticker: str) -> Optional[CompanyData]:
         """
         Fetch all company data for a ticker
-        Uses backup APIs (Alpha Vantage, MarketStack, FMP) FIRST, then falls back to Yahoo Finance
+        Uses backup APIs (MarketStack, Alpha Vantage, FMP) FIRST, then falls back to Yahoo Finance
+        MarketStack is prioritized as the primary backup source
         For international tickers (with exchange suffixes like .JO, .L, etc.), prioritizes Yahoo Finance
         """
         try:

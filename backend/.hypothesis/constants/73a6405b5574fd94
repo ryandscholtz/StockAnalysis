@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Documents\GitHub\StockAnalysis\backend\app\data\pdf_extractor.py
+# hypothesis_version: 6.149.1
+
+[0.0, 0.1, 100, 120, 200, 300, 500, 5000, 8000, 10800, 16000, 50000, 200000, 'Authorization', 'Content-Type', 'Net Income', 'Operating Cash Flow', 'Total Assets', 'Total Liabilities', 'Total Revenue', 'USE_TEXTRACT', 'Windows', '```', '```json', 'application/json', 'assets', 'balance sheet', 'balance_sheet', 'cannot find', 'cash flow', 'cashflow', 'content', 'eng', 'financing', 'gpt-4o', 'gpt-4o-mini', 'image_url', 'images', 'income statement', 'income_statement', 'key_metrics', 'liabilities', 'max_tokens', 'messages', 'model', 'net income', 'num_predict', 'operating cash', 'options', 'p&l', 'pdftoppm', 'poppler', 'profit and loss', 'prompt', 'response', 'revenue', 'role', 'shareholder equity', 'stockholder equity', 'stream', 'system', 'temperature', 'text', 'total assets', 'true', 'type', 'url', 'user']

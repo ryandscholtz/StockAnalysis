@@ -11,6 +11,7 @@ import os
 import json
 
 from app.database.models import Base, StockAnalysis, BatchJob, AIExtractedFinancialData, PDFJob, Watchlist
+from app.core.xray_middleware import create_database_subsegment, end_subsegment, trace_function
 
 
 class DatabaseService:
@@ -39,6 +40,7 @@ class DatabaseService:
         """Get database session"""
         return self.SessionLocal()
     
+    @trace_function(name="database.has_analysis_today", annotations={"operation": "query", "table": "stock_analysis"})
     def has_analysis_today(self, ticker: str, analysis_date: Optional[str] = None) -> bool:
         """
         Check if stock has been analyzed today
@@ -66,6 +68,7 @@ class DatabaseService:
         finally:
             session.close()
     
+    @trace_function(name="database.get_analysis", annotations={"operation": "query", "table": "stock_analysis"})
     def get_analysis(self, ticker: str, analysis_date: Optional[str] = None) -> Optional[Dict]:
         """
         Get analysis for a ticker
@@ -117,6 +120,7 @@ class DatabaseService:
         finally:
             session.close()
     
+    @trace_function(name="database.save_analysis", annotations={"operation": "insert_update", "table": "stock_analysis"})
     def save_analysis(self, 
                      ticker: str,
                      analysis_data: Dict,

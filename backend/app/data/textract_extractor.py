@@ -10,6 +10,8 @@ from typing import Dict, List, Optional, Any, Tuple
 from botocore.exceptions import ClientError
 import io
 
+from app.core.xray_middleware import trace_function, create_external_api_subsegment, end_subsegment
+
 logger = logging.getLogger(__name__)
 
 
@@ -29,6 +31,7 @@ class TextractExtractor:
             logger.error(f"Failed to initialize Textract client: {e}")
             raise
     
+    @trace_function(name="textract.extract_text_from_pdf", annotations={"operation": "extract_text", "service": "textract"})
     def extract_text_from_pdf(self, pdf_bytes: bytes) -> str:
         """
         Extract text from PDF using Textract AnalyzeDocument API
@@ -72,6 +75,7 @@ class TextractExtractor:
             logger.error(f"Unexpected error extracting text with Textract: {e}")
             raise
     
+    @trace_function(name="textract.extract_tables_from_pdf", annotations={"operation": "extract_tables", "service": "textract"})
     def extract_tables_from_pdf(self, pdf_bytes: bytes) -> List[Dict[str, Any]]:
         """
         Extract tables from PDF using Textract
@@ -184,6 +188,7 @@ class TextractExtractor:
         
         return ' '.join(text_parts)
     
+    @trace_function(name="textract.extract_financial_data", annotations={"operation": "extract_financial_data", "service": "textract"})
     def extract_financial_data(self, pdf_bytes: bytes, ticker: str) -> Tuple[Dict[str, Any], str]:
         """
         Extract financial data from PDF using Textract with OCR fallback

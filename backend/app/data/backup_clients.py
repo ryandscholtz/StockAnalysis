@@ -428,46 +428,10 @@ class BackupDataFetcher:
             logger.warning("AlphaVantageClient could not be imported")
     
     def get_current_price(self, ticker: str) -> Optional[float]:
-        """Try to get current price from backup sources"""
+        """Try to get current price from backup sources - MarketStack prioritized"""
         sources_tried = []
         
-        # Try Alpha Vantage first (free tier - 5 calls/min, 500/day)
-        if self.alpha_vantage_client and self.alpha_vantage_client.api_key:
-            sources_tried.append("Alpha Vantage")
-            quote = self.alpha_vantage_client.get_quote(ticker)
-            if quote and quote.get('price'):
-                logger.info(f"Got price from Alpha Vantage: {quote['price']}")
-                return float(quote['price'])
-            else:
-                logger.debug(f"Alpha Vantage returned no price for {ticker}")
-        else:
-            logger.debug("Alpha Vantage API key not configured")
-        
-        # Try Financial Modeling Prep
-        if self.fmp_client.api_key:
-            sources_tried.append("Financial Modeling Prep")
-            quote = self.fmp_client.get_quote(ticker)
-            if quote and quote.get('price'):
-                logger.info(f"Got price from Financial Modeling Prep: {quote['price']}")
-                return float(quote['price'])
-            else:
-                logger.debug(f"Financial Modeling Prep returned no price for {ticker}")
-        else:
-            logger.debug("Financial Modeling Prep API key not configured")
-        
-        # Try Google Finance (no API key needed - web scraping)
-        sources_tried.append("Google Finance")
-        try:
-            price = self.google_finance_client.get_current_price(ticker)
-            if price:
-                logger.info(f"Got price from Google Finance: {price}")
-                return float(price)
-            else:
-                logger.debug(f"Google Finance returned no price for {ticker}")
-        except Exception as e:
-            logger.debug(f"Error getting price from Google Finance: {e}")
-        
-        # Try MarketStack
+        # Try MarketStack FIRST (prioritized - free tier: 1,000 requests/month)
         if self.marketstack_client.api_key:
             sources_tried.append("MarketStack")
             intraday = self.marketstack_client.get_intraday(ticker)
@@ -479,6 +443,42 @@ class BackupDataFetcher:
         else:
             logger.debug("MarketStack API key not configured")
         
+        # Try Alpha Vantage second (free tier - 5 calls/min, 500/day)
+        if self.alpha_vantage_client and self.alpha_vantage_client.api_key:
+            sources_tried.append("Alpha Vantage")
+            quote = self.alpha_vantage_client.get_quote(ticker)
+            if quote and quote.get('price'):
+                logger.info(f"Got price from Alpha Vantage: {quote['price']}")
+                return float(quote['price'])
+            else:
+                logger.debug(f"Alpha Vantage returned no price for {ticker}")
+        else:
+            logger.debug("Alpha Vantage API key not configured")
+        
+        # Try Financial Modeling Prep third
+        if self.fmp_client.api_key:
+            sources_tried.append("Financial Modeling Prep")
+            quote = self.fmp_client.get_quote(ticker)
+            if quote and quote.get('price'):
+                logger.info(f"Got price from Financial Modeling Prep: {quote['price']}")
+                return float(quote['price'])
+            else:
+                logger.debug(f"Financial Modeling Prep returned no price for {ticker}")
+        else:
+            logger.debug("Financial Modeling Prep API key not configured")
+        
+        # Try Google Finance last (no API key needed - web scraping)
+        sources_tried.append("Google Finance")
+        try:
+            price = self.google_finance_client.get_current_price(ticker)
+            if price:
+                logger.info(f"Got price from Google Finance: {price}")
+                return float(price)
+            else:
+                logger.debug(f"Google Finance returned no price for {ticker}")
+        except Exception as e:
+            logger.debug(f"Error getting price from Google Finance: {e}")
+        
         if sources_tried:
             logger.warning(f"Tried backup sources {', '.join(sources_tried)} for {ticker} but none returned a price")
         else:
@@ -487,10 +487,28 @@ class BackupDataFetcher:
         return None
     
     def get_quote_with_metrics(self, ticker: str) -> Optional[Dict]:
-        """Try to get quote with price and market cap from backup sources"""
+        """Try to get quote with price and market cap from backup sources - MarketStack prioritized"""
         sources_tried = []
         
-        # Try Alpha Vantage first
+        # Try MarketStack first (prioritized)
+        if self.marketstack_client.api_key:
+            sources_tried.append("MarketStack")
+            intraday = self.marketstack_client.get_intraday(ticker)
+            if intraday and intraday.get('price'):
+                # Convert MarketStack response to standard quote format
+                quote = {
+                    'price': intraday['price'],
+                    'symbol': ticker,
+                    'source': 'MarketStack'
+                }
+                logger.info(f"Got quote from MarketStack")
+                return quote
+            else:
+                logger.debug(f"MarketStack returned no quote for {ticker}")
+        else:
+            logger.debug("MarketStack API key not configured")
+        
+        # Try Alpha Vantage second
         if self.alpha_vantage_client and self.alpha_vantage_client.api_key:
             sources_tried.append("Alpha Vantage")
             quote = self.alpha_vantage_client.get_quote(ticker)
@@ -502,7 +520,7 @@ class BackupDataFetcher:
         else:
             logger.debug("Alpha Vantage API key not configured")
         
-        # Try Financial Modeling Prep
+        # Try Financial Modeling Prep third
         if self.fmp_client.api_key:
             sources_tried.append("Financial Modeling Prep")
             quote = self.fmp_client.get_quote(ticker)
@@ -514,7 +532,7 @@ class BackupDataFetcher:
         else:
             logger.debug("Financial Modeling Prep API key not configured")
         
-        # Try Google Finance (no API key needed)
+        # Try Google Finance last (no API key needed)
         sources_tried.append("Google Finance")
         try:
             quote = self.google_finance_client.get_quote(ticker)

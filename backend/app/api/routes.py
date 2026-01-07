@@ -80,7 +80,7 @@ async def test_batch_route():
 @router.get("/version")
 async def get_version():
     """Get backend version information"""
-    from app.main import BUILD_TIMESTAMP
+    from app.core.app import BUILD_TIMESTAMP
     return {
         "version": BUILD_TIMESTAMP,
         "build_time": BUILD_TIMESTAMP

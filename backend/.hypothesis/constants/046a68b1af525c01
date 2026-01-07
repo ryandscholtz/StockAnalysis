@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\LocalCache\local-packages\Python312\site-packages\pdfplumber\utils\text.py
+# hypothesis_version: 6.149.1
+
+[7.25, ' *([^\\n]+?) *(\\n|$)', '([^\\n]+)', 'bottom', 'chars', 'direction', 'doctop', 'ff', 'ffi', 'ffl', 'fi', 'fl', 'fontname', 'groups', 'layout', 'presorted', 'size', 'st', 'text', 'top', 'upright', 'x0', 'x1', 'y_tolerance', 'ﬀ', 'ﬁ', 'ﬂ', 'ﬃ', 'ﬄ', 'ﬅ', 'ﬆ']

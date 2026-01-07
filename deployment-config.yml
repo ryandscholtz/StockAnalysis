@@ -1,0 +1,128 @@
+# Deployment Configuration for Stock Analysis Application
+
+environments:
+  staging:
+    aws_region: us-east-1
+    stack_name: StockAnalysisStack-staging
+    domain: staging-api.stockanalysis.com
+    database_table: stock-analyses-staging
+    cache_cluster: stock-analysis-staging-cache
+    monitoring:
+      log_level: DEBUG
+      metrics_enabled: true
+      tracing_enabled: true
+    scaling:
+      min_capacity: 1
+      max_capacity: 10
+      target_utilization: 70
+    backup:
+      enabled: true
+      retention_days: 7
+    
+  production:
+    aws_region: us-east-1
+    stack_name: StockAnalysisStack-production
+    domain: api.stockanalysis.com
+    database_table: stock-analyses-prod
+    cache_cluster: stock-analysis-prod-cache
+    monitoring:
+      log_level: INFO
+      metrics_enabled: true
+      tracing_enabled: true
+      alerting_enabled: true
+    scaling:
+      min_capacity: 2
+      max_capacity: 50
+      target_utilization: 60
+    backup:
+      enabled: true
+      retention_days: 30
+      point_in_time_recovery: true
+    security:
+      encryption_at_rest: true
+      encryption_in_transit: true
+      waf_enabled: true
+
+deployment:
+  strategies:
+    staging:
+      type: rolling
+      health_check_grace_period: 30
+      health_check_interval: 10
+      max_unhealthy_percent: 50
+      
+    production:
+      type: blue_green
+      health_check_grace_period: 60
+      health_check_interval: 15
+      max_unhealthy_percent: 0
+      rollback_on_failure: true
+      
+  validation:
+    required_checks:
+      - health_check
+      - api_documentation
+      - database_connectivity
+      - cache_connectivity
+      
+    performance_thresholds:
+      response_time_p95: 200ms
+      error_rate: 0.1%
+      availability: 99.9%
+      
+  notifications:
+    slack:
+      enabled: true
+      channels:
+        success: "#deployments"
+        failure: "#alerts"
+        
+    email:
+      enabled: true
+      recipients:
+        - devops@stockanalysis.com
+        - team-lead@stockanalysis.com
+
+rollback:
+  triggers:
+    - health_check_failure
+    - error_rate_threshold_exceeded
+    - manual_trigger
+    
+  retention:
+    backup_count: 5
+    configuration_versions: 10
+    
+  validation:
+    post_rollback_checks:
+      - health_check
+      - smoke_tests
+      - performance_validation
+
+monitoring:
+  dashboards:
+    - operational_health
+    - business_metrics
+    - security_metrics
+    
+  alerts:
+    critical:
+      - application_down
+      - database_connection_failure
+      - high_error_rate
+      
+    warning:
+      - high_response_time
+      - resource_utilization_high
+      - cache_miss_rate_high
+
+security:
+  scanning:
+    - dependency_vulnerabilities
+    - code_security_issues
+    - infrastructure_misconfigurations
+    
+  compliance:
+    - data_encryption
+    - access_controls
+    - audit_logging

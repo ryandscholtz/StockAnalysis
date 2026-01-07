@@ -13,6 +13,19 @@ import os
 
 logger = logging.getLogger(__name__)
 
+# Import metrics functions (with fallback if not available)
+try:
+    from app.core.metrics import record_cache_hit, record_cache_miss
+    METRICS_AVAILABLE = True
+except ImportError:
+    METRICS_AVAILABLE = False
+    
+    async def record_cache_hit(cache_type: str = "memory"):
+        pass
+    
+    async def record_cache_miss(cache_type: str = "memory"):
+        pass
+
 @dataclass
 class CacheEntry:
     key: str
@@ -151,6 +164,9 @@ class AdvancedCacheManager:
     def get(self, key: str) -> Optional[Any]:
         """Get a cache entry, returns None if not found or expired"""
         if key not in self.cache:
+            # Record cache miss
+            if METRICS_AVAILABLE:
+                asyncio.create_task(record_cache_miss("memory"))
             return None
         
         entry = self.cache[key]
@@ -158,11 +174,18 @@ class AdvancedCacheManager:
         # Check if expired
         if self._is_expired(entry):
             self._remove_entry(key)
+            # Record cache miss for expired entries
+            if METRICS_AVAILABLE:
+                asyncio.create_task(record_cache_miss("memory"))
             return None
         
         # Update access statistics
         entry.access_count += 1
         entry.last_accessed = datetime.now()
+        
+        # Record cache hit
+        if METRICS_AVAILABLE:
+            asyncio.create_task(record_cache_hit("memory"))
         
         return entry.value
     

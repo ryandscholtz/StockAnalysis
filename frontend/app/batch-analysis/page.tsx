@@ -329,10 +329,11 @@ export default function BatchAnalysisPage() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            onFocus={() => {
+            onFocus={(e) => {
               if (suggestions.length > 0) {
                 setShowSuggestions(true)
               }
+              e.currentTarget.style.borderColor = '#2563eb'
             }}
             placeholder="Search for a stock ticker (e.g., AAPL, MSFT)..."
             style={{
@@ -343,9 +344,6 @@ export default function BatchAnalysisPage() {
               fontSize: '16px',
               outline: 'none',
               transition: 'border-color 0.2s'
-            }}
-            onFocus={(e) => {
-              e.currentTarget.style.borderColor = '#2563eb'
             }}
             onBlur={(e) => {
               e.currentTarget.style.borderColor = '#d1d5db'

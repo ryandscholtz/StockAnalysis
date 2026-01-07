@@ -1,3 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 * {
   box-sizing: border-box;
   padding: 0;
@@ -22,6 +26,7 @@ a {
   text-decoration: none;
 }
 
+/* Legacy CSS classes for backward compatibility */
 .container {
   max-width: 1200px;
   margin: 0 auto;

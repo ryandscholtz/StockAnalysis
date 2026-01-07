@@ -3,6 +3,7 @@ import type { Metadata } from 'next'
 import Navigation from '@/components/Navigation'
 import DeveloperFeedback from '@/components/DeveloperFeedback'
 import VersionFooter from '@/components/VersionFooter'
+import { Providers } from '@/components/Providers'
 
 export const metadata: Metadata = {
   title: 'Stock Analysis Tool',
@@ -19,13 +20,15 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-        <Navigation />
-        <main style={{ flex: 1 }}>
-          {children}
-        </main>
-        <VersionFooter />
-        <DeveloperFeedback enabled={true} />
+      <body className="flex flex-col min-h-screen bg-gray-50 text-gray-900">
+        <Providers>
+          <Navigation />
+          <main className="flex-1 container mx-auto px-4 py-6">
+            {children}
+          </main>
+          <VersionFooter />
+          <DeveloperFeedback enabled={true} />
+        </Providers>
       </body>
     </html>
   )

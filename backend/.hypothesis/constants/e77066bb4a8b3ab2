@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Documents\GitHub\StockAnalysis\backend\app\core\app.py
+# hypothesis_version: 6.149.1
+
+[3600, '%y%m%d-%H:%M', '*', ',', '/', '/api', '/docs', '/health', '/metrics', '/redoc', '2.0.0', 'ALLOWED_ORIGINS', 'DELETE', 'EC2_AUTO_STOP', 'ENVIRONMENT', 'GET', 'HEAD', 'Health', 'INFO', 'LOG_LEVEL', 'OPTIONS', 'Optimized Endpoints', 'PATCH', 'POST', 'PUT', 'STRUCTURED_LOGGING', 'Stock Analysis', 'Stock Analysis API', 'Z', 'build_timestamp', 'error', 'errors_total', 'healthy', 'message', 'production', 'requests_total', 'status', 'timestamp', 'true', 'unknown', 'uptime', 'version']

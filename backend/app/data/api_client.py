@@ -349,14 +349,50 @@ class YahooFinanceClient:
             return yahoo_attempts
 
     def _try_backup_apis(self, symbol: str) -> List[Dict]:
-        """Try backup APIs when Yahoo Finance fails - optimized for speed"""
+        """Try backup APIs when Yahoo Finance fails - MarketStack prioritized first"""
         backup_attempts = []
         
         try:
             from app.data.backup_clients import BackupDataFetcher
             backup_fetcher = BackupDataFetcher()
             
-            # Try Google Finance FIRST (web scraping - no API key needed, most reliable)
+            # Try MarketStack FIRST (prioritized - API key based, reliable)
+            if backup_fetcher.marketstack_client.api_key:
+                backup_attempts.append({
+                    'api': 'MarketStack',
+                    'method': 'get_intraday()',
+                    'status': 'attempting',
+                    'details': f'Fetching intraday data from MarketStack for {symbol}'
+                })
+                
+                try:
+                    intraday = backup_fetcher.marketstack_client.get_intraday(symbol)
+                    if intraday and intraday.get('price'):
+                        backup_attempts[-1].update({
+                            'status': 'success',
+                            'price': float(intraday['price']),
+                            'company_name': symbol,  # MarketStack doesn't provide company name in intraday
+                            'details': f'Successfully retrieved price {intraday["price"]} from MarketStack intraday data'
+                        })
+                        return backup_attempts  # Success, return early
+                    else:
+                        backup_attempts[-1].update({
+                            'status': 'failed',
+                            'error': 'No price data returned',
+                            'details': 'MarketStack returned empty or invalid intraday data'
+                        })
+                except Exception as e:
+                    backup_attempts[-1].update({
+                        'status': 'failed',
+                        'error': str(e),
+                        'details': f'Exception during MarketStack request: {str(e)}'
+                    })
+            
+            # If MarketStack succeeded, return early
+            if backup_attempts and backup_attempts[-1].get('status') == 'success':
+                return backup_attempts
+            
+            # Try Google Finance SECOND (web scraping - no API key needed, most reliable)
             backup_attempts.append({
                 'api': 'Google Finance',
                 'method': 'web_scraping',
@@ -521,38 +557,6 @@ class YahooFinanceClient:
                             'error': str(e),
                             'details': f'Exception during parallel API execution: {str(e)}'
                         })
-            
-            # Try MarketStack as last resort (if available)
-            if backup_fetcher.marketstack_client.api_key:
-                backup_attempts.append({
-                    'api': 'MarketStack',
-                    'method': 'get_intraday()',
-                    'status': 'attempting',
-                    'details': f'Fetching intraday data from MarketStack for {symbol}'
-                })
-                
-                try:
-                    intraday = backup_fetcher.marketstack_client.get_intraday(symbol)
-                    if intraday and intraday.get('price'):
-                        backup_attempts[-1].update({
-                            'status': 'success',
-                            'price': float(intraday['price']),
-                            'company_name': symbol,  # MarketStack doesn't provide company name in intraday
-                            'details': f'Successfully retrieved price {intraday["price"]} from MarketStack intraday data'
-                        })
-                        return backup_attempts  # Success, return early
-                    else:
-                        backup_attempts[-1].update({
-                            'status': 'failed',
-                            'error': 'No price data returned',
-                            'details': 'MarketStack returned empty or invalid intraday data'
-                        })
-                except Exception as e:
-                    backup_attempts[-1].update({
-                        'status': 'failed',
-                        'error': str(e),
-                        'details': f'Exception during MarketStack request: {str(e)}'
-                    })
             
             return backup_attempts
             

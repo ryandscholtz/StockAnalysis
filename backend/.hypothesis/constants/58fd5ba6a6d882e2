@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Documents\GitHub\StockAnalysis\backend\app\database\factory.py
+# hypothesis_version: 6.149.1
+
+['DYNAMODB_REGION', 'DYNAMODB_TABLE_NAME', 'ENVIRONMENT', 'SQLITE_DB_PATH', 'development', 'eu-west-1', 'production', 'stock-analyses', 'stock_analysis.db']

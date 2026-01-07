@@ -6,6 +6,7 @@ import os
 import logging
 from typing import Optional, Dict, Any
 from app.config.analysis_weights import BusinessType, AnalysisWeightPresets
+from app.core.xray_middleware import trace_function, create_external_api_subsegment, end_subsegment
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +63,7 @@ Business type:"""
         
         return prompt
     
+    @trace_function(name="ai.bedrock_business_type", annotations={"operation": "detect", "service": "bedrock"})
     def _call_aws_bedrock(self, prompt: str) -> Optional[str]:
         """Call AWS Bedrock for AI analysis"""
         try:
@@ -125,6 +127,7 @@ Business type:"""
             logger.error(f"Error calling AWS Bedrock: {e}")
             return None
     
+    @trace_function(name="ai.openai_business_type", annotations={"operation": "detect", "service": "openai"})
     def _call_openai(self, prompt: str) -> Optional[str]:
         """Call OpenAI API for AI analysis"""
         try:
@@ -156,6 +159,7 @@ Business type:"""
             logger.error(f"Error calling OpenAI: {e}")
             return None
     
+    @trace_function(name="ai.detect_business_type", annotations={"operation": "detect", "service": "business_type_detector"})
     def detect_business_type_ai(self, company_info: Dict[str, Any]) -> Optional[BusinessType]:
         """
         Use AI to detect business type from company information

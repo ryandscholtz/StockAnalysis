@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { LoadingSpinner } from '@/components/LoadingSpinner'
 
 export default function Home() {
   const router = useRouter()
@@ -12,10 +13,8 @@ export default function Home() {
   }, [router])
 
   return (
-    <div className="container">
-      <div style={{ textAlign: 'center', padding: '60px 20px' }}>
-        <p>Redirecting...</p>
-      </div>
+    <div className="flex items-center justify-center min-h-96">
+      <LoadingSpinner text="Redirecting to watchlist..." />
     </div>
   )
 }

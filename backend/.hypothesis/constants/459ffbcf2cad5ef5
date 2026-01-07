@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Documents\GitHub\StockAnalysis\backend\app\analysis\growth_metrics.py
+# hypothesis_version: 6.149.1
+
+[1.0, 100, 'Capital Expenditure', 'Capital Expenditures', 'CapitalExpenditures', 'Net Income', 'Net Sales', 'Operating Cash Flow', 'OperatingCashFlow', 'Revenue', 'Sales', 'Total Revenue', 'earningsGrowth1Y', 'earningsGrowth3Y', 'earningsGrowth5Y', 'fcfGrowth1Y', 'fcfGrowth3Y', 'fcfGrowth5Y', 'revenueGrowth1Y', 'revenueGrowth3Y', 'revenueGrowth5Y']

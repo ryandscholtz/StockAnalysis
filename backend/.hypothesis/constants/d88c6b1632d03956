@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\LocalCache\local-packages\Python312\site-packages\pandas\_testing\_io.py
+# hypothesis_version: 6.149.1
+
+['___localpath___', '___pathlib___', 'addfile', 'bz2', 'gzip', 'py.path', 'tar', 'test', 'w', 'wb', 'write', 'writestr', 'xz', 'zip', 'zstandard', 'zstd']
