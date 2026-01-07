@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Documents\GitHub\StockAnalysis\backend\app\auth\dependencies.py
+# hypothesis_version: 6.149.0
+
+[401, 403, 'admin', 'authentication', 'authorization', 'category', 'details', 'error', 'message', 'no_user_in_state', 'reason', 'required_roles', 'user', 'user_roles']

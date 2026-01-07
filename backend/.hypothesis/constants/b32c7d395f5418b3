@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Documents\GitHub\StockAnalysis\backend\app\auth\routes.py
+# hypothesis_version: 6.149.0
+
+[401, '/auth', '/login', '/logout', '/logout-all', '/me', '/refresh', '1', '2', 'Authentication', 'Login attempt failed', 'Logout completed', 'Token refresh failed', 'admin', 'admin@example.com', 'authentication', 'category', 'details', 'email', 'error', 'id', 'is_active', 'message', 'password_hash', 'revoked_tokens', 'roles', 'token_type', 'user', 'user@example.com', 'user_id', 'username']

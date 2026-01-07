@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Documents\GitHub\StockAnalysis\backend\app\api\websocket_routes.py
+# hypothesis_version: 6.149.0
+
+[10.0, 30.0, 100.0, 200.0, 100, 1000, '/ws/status', '/ws/{client_id}', 'Invalid JSON format', 'active_connections', 'active_streams', 'analysis_progress', 'connection_id', 'connections', 'data', 'error', 'market_data', 'message', 'message_id', 'ping', 'pong', 'stream_id', 'subscription', 'symbols', 'ticker', 'timestamp', 'type', 'unsubscribe', 'unsubscribed']

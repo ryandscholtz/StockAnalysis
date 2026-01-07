@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Documents\GitHub\StockAnalysis\backend\app\ai\document_similarity.py
+# hypothesis_version: 6.149.0
+
+[0.0, 0.1, 0.6, 0.8, 0.9, 1.0, 100, 'AWS_PROFILE', 'AWS_REGION', 'USE_AWS_BEDROCK', '\\b\\w+\\b', 'a', 'ai.bedrock_embedding', 'an', 'and', 'are', 'assets', 'at', 'balance', 'balance sheet', 'be', 'bedrock', 'bedrock-runtime', 'been', 'being', 'body', 'but', 'by', 'can', 'could', 'did', 'do', 'does', 'earnings', 'embedding', 'equity', 'false', 'for', 'had', 'has', 'have', 'in', 'income', 'income statement', 'inputText', 'is', 'is_highly_similar', 'liabilities', 'may', 'might', 'net income', 'net sales', 'of', 'on', 'operation', 'or', 'overall_similarity', 'profile_name', 'profit', 'region_name', 'revenue', 'sales', 'service', 'should', 'that', 'the', 'these', 'this', 'those', 'to', 'total revenue', 'true', 'us-east-1', 'was', 'were', 'will', 'with', 'would']

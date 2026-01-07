@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Documents\GitHub\StockAnalysis\backend\app\core\xray_middleware.py
+# hypothesis_version: 6.149.0
+
+[400, '/docs', '/favicon.ico', '/health', '/metrics', '/redoc', '/robots.txt', '/static/', '127.0.0.1:2000', ';', '=', 'EC2Plugin', 'ECSPlugin', 'Parent=', 'Root=', 'X-Amzn-Trace-Id', 'async', 'boto3', 'botocore', 'correlation_id', 'daemon_address', 'error', 'error_code', 'exception_type', 'external', 'function', 'httpx', 'method', 'module', 'operation', 'path', 'requests', 'segment', 'service', 'service_name', 'sqlite3', 'stock-analysis-api', 'subsegment', 'table', 'user-agent', 'user_id', 'x-correlation-id']

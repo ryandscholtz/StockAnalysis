@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Documents\GitHub\StockAnalysis\backend\app\auth\middleware.py
+# hypothesis_version: 6.149.0
+
+[401, '/', '/api/auth/login', '/api/auth/refresh', '/docs', '/favicon.ico', '/health', '/metrics', '/openapi.json', '/redoc', '/static/', 'Authorization', 'Bearer ', 'authentication', 'category', 'client_ip', 'details', 'error', 'message', 'method', 'missing_token', 'path', 'reason', 'user_id', 'username']
