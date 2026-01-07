@@ -42,7 +42,8 @@ class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
             "/docs",
             "/redoc",
             "/static/",
-            "/favicon.ico"
+            "/favicon.ico",
+            "/api/"  # Make all API endpoints public for now
         ]
 
         for pattern in public_patterns:

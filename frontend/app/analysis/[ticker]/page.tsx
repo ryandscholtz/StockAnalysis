@@ -401,7 +401,7 @@ export default function AnalysisPage() {
       )}
       
       {/* Show missing data prompt if fair value is 0 or if data is missing */}
-      {(analysis.fairValue === 0 || (analysis.missingData && analysis.missingData.has_missing_data)) && (
+      {(analysis.fairValue === 0 || (analysis.missingData?.has_missing_data)) && (
         <>
           <PDFUpload
             ticker={analysis.ticker}

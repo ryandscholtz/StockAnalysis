@@ -28,7 +28,7 @@ export default function WatchlistPage() {
       try {
         console.log('📦 Trying cached endpoint...')
         const cacheStartTime = Date.now()
-        const cachedResponse = await fetch('http://127.0.0.1:8000/api/cache/watchlist')
+        const cachedResponse = await fetch('https://127.0.0.1:8000/api/cache/watchlist')
         const cacheTime = Date.now() - cacheStartTime
         console.log(`📦 Cache response: ${cachedResponse.status} in ${cacheTime}ms`)
         
@@ -70,7 +70,7 @@ export default function WatchlistPage() {
       
       // Try the new async endpoint first
       try {
-        const asyncResponse = await fetch('http://127.0.0.1:8000/api/watchlist/live-prices-async')
+        const asyncResponse = await fetch('https://127.0.0.1:8000/api/watchlist/live-prices-async')
         if (asyncResponse.ok) {
           const asyncData = await asyncResponse.json()
           
@@ -87,7 +87,7 @@ export default function WatchlistPage() {
             // Poll for results every 2 seconds
             const pollInterval = setInterval(async () => {
               try {
-                const statusResponse = await fetch(`http://127.0.0.1:8000/api/tasks/${taskId}`)
+                const statusResponse = await fetch(`https://127.0.0.1:8000/api/tasks/${taskId}`)
                 if (statusResponse.ok) {
                   const statusData = await statusResponse.json()
                   

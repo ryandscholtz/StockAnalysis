@@ -68,7 +68,8 @@ class AdvancedCacheManager:
             elif isinstance(value, (list, dict)):
                 return len(json.dumps(value, default=str).encode('utf-8'))
             else:
-                return len(pickle.dumps(value))
+                # Use JSON serialization instead of pickle for security
+                return len(json.dumps(str(value), default=str).encode('utf-8'))
         except:
             return 1024  # Default 1KB if calculation fails
 
@@ -251,35 +252,70 @@ class AdvancedCacheManager:
         }
 
     def _save_cache(self):
-        """Save cache to disk"""
+        """Save cache to disk using JSON instead of pickle for security"""
         try:
             # Only save non-expired entries
-            active_cache = {
-                key: entry for key, entry in self.cache.items()
-                if not self._is_expired(entry)
-            }
+            active_cache = {}
+            for key, entry in self.cache.items():
+                if not self._is_expired(entry):
+                    # Convert cache entry to JSON-serializable format
+                    active_cache[key] = {
+                        'key': entry.key,
+                        'value': entry.value,
+                        'created_at': entry.created_at.isoformat(),
+                        'expires_at': entry.expires_at.isoformat() if entry.expires_at else None,
+                        'access_count': entry.access_count,
+                        'last_accessed': entry.last_accessed.isoformat() if entry.last_accessed else None,
+                        'size_bytes': entry.size_bytes
+                    }
 
-            with open(self.cache_file, 'wb') as f:
-                pickle.dump(active_cache, f)
+            # Save as JSON instead of pickle
+            cache_file_json = self.cache_file.replace('.pkl', '.json')
+            with open(cache_file_json, 'w') as f:
+                json.dump(active_cache, f, indent=2)
 
-            logger.debug(f"Saved {len(active_cache)} cache entries to disk")
+            logger.debug(f"Saved {len(active_cache)} cache entries to disk as JSON")
         except Exception as e:
             logger.error(f"Error saving cache to disk: {e}")
 
     def _load_cache(self):
-        """Load cache from disk"""
+        """Load cache from disk, supporting both JSON and legacy pickle formats"""
         try:
+            # Try JSON format first (secure)
+            cache_file_json = self.cache_file.replace('.pkl', '.json')
+            if os.path.exists(cache_file_json):
+                with open(cache_file_json, 'r') as f:
+                    loaded_cache = json.load(f)
+                
+                # Convert back to CacheEntry objects
+                for key, entry_data in loaded_cache.items():
+                    try:
+                        entry = CacheEntry(
+                            key=entry_data['key'],
+                            value=entry_data['value'],
+                            created_at=datetime.fromisoformat(entry_data['created_at']),
+                            expires_at=datetime.fromisoformat(entry_data['expires_at']) if entry_data['expires_at'] else None,
+                            access_count=entry_data['access_count'],
+                            last_accessed=datetime.fromisoformat(entry_data['last_accessed']) if entry_data['last_accessed'] else None,
+                            size_bytes=entry_data['size_bytes']
+                        )
+                        
+                        if not self._is_expired(entry):
+                            self.cache[key] = entry
+                            self.current_size_bytes += entry.size_bytes
+                    except Exception as e:
+                        logger.warning(f"Error loading cache entry {key}: {e}")
+                        continue
+                
+                logger.info(f"Loaded {len(self.cache)} cache entries from JSON")
+                return
+            
+            # Fallback to pickle format (legacy) - but warn about security
             if os.path.exists(self.cache_file):
-                with open(self.cache_file, 'rb') as f:
-                    loaded_cache = pickle.load(f)
-
-                # Filter out expired entries and update size tracking
-                for key, entry in loaded_cache.items():
-                    if not self._is_expired(entry):
-                        self.cache[key] = entry
-                        self.current_size_bytes += entry.size_bytes
-
-                logger.info(f"Loaded {len(self.cache)} cache entries from disk")
+                logger.warning("Loading cache from pickle format - consider migrating to JSON for security")
+                # For now, disable pickle loading for security
+                logger.info("Pickle cache loading disabled for security - starting with empty cache")
+                
         except Exception as e:
             logger.error(f"Error loading cache from disk: {e}")
 

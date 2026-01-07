@@ -114,8 +114,9 @@ class TestAPIDocumentation:
                     # Should have at least a success response
                     success_codes = [
                         code for code in responses.keys() if code.startswith("2")]
-                    assert len(success_codes) > 0, (f"Endpoint {
-                        method.upper()} {path} has no success response documented")
+                    assert len(success_codes) > 0, (
+                        f"Endpoint {method.upper()} {path} has no success response documented"
+                    )
 
     def test_api_tags_and_descriptions(self, client):
         """Test that API endpoints have proper tags and descriptions"""
@@ -142,8 +143,9 @@ class TestAPIDocumentation:
                     has_summary = "summary" in details and details["summary"]
                     has_description = "description" in details and details["description"]
 
-                    assert has_summary or has_description, (f"Endpoint {
-                        method.upper()} {path} missing summary or description")
+                    assert has_summary or has_description, (
+                        f"Endpoint {method.upper()} {path} missing summary or description"
+                    )
 
     def test_api_models_documented(self, client):
         """Test that API models/schemas are documented"""
