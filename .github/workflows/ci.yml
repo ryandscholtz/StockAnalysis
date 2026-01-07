@@ -46,7 +46,7 @@ jobs:
         python-version: ${{ env.PYTHON_VERSION }}
         
     - name: Cache Python dependencies
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/.cache/pip
         key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements*.txt') }}
@@ -177,7 +177,7 @@ jobs:
       if: always()
         
     - name: Upload security reports
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: security-reports
