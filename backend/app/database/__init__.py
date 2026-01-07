@@ -9,7 +9,7 @@ from app.database.unified_service import UnifiedDatabaseService, get_unified_dat
 from app.database.models import StockAnalysis, BatchJob
 
 __all__ = [
-    'DatabaseService', 'DynamoDBService', 
+    'DatabaseService', 'DynamoDBService',
     'DatabaseRepository', 'SQLiteRepository', 'DynamoDBRepository',
     'DatabaseFactory', 'get_database_repository',
     'RetryPolicy', 'ResilientDatabaseService',
@@ -17,4 +17,3 @@ __all__ = [
     'UnifiedDatabaseService', 'get_unified_database_service', 'initialize_database_service',
     'StockAnalysis', 'BatchJob'
 ]
-

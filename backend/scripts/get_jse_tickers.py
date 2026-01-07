@@ -10,7 +10,7 @@ from typing import List
 def get_jse_tickers() -> List[str]:
     """
     Get list of JSE (Johannesburg Stock Exchange) tickers
-    
+
     Note: This is a simplified example. For production, you may want to:
     1. Use a paid API (Financial Modeling Prep, Alpha Vantage)
     2. Scrape the exchange website
@@ -23,7 +23,7 @@ def get_jse_tickers() -> List[str]:
         "FSR.JO", "SOL.JO", "BID.JO", "NED.JO", "SBK.JO",
         # Add more tickers here
     ]
-    
+
     # Option 2: Try to fetch from Yahoo Finance (limited)
     # This won't get all tickers, but can help discover some
     try:
@@ -38,7 +38,7 @@ def get_jse_tickers() -> List[str]:
                         common_jse_tickers.append(symbol)
     except Exception as e:
         print(f"Error searching for JSE tickers: {e}")
-    
+
     return sorted(set(common_jse_tickers))
 
 
@@ -59,4 +59,3 @@ if __name__ == "__main__":
     print("\nFirst 10 tickers:")
     for ticker in tickers[:10]:
         print(f"  {ticker}")
-

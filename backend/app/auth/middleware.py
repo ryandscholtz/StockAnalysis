@@ -14,11 +14,11 @@ from app.core.logging import app_logger
 
 class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
     """Middleware for JWT token validation"""
-    
+
     def __init__(self, app: ASGIApp):
         super().__init__(app)
         self.jwt_service = get_jwt_service()
-        
+
         # Public endpoints that don't require authentication
         self.public_paths = {
             "/",
@@ -30,13 +30,13 @@ class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
             "/api/auth/login",
             "/api/auth/refresh"
         }
-    
+
     def _is_public_path(self, path: str) -> bool:
         """Check if path is public (doesn't require authentication)"""
         # Exact match
         if path in self.public_paths:
             return True
-        
+
         # Pattern matching for public paths
         public_patterns = [
             "/docs",
@@ -44,37 +44,37 @@ class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
             "/static/",
             "/favicon.ico"
         ]
-        
+
         for pattern in public_patterns:
             if path.startswith(pattern):
                 return True
-        
+
         return False
-    
+
     def _extract_token(self, request: Request) -> Optional[str]:
         """Extract JWT token from request headers"""
         authorization = request.headers.get("Authorization")
-        
+
         if not authorization:
             return None
-        
+
         # Check for Bearer token format
         if not authorization.startswith("Bearer "):
             return None
-        
+
         return authorization[7:]  # Remove "Bearer " prefix
-    
+
     async def dispatch(self, request: Request, call_next: Callable):
         """Process request with JWT authentication"""
         path = request.url.path
-        
+
         # Skip authentication for public paths
         if self._is_public_path(path):
             return await call_next(request)
-        
+
         # Extract token from request
         token = self._extract_token(request)
-        
+
         if not token:
             app_logger.warning(
                 "Missing authentication token",
@@ -84,7 +84,7 @@ class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
                     "client_ip": request.client.host if request.client else None
                 }
             )
-            
+
             raise HTTPException(
                 status_code=401,
                 detail={
@@ -95,15 +95,15 @@ class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
                     }
                 }
             )
-        
+
         try:
             # Validate token
             token_data = self.jwt_service.verify_token(token)
-            
+
             # Add user information to request state
             request.state.user = token_data
             request.state.authenticated = True
-            
+
             app_logger.debug(
                 "User authenticated successfully",
                 extra={
@@ -113,7 +113,7 @@ class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
                     "method": request.method
                 }
             )
-            
+
         except AppException as e:
             app_logger.warning(
                 "Token validation failed",
@@ -124,7 +124,7 @@ class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
                     "client_ip": request.client.host if request.client else None
                 }
             )
-            
+
             raise HTTPException(
                 status_code=e.status_code,
                 detail={
@@ -135,7 +135,7 @@ class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
                     }
                 }
             )
-        
+
         # Process request
         response = await call_next(request)
         return response

@@ -5,13 +5,13 @@ with open('app/services/batch_processing_service.py', 'r', encoding='utf-8') as 
     print(f"File length: {len(content)}")
     print(f"First 200 chars: {repr(content[:200])}")
     print(f"Last 200 chars: {repr(content[-200:])}")
-    
+
     # Check for the class definition
     if 'class BatchProcessingService' in content:
         print("Class definition found in file!")
     else:
         print("Class definition NOT found in file!")
-        
+
     # Try to execute the content
     try:
         exec(content)

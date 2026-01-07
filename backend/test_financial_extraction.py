@@ -17,29 +17,29 @@ def test_financial_extraction_with_fallback():
     """Test financial data extraction with OCR fallback"""
     try:
         from app.data.textract_extractor import TextractExtractor
-        
+
         # Test with the problematic PDF that should trigger OCR fallback
         pdf_path = "../TestData/Test.pdf"
         if not os.path.exists(pdf_path):
             logger.error(f"Test PDF not found at {pdf_path}")
             return False
-        
+
         with open(pdf_path, 'rb') as f:
             pdf_bytes = f.read()
-        
+
         logger.info(f"Testing financial extraction with PDF: {len(pdf_bytes)} bytes")
-        
+
         # Initialize Textract extractor
         extractor = TextractExtractor()
-        
+
         # Test financial data extraction (should trigger OCR fallback)
         logger.info("=== Testing Financial Data Extraction with OCR Fallback ===")
         try:
             financial_data, raw_text = extractor.extract_financial_data(pdf_bytes, "COCA_COLA_TEST")
-            
+
             logger.info(f"✓ Financial data extraction completed")
             logger.info(f"Raw text length: {len(raw_text)} characters")
-            
+
             # Show what was extracted
             total_periods = 0
             for statement_type, data in financial_data.items():
@@ -52,11 +52,11 @@ def test_financial_extraction_with_fallback():
                             logger.info(f"      {field}: ${value:,.0f}" if isinstance(value, (int, float)) else f"      {field}: {value}")
                 else:
                     logger.info(f"  {statement_type}: No data")
-            
+
             # Show raw text preview
             if raw_text:
                 logger.info(f"Raw text preview (first 500 chars): {raw_text[:500]}...")
-            
+
             if total_periods > 0:
                 logger.info(f"✓ Successfully extracted {total_periods} total periods of financial data using OCR fallback!")
                 return True
@@ -68,13 +68,13 @@ def test_financial_extraction_with_fallback():
                 else:
                     logger.error("✗ OCR fallback failed to extract meaningful text")
                     return False
-                
+
         except Exception as e:
             logger.error(f"✗ Financial data extraction failed: {e}")
             import traceback
             logger.error(traceback.format_exc())
             return False
-        
+
     except Exception as e:
         logger.error(f"Test setup failed: {e}")
         import traceback
@@ -83,7 +83,7 @@ def test_financial_extraction_with_fallback():
 
 if __name__ == "__main__":
     logger.info("Starting financial data extraction test with OCR fallback...")
-    
+
     if test_financial_extraction_with_fallback():
         logger.info("✓ Financial extraction test with OCR fallback passed!")
         sys.exit(0)

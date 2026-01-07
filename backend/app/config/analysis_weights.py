@@ -38,13 +38,13 @@ class AnalysisWeights:
     dcf_weight: float = 0.40
     epv_weight: float = 0.40
     asset_weight: float = 0.20
-    
+
     def validate(self) -> bool:
         """Validate that valuation weights sum to 1.0 (with tolerance)"""
         valuation_sum = self.dcf_weight + self.epv_weight + self.asset_weight
         tolerance = 0.01
         return abs(valuation_sum - 1.0) < tolerance
-    
+
     def normalize(self):
         """Normalize valuation weights to sum to 1.0"""
         valuation_sum = self.dcf_weight + self.epv_weight + self.asset_weight
@@ -52,11 +52,11 @@ class AnalysisWeights:
             self.dcf_weight /= valuation_sum
             self.epv_weight /= valuation_sum
             self.asset_weight /= valuation_sum
-    
+
     def to_dict(self) -> Dict:
         """Convert to dictionary"""
         return asdict(self)
-    
+
     @classmethod
     def from_dict(cls, data: Dict) -> 'AnalysisWeights':
         """Create from dictionary"""
@@ -65,7 +65,7 @@ class AnalysisWeights:
 
 class AnalysisWeightPresets:
     """Preset weight configurations for different business types"""
-    
+
     @staticmethod
     def get_preset(business_type: BusinessType) -> AnalysisWeights:
         """Get preset weights for a business type"""
@@ -212,84 +212,84 @@ class AnalysisWeightPresets:
                 asset_weight=0.15  # Lower asset weight
             )
         }
-        
+
         return presets.get(business_type, presets[BusinessType.DEFAULT])
-    
+
     @staticmethod
-    def detect_business_type(sector: Optional[str], industry: Optional[str], 
-                            revenue_growth: float = 0.0, 
+    def detect_business_type(sector: Optional[str], industry: Optional[str],
+                            revenue_growth: float = 0.0,
                             asset_intensity: float = 0.0) -> BusinessType:
         """Detect business type from company characteristics"""
         sector_lower = (sector or '').lower()
         industry_lower = (industry or '').lower()
-        
+
         # Banks
-        if any(kw in sector_lower or kw in industry_lower 
+        if any(kw in sector_lower or kw in industry_lower
                for kw in ['bank', 'banking', 'financial services', 'credit']):
             return BusinessType.BANK
-        
+
         # REITs
-        if any(kw in sector_lower or kw in industry_lower 
+        if any(kw in sector_lower or kw in industry_lower
                for kw in ['reit', 'real estate investment trust', 'real estate']):
             return BusinessType.REIT
-        
+
         # Insurance
-        if any(kw in sector_lower or kw in industry_lower 
+        if any(kw in sector_lower or kw in industry_lower
                for kw in ['insurance', 'reinsurance']):
             return BusinessType.INSURANCE
-        
+
         # Utilities
-        if any(kw in sector_lower or kw in industry_lower 
+        if any(kw in sector_lower or kw in industry_lower
                for kw in ['utility', 'utilities', 'electric', 'water', 'gas']):
             return BusinessType.UTILITY
-        
+
         # Technology
-        if any(kw in sector_lower or kw in industry_lower 
-               for kw in ['technology', 'software', 'internet', 'semiconductor', 
+        if any(kw in sector_lower or kw in industry_lower
+               for kw in ['technology', 'software', 'internet', 'semiconductor',
                          'tech', 'saas', 'cloud']):
             return BusinessType.TECHNOLOGY
-        
+
         # Healthcare
-        if any(kw in sector_lower or kw in industry_lower 
-               for kw in ['healthcare', 'pharmaceutical', 'biotech', 'medical', 
+        if any(kw in sector_lower or kw in industry_lower
+               for kw in ['healthcare', 'pharmaceutical', 'biotech', 'medical',
                          'health']):
             return BusinessType.HEALTHCARE
-        
+
         # Retail
-        if any(kw in sector_lower or kw in industry_lower 
+        if any(kw in sector_lower or kw in industry_lower
                for kw in ['retail', 'consumer', 'stores']):
             return BusinessType.RETAIL
-        
+
         # Energy
-        if any(kw in sector_lower or kw in industry_lower 
+        if any(kw in sector_lower or kw in industry_lower
                for kw in ['energy', 'oil', 'gas', 'petroleum', 'mining']):
             return BusinessType.ENERGY
-        
+
         # Manufacturing/Industrial
-        if any(kw in sector_lower or kw in industry_lower 
+        if any(kw in sector_lower or kw in industry_lower
                for kw in ['manufacturing', 'industrial', 'machinery', 'equipment', 'automotive']):
             return BusinessType.MANUFACTURING
-        
+
         # Professional Services
-        if any(kw in sector_lower or kw in industry_lower 
+        if any(kw in sector_lower or kw in industry_lower
                for kw in ['consulting', 'professional services', 'legal', 'accounting', 'advisory']):
             return BusinessType.PROFESSIONAL_SERVICES
-        
+
         # Franchise
-        if any(kw in sector_lower or kw in industry_lower 
+        if any(kw in sector_lower or kw in industry_lower
                for kw in ['franchise', 'franchising']):
             return BusinessType.FRANCHISE
-        
+
         # E-commerce
-        if any(kw in sector_lower or kw in industry_lower 
+        if any(kw in sector_lower or kw in industry_lower
                for kw in ['e-commerce', 'ecommerce', 'online retail', 'internet retail']):
             return BusinessType.ECOMMERCE
-        
+
         # Subscription/Recurring Revenue (check before technology to prioritize)
-        if any(kw in sector_lower or kw in industry_lower 
+        if any(kw in sector_lower or kw in industry_lower
                for kw in ['subscription', 'saas', 'software as a service', 'recurring revenue']):
             return BusinessType.SUBSCRIPTION
-        
+
         # Growth-based classification
         if revenue_growth > 0.20:
             return BusinessType.HIGH_GROWTH
@@ -301,4 +301,3 @@ class AnalysisWeightPresets:
             return BusinessType.ASSET_HEAVY
         else:
             return BusinessType.MATURE
-

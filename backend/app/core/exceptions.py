@@ -26,7 +26,7 @@ class ErrorCategory(str, Enum):
 
 class AppException(Exception):
     """Base application exception with structured error information"""
-    
+
     def __init__(
         self,
         message: str,
@@ -45,7 +45,7 @@ class AppException(Exception):
 
 class ValidationError(AppException):
     """Validation error with field-specific information"""
-    
+
     def __init__(self, message: str, field: str, value: Any, correlation_id: Optional[str] = None):
         super().__init__(
             message=message,
@@ -58,7 +58,7 @@ class ValidationError(AppException):
 
 class ExternalAPIError(AppException):
     """External API error with service information"""
-    
+
     def __init__(self, message: str, service: str, status_code: int = 502, correlation_id: Optional[str] = None):
         super().__init__(
             message=message,
@@ -71,7 +71,7 @@ class ExternalAPIError(AppException):
 
 class DatabaseError(AppException):
     """Database operation error"""
-    
+
     def __init__(self, message: str, operation: str, correlation_id: Optional[str] = None):
         super().__init__(
             message=message,
@@ -84,7 +84,7 @@ class DatabaseError(AppException):
 
 class BusinessLogicError(AppException):
     """Business logic validation error"""
-    
+
     def __init__(self, message: str, context: Optional[Dict[str, Any]] = None, correlation_id: Optional[str] = None):
         super().__init__(
             message=message,
@@ -98,7 +98,7 @@ class BusinessLogicError(AppException):
 async def app_exception_handler(request: Request, exc: AppException) -> JSONResponse:
     """Global exception handler for AppException and its subclasses"""
     correlation_id = exc.correlation_id or request.headers.get("x-correlation-id", str(uuid.uuid4()))
-    
+
     # Log error with structured context
     logger.error(
         "Application error occurred",
@@ -114,7 +114,7 @@ async def app_exception_handler(request: Request, exc: AppException) -> JSONResp
             "client_ip": request.client.host if request.client else None
         }
     )
-    
+
     return JSONResponse(
         status_code=exc.status_code,
         content={
@@ -132,7 +132,7 @@ async def app_exception_handler(request: Request, exc: AppException) -> JSONResp
 async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
     """Handler for FastAPI HTTPException"""
     correlation_id = request.headers.get("x-correlation-id", str(uuid.uuid4()))
-    
+
     logger.warning(
         "HTTP exception occurred",
         extra={
@@ -143,7 +143,7 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
             "request_method": request.method
         }
     )
-    
+
     return JSONResponse(
         status_code=exc.status_code,
         content={
@@ -161,12 +161,12 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
 async def validation_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """Handler for Pydantic validation errors"""
     correlation_id = request.headers.get("x-correlation-id", str(uuid.uuid4()))
-    
+
     # Extract validation error details
     details = {}
     if hasattr(exc, 'errors'):
         details = {"validation_errors": exc.errors()}
-    
+
     logger.warning(
         "Validation error occurred",
         extra={
@@ -176,7 +176,7 @@ async def validation_exception_handler(request: Request, exc: Exception) -> JSON
             "validation_details": details
         }
     )
-    
+
     return JSONResponse(
         status_code=422,
         content={
@@ -194,7 +194,7 @@ async def validation_exception_handler(request: Request, exc: Exception) -> JSON
 async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """Handler for unhandled exceptions"""
     correlation_id = request.headers.get("x-correlation-id", str(uuid.uuid4()))
-    
+
     logger.error(
         "Unhandled exception occurred",
         extra={
@@ -206,7 +206,7 @@ async def generic_exception_handler(request: Request, exc: Exception) -> JSONRes
         },
         exc_info=True
     )
-    
+
     return JSONResponse(
         status_code=500,
         content={

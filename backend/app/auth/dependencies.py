@@ -23,7 +23,7 @@ async def get_current_user(request: Request) -> TokenData:
                 }
             }
         )
-    
+
     return request.state.user
 
 
@@ -56,7 +56,7 @@ def require_roles(required_roles: List[str]):
                 }
             )
         return current_user
-    
+
     return check_roles
 
 

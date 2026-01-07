@@ -1,2 +1,1 @@
 # Stock Analysis Backend Application
-

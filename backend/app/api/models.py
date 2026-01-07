@@ -86,7 +86,7 @@ class AnalysisWeights(BaseModel):
     dcf_weight: float = Field(default=0.40, ge=0.0, le=1.0)
     epv_weight: float = Field(default=0.40, ge=0.0, le=1.0)
     asset_weight: float = Field(default=0.20, ge=0.0, le=1.0)
-    
+
     @field_validator('dcf_weight', 'epv_weight', 'asset_weight')
     @classmethod
     def validate_weight_values(cls, v):
@@ -156,21 +156,21 @@ class StockAnalysis(BaseModel):
     bankMetrics: Optional[BankMetrics] = None  # Bank-specific metrics (if applicable)
     reitMetrics: Optional[REITMetrics] = None  # REIT-specific metrics (if applicable)
     insuranceMetrics: Optional[InsuranceMetrics] = None  # Insurance-specific metrics (if applicable)
-    
+
     @field_validator('ticker')
     @classmethod
     def validate_ticker(cls, v):
         if not v or not v.strip():
             raise ValueError("Ticker cannot be empty or whitespace only")
         return v.strip().upper()
-    
+
     @field_validator('companyName')
     @classmethod
     def validate_company_name(cls, v):
         if not v or not v.strip():
             raise ValueError("Company name cannot be empty or whitespace only")
         return v.strip()
-    
+
     @field_validator('currentPrice', 'fairValue', 'priceToIntrinsicValue')
     @classmethod
     def validate_positive_prices(cls, v):
@@ -179,14 +179,14 @@ class StockAnalysis(BaseModel):
         if v <= 0:
             raise ValueError("Price values must be positive")
         return v
-    
+
     @field_validator('marginOfSafety', 'upsidePotential')
     @classmethod
     def validate_percentage_values(cls, v):
         if math.isnan(v) or math.isinf(v):
             raise ValueError("Percentage values cannot be NaN or infinity")
         return v
-    
+
     @field_validator('recommendationReasoning')
     @classmethod
     def validate_recommendation_reasoning(cls, v):
@@ -203,21 +203,21 @@ class QuoteResponse(BaseModel):
     sector: Optional[str] = None
     industry: Optional[str] = None
     currency: Optional[str] = None
-    
+
     @field_validator('ticker')
     @classmethod
     def validate_ticker(cls, v):
         if not v or not v.strip():
             raise ValueError("Ticker cannot be empty or whitespace only")
         return v.strip().upper()
-    
+
     @field_validator('companyName')
     @classmethod
     def validate_company_name(cls, v):
         if not v or not v.strip():
             raise ValueError("Company name cannot be empty or whitespace only")
         return v.strip()
-    
+
     @field_validator('currentPrice')
     @classmethod
     def validate_current_price(cls, v):
@@ -226,7 +226,7 @@ class QuoteResponse(BaseModel):
         if v <= 0:
             raise ValueError("Current price must be positive")
         return v
-    
+
     @field_validator('marketCap')
     @classmethod
     def validate_market_cap(cls, v):

@@ -25,7 +25,7 @@ MOCK_USERS = {
         "is_active": True
     },
     "user": {
-        "id": "2", 
+        "id": "2",
         "username": "user",
         "email": "user@example.com",
         "password_hash": "$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",  # "secret"
@@ -38,7 +38,7 @@ MOCK_USERS = {
 def authenticate_user(username: str, password: str) -> User:
     """Authenticate user credentials"""
     jwt_service = get_jwt_service()
-    
+
     # Get user from mock database
     user_data = MOCK_USERS.get(username)
     if not user_data:
@@ -47,15 +47,15 @@ def authenticate_user(username: str, password: str) -> User:
             category="authentication",
             status_code=401
         )
-    
+
     # Verify password
     if not jwt_service.verify_password(password, user_data["password_hash"]):
         raise AppException(
-            message="Invalid username or password", 
+            message="Invalid username or password",
             category="authentication",
             status_code=401
         )
-    
+
     # Check if user is active
     if not user_data["is_active"]:
         raise AppException(
@@ -63,7 +63,7 @@ def authenticate_user(username: str, password: str) -> User:
             category="authentication",
             status_code=401
         )
-    
+
     return User(
         id=user_data["id"],
         username=user_data["username"],
@@ -77,7 +77,7 @@ def authenticate_user(username: str, password: str) -> User:
 async def login(login_request: LoginRequest):
     """
     Authenticate user and return JWT tokens
-    
+
     Default credentials for testing:
     - Username: admin, Password: secret (admin role)
     - Username: user, Password: secret (user role)
@@ -85,11 +85,11 @@ async def login(login_request: LoginRequest):
     try:
         # Authenticate user
         user = authenticate_user(login_request.username, login_request.password)
-        
+
         # Generate tokens
         jwt_service = get_jwt_service()
         token_response = jwt_service.create_token_response(user)
-        
+
         app_logger.info(
             "User logged in successfully",
             extra={
@@ -98,9 +98,9 @@ async def login(login_request: LoginRequest):
                 "roles": user.roles
             }
         )
-        
+
         return token_response
-        
+
     except AppException as e:
         app_logger.warning(
             "Login attempt failed",
@@ -129,11 +129,11 @@ async def refresh_token(refresh_request: RefreshTokenRequest):
     try:
         jwt_service = get_jwt_service()
         token_response = jwt_service.refresh_access_token(refresh_request.refresh_token)
-        
+
         app_logger.info("Token refreshed successfully")
-        
+
         return token_response
-        
+
     except AppException as e:
         app_logger.warning(
             "Token refresh failed",
@@ -159,13 +159,13 @@ async def logout(refresh_request: RefreshTokenRequest):
     try:
         jwt_service = get_jwt_service()
         revoked = jwt_service.revoke_refresh_token(refresh_request.refresh_token)
-        
+
         if revoked:
             app_logger.info("User logged out successfully")
             return {"message": "Logged out successfully"}
         else:
             return {"message": "Token already revoked or invalid"}
-            
+
     except Exception as e:
         app_logger.error(f"Logout error: {e}")
         return {"message": "Logout completed"}
@@ -179,7 +179,7 @@ async def logout_all(current_user = Depends(get_current_user)):
     try:
         jwt_service = get_jwt_service()
         revoked_count = jwt_service.revoke_all_user_tokens(current_user.user_id)
-        
+
         app_logger.info(
             "User logged out from all devices",
             extra={
@@ -187,12 +187,12 @@ async def logout_all(current_user = Depends(get_current_user)):
                 "revoked_tokens": revoked_count
             }
         )
-        
+
         return {
             "message": f"Logged out from all devices successfully",
             "revoked_tokens": revoked_count
         }
-        
+
     except Exception as e:
         app_logger.error(f"Logout all error: {e}")
         return {"message": "Logout from all devices completed"}

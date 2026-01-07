@@ -20,20 +20,20 @@ async def main():
         print("  NPN.JO")
         print("  BTI.JO")
         sys.exit(1)
-    
+
     exchange_name = sys.argv[1]
     ticker_file = Path(sys.argv[2])
-    
+
     if not ticker_file.exists():
         print(f"Error: Ticker list file not found: {ticker_file}")
         sys.exit(1)
-    
+
     # Load tickers from file
     with open(ticker_file, 'r') as f:
         tickers = [line.strip() for line in f if line.strip() and not line.startswith('#')]
-    
+
     print(f"Loaded {len(tickers)} tickers from {ticker_file}")
-    
+
     # Create batch analyzer
     # Will auto-detect DynamoDB if USE_DYNAMODB env var is set
     analyzer = BatchAnalyzer(
@@ -46,17 +46,16 @@ async def main():
         dynamodb_table="stock-analyses",  # DynamoDB table name
         dynamodb_region="us-east-1"  # AWS region
     )
-    
+
     # Run analysis
     summary = await analyzer.analyze_ticker_list(
         tickers=tickers,
         exchange_name=exchange_name,
         resume=True  # Resume if interrupted
     )
-    
+
     print(f"\nSummary: {json.dumps(summary, indent=2)}")
 
 
 if __name__ == "__main__":
     asyncio.run(main())
-

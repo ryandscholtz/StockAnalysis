@@ -34,7 +34,7 @@ found = {
 new_lines = []
 for line in env_content:
     line = line.rstrip('\n\r')
-    
+
     if re.match(r'^EC2_AUTO_START=', line):
         new_lines.append(f"EC2_AUTO_START=true\n")
         found['EC2_AUTO_START'] = True
@@ -97,4 +97,3 @@ print(f"  AWS_PROFILE={AWS_PROFILE}")
 print(f"  AWS_REGION={AWS_REGION}")
 print(f"  EC2_AUTO_SHUTDOWN_MINUTES=15")
 print(f"  LLAMA_MODEL={LLAMA_MODEL}")
-

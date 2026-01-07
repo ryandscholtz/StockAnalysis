@@ -22,17 +22,17 @@ router = APIRouter()
 # Connection manager for WebSocket connections
 class ConnectionManager:
     """Manages WebSocket connections and message broadcasting"""
-    
+
     def __init__(self):
         self.active_connections: Dict[str, WebSocket] = {}
         self.connection_streams: Dict[str, str] = {}  # connection_id -> stream_id
-        
+
     async def connect(self, websocket: WebSocket, connection_id: str):
         """Accept a WebSocket connection"""
         await websocket.accept()
         self.active_connections[connection_id] = websocket
         app_logger.info(f"WebSocket connection established: {connection_id}")
-        
+
     def disconnect(self, connection_id: str):
         """Remove a WebSocket connection"""
         if connection_id in self.active_connections:
@@ -40,7 +40,7 @@ class ConnectionManager:
         if connection_id in self.connection_streams:
             del self.connection_streams[connection_id]
         app_logger.info(f"WebSocket connection closed: {connection_id}")
-        
+
     async def send_personal_message(self, message: str, connection_id: str):
         """Send a message to a specific connection"""
         if connection_id in self.active_connections:
@@ -53,7 +53,7 @@ class ConnectionManager:
                 self.disconnect(connection_id)
                 return False
         return False
-        
+
     async def broadcast(self, message: str):
         """Broadcast a message to all connections"""
         disconnected = []
@@ -63,7 +63,7 @@ class ConnectionManager:
             except Exception as e:
                 app_logger.error(f"Error broadcasting to {connection_id}: {e}")
                 disconnected.append(connection_id)
-        
+
         # Clean up disconnected connections
         for connection_id in disconnected:
             self.disconnect(connection_id)
@@ -77,7 +77,7 @@ manager = ConnectionManager()
 async def websocket_endpoint(websocket: WebSocket, client_id: str):
     """
     WebSocket endpoint for real-time updates
-    
+
     Supports:
     - Real-time market data streaming
     - Analysis progress updates
@@ -85,9 +85,9 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
     """
     connection_id = f"{client_id}_{uuid.uuid4().hex[:8]}"
     streaming_service = get_streaming_service()
-    
+
     await manager.connect(websocket, connection_id)
-    
+
     try:
         # Send welcome message
         welcome_message = {
@@ -97,15 +97,15 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
             "message": "WebSocket connection established successfully"
         }
         await websocket.send_text(json.dumps(welcome_message))
-        
+
         while True:
             # Receive message from client
             data = await websocket.receive_text()
-            
+
             try:
                 message = json.loads(data)
                 message_type = message.get("type")
-                
+
                 if message_type == "subscribe_market_data":
                     await handle_market_data_subscription(
                         websocket, connection_id, message, streaming_service
@@ -132,7 +132,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                         "timestamp": asyncio.get_event_loop().time()
                     }
                     await websocket.send_text(json.dumps(error_message))
-                    
+
             except json.JSONDecodeError:
                 error_message = {
                     "type": "error",
@@ -140,7 +140,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                     "timestamp": asyncio.get_event_loop().time()
                 }
                 await websocket.send_text(json.dumps(error_message))
-                
+
     except WebSocketDisconnect:
         app_logger.info(f"WebSocket client {connection_id} disconnected")
     except Exception as e:
@@ -150,14 +150,14 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
         if connection_id in manager.connection_streams:
             stream_id = manager.connection_streams[connection_id]
             await streaming_service.close_stream(stream_id)
-        
+
         manager.disconnect(connection_id)
 
 
 async def handle_market_data_subscription(
-    websocket: WebSocket, 
-    connection_id: str, 
-    message: dict, 
+    websocket: WebSocket,
+    connection_id: str,
+    message: dict,
     streaming_service
 ):
     """Handle market data subscription request"""
@@ -170,7 +170,7 @@ async def handle_market_data_subscription(
         }
         await websocket.send_text(json.dumps(error_message))
         return
-    
+
     # Create stream configuration
     stream_id = f"market_data_{connection_id}"
     config = StreamConfig(
@@ -179,12 +179,12 @@ async def handle_market_data_subscription(
         max_buffer_size=1000,
         heartbeat_interval=30.0
     )
-    
+
     try:
         # Create stream
         await streaming_service.create_stream(config)
         manager.connection_streams[connection_id] = stream_id
-        
+
         # Subscribe to stream messages
         async def message_callback(stream_message: StreamMessage):
             message_data = {
@@ -196,14 +196,14 @@ async def handle_market_data_subscription(
             await manager.send_personal_message(
                 json.dumps(message_data), connection_id
             )
-        
+
         await streaming_service.subscribe(stream_id, message_callback)
-        
+
         # Start streaming market data
         asyncio.create_task(
             stream_market_data_task(streaming_service, symbols, stream_id)
         )
-        
+
         # Send confirmation
         confirmation = {
             "type": "subscription_confirmed",
@@ -213,7 +213,7 @@ async def handle_market_data_subscription(
             "timestamp": asyncio.get_event_loop().time()
         }
         await websocket.send_text(json.dumps(confirmation))
-        
+
     except Exception as e:
         error_message = {
             "type": "error",
@@ -224,9 +224,9 @@ async def handle_market_data_subscription(
 
 
 async def handle_analysis_progress_subscription(
-    websocket: WebSocket, 
-    connection_id: str, 
-    message: dict, 
+    websocket: WebSocket,
+    connection_id: str,
+    message: dict,
     streaming_service
 ):
     """Handle analysis progress subscription request"""
@@ -239,7 +239,7 @@ async def handle_analysis_progress_subscription(
         }
         await websocket.send_text(json.dumps(error_message))
         return
-    
+
     # Create stream configuration
     stream_id = f"analysis_progress_{connection_id}"
     config = StreamConfig(
@@ -248,12 +248,12 @@ async def handle_analysis_progress_subscription(
         max_buffer_size=100,
         heartbeat_interval=10.0
     )
-    
+
     try:
         # Create stream
         await streaming_service.create_stream(config)
         manager.connection_streams[connection_id] = stream_id
-        
+
         # Subscribe to stream messages
         async def message_callback(stream_message: StreamMessage):
             message_data = {
@@ -265,14 +265,14 @@ async def handle_analysis_progress_subscription(
             await manager.send_personal_message(
                 json.dumps(message_data), connection_id
             )
-        
+
         await streaming_service.subscribe(stream_id, message_callback)
-        
+
         # Start streaming analysis progress
         asyncio.create_task(
             stream_analysis_progress_task(streaming_service, ticker, stream_id)
         )
-        
+
         # Send confirmation
         confirmation = {
             "type": "subscription_confirmed",
@@ -282,7 +282,7 @@ async def handle_analysis_progress_subscription(
             "timestamp": asyncio.get_event_loop().time()
         }
         await websocket.send_text(json.dumps(confirmation))
-        
+
     except Exception as e:
         error_message = {
             "type": "error",
@@ -293,9 +293,9 @@ async def handle_analysis_progress_subscription(
 
 
 async def handle_unsubscribe(
-    websocket: WebSocket, 
-    connection_id: str, 
-    message: dict, 
+    websocket: WebSocket,
+    connection_id: str,
+    message: dict,
     streaming_service
 ):
     """Handle unsubscribe request"""
@@ -303,7 +303,7 @@ async def handle_unsubscribe(
         stream_id = manager.connection_streams[connection_id]
         await streaming_service.close_stream(stream_id)
         del manager.connection_streams[connection_id]
-        
+
         confirmation = {
             "type": "unsubscribed",
             "stream_id": stream_id,

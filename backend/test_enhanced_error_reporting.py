@@ -12,9 +12,9 @@ from app.data.api_client import YahooFinanceClient
 async def test_enhanced_error_reporting():
     """Test the enhanced error reporting functionality"""
     print("=== Testing Enhanced API Error Reporting ===\n")
-    
+
     client = YahooFinanceClient()
-    
+
     # Test cases
     test_cases = [
         ("AAPL", "Valid ticker - should succeed"),
@@ -22,16 +22,16 @@ async def test_enhanced_error_reporting():
         ("PPE.JO", "International ticker - may succeed or fail with details"),
         ("COKE", "Valid ticker - should succeed"),
     ]
-    
+
     for ticker, description in test_cases:
         print(f"Testing {ticker}: {description}")
         print("-" * 50)
-        
+
         try:
             # Run in executor to match the API behavior
             loop = asyncio.get_event_loop()
             result = await loop.run_in_executor(None, client.get_quote, ticker)
-            
+
             if result:
                 if result.get('success'):
                     print(f"✅ SUCCESS: {ticker}")
@@ -46,12 +46,12 @@ async def test_enhanced_error_reporting():
                     print(f"   Detail: {result.get('error_detail', 'No details')}")
             else:
                 print(f"❌ FAILED: {ticker} - No result returned")
-                
+
         except Exception as e:
             print(f"❌ EXCEPTION: {ticker} - {e}")
-        
+
         print()
-    
+
     print("=== Test Complete ===")
 
 if __name__ == "__main__":

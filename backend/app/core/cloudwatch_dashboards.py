@@ -38,12 +38,12 @@ class DashboardWidget:
 
 class CloudWatchDashboardService(LoggerMixin):
     """Service for creating and managing CloudWatch dashboards"""
-    
+
     def __init__(self, namespace: str = "StockAnalysis/API"):
         self.namespace = namespace
         self.enabled = BOTO3_AVAILABLE and os.getenv("CLOUDWATCH_DASHBOARDS_ENABLED", "true").lower() == "true"
         self.region = os.getenv("AWS_REGION", "us-east-1")
-        
+
         if self.enabled and BOTO3_AVAILABLE:
             try:
                 self.cloudwatch = boto3.client('cloudwatch', region_name=self.region)
@@ -57,7 +57,7 @@ class CloudWatchDashboardService(LoggerMixin):
                 self.log_warning("boto3 not available, CloudWatch dashboards disabled")
             else:
                 self.log_info("CloudWatch dashboards disabled by configuration")
-    
+
     def _create_metric_widget(
         self,
         title: str,
@@ -92,7 +92,7 @@ class CloudWatchDashboardService(LoggerMixin):
                 }
             }
         )
-    
+
     def _create_text_widget(
         self,
         markdown: str,
@@ -112,17 +112,17 @@ class CloudWatchDashboardService(LoggerMixin):
                 "markdown": markdown
             }
         )
-    
+
     def _create_operational_dashboard_widgets(self) -> List[DashboardWidget]:
         """Create widgets for operational dashboard"""
         widgets = []
-        
+
         # Header
         widgets.append(self._create_text_widget(
             markdown="# Stock Analysis API - Operational Dashboard\n\nSystem health and performance metrics",
             x=0, y=0, width=24, height=2
         ))
-        
+
         # API Response Time
         widgets.append(self._create_metric_widget(
             title="API Response Time",
@@ -134,7 +134,7 @@ class CloudWatchDashboardService(LoggerMixin):
             x=0, y=2, width=12, height=6,
             stat="Average"
         ))
-        
+
         # Error Rate
         widgets.append(self._create_metric_widget(
             title="Error Rate",
@@ -144,7 +144,7 @@ class CloudWatchDashboardService(LoggerMixin):
             x=12, y=2, width=12, height=6,
             stat="Average"
         ))
-        
+
         # Cache Performance
         widgets.append(self._create_metric_widget(
             title="Cache Hit Ratio",
@@ -154,7 +154,7 @@ class CloudWatchDashboardService(LoggerMixin):
             x=0, y=8, width=12, height=6,
             stat="Average"
         ))
-        
+
         # Cache Operations
         widgets.append(self._create_metric_widget(
             title="Cache Operations",
@@ -167,7 +167,7 @@ class CloudWatchDashboardService(LoggerMixin):
             x=12, y=8, width=12, height=6,
             stat="Sum"
         ))
-        
+
         # System Performance
         widgets.append(self._create_metric_widget(
             title="Average Response Time by Endpoint",
@@ -177,19 +177,19 @@ class CloudWatchDashboardService(LoggerMixin):
             x=0, y=14, width=24, height=6,
             stat="Average"
         ))
-        
+
         return widgets
-    
+
     def _create_business_dashboard_widgets(self) -> List[DashboardWidget]:
         """Create widgets for business dashboard"""
         widgets = []
-        
+
         # Header
         widgets.append(self._create_text_widget(
             markdown="# Stock Analysis API - Business Dashboard\n\nBusiness metrics and analysis performance",
             x=0, y=0, width=24, height=2
         ))
-        
+
         # Analysis Completion Rate
         widgets.append(self._create_metric_widget(
             title="Analysis Completion Rate",
@@ -199,7 +199,7 @@ class CloudWatchDashboardService(LoggerMixin):
             x=0, y=2, width=12, height=6,
             stat="Average"
         ))
-        
+
         # Analysis Volume
         widgets.append(self._create_metric_widget(
             title="Analysis Volume",
@@ -210,7 +210,7 @@ class CloudWatchDashboardService(LoggerMixin):
             x=12, y=2, width=12, height=6,
             stat="Sum"
         ))
-        
+
         # Analysis Duration
         widgets.append(self._create_metric_widget(
             title="Analysis Duration",
@@ -222,7 +222,7 @@ class CloudWatchDashboardService(LoggerMixin):
             x=0, y=8, width=12, height=6,
             stat="Average"
         ))
-        
+
         # Popular Tickers
         widgets.append(self._create_metric_widget(
             title="Analysis by Ticker (Top Analyzed)",
@@ -236,19 +236,19 @@ class CloudWatchDashboardService(LoggerMixin):
             x=12, y=8, width=12, height=6,
             stat="Sum"
         ))
-        
+
         return widgets
-    
+
     def _create_alerting_dashboard_widgets(self) -> List[DashboardWidget]:
         """Create widgets for alerting dashboard"""
         widgets = []
-        
+
         # Header
         widgets.append(self._create_text_widget(
             markdown="# Stock Analysis API - Alerting Dashboard\n\nCritical issues and alerts monitoring",
             x=0, y=0, width=24, height=2
         ))
-        
+
         # Error Count by Category
         widgets.append(self._create_metric_widget(
             title="Error Count by Category",
@@ -262,7 +262,7 @@ class CloudWatchDashboardService(LoggerMixin):
             x=0, y=2, width=12, height=6,
             stat="Sum"
         ))
-        
+
         # High Response Time Alerts
         widgets.append(self._create_metric_widget(
             title="High Response Time (>1000ms)",
@@ -273,7 +273,7 @@ class CloudWatchDashboardService(LoggerMixin):
             x=12, y=2, width=12, height=6,
             stat="Maximum"
         ))
-        
+
         # Failed Analyses
         widgets.append(self._create_metric_widget(
             title="Failed Analyses",
@@ -285,7 +285,7 @@ class CloudWatchDashboardService(LoggerMixin):
             x=0, y=8, width=12, height=6,
             stat="Sum"
         ))
-        
+
         # Cache Miss Rate (Alert when high)
         widgets.append(self._create_metric_widget(
             title="Cache Miss Rate",
@@ -296,13 +296,13 @@ class CloudWatchDashboardService(LoggerMixin):
             x=12, y=8, width=12, height=6,
             stat="Sum"
         ))
-        
+
         return widgets
-    
+
     def _widgets_to_dashboard_body(self, widgets: List[DashboardWidget]) -> str:
         """Convert widgets to dashboard body JSON"""
         dashboard_widgets = []
-        
+
         for widget in widgets:
             dashboard_widget = {
                 "type": widget.type,
@@ -313,24 +313,24 @@ class CloudWatchDashboardService(LoggerMixin):
                 "properties": widget.properties
             }
             dashboard_widgets.append(dashboard_widget)
-        
+
         dashboard_body = {
             "widgets": dashboard_widgets
         }
-        
+
         return json.dumps(dashboard_body)
-    
+
     async def create_dashboard(self, dashboard_type: DashboardType, dashboard_name: str = None) -> bool:
         """Create a CloudWatch dashboard"""
         if not self.enabled:
             self.log_warning("CloudWatch dashboards disabled, skipping dashboard creation")
             return False
-        
+
         try:
             # Generate dashboard name if not provided
             if not dashboard_name:
                 dashboard_name = f"StockAnalysis-{dashboard_type.value.title()}"
-            
+
             # Get widgets based on dashboard type
             if dashboard_type == DashboardType.OPERATIONAL:
                 widgets = self._create_operational_dashboard_widgets()
@@ -340,80 +340,80 @@ class CloudWatchDashboardService(LoggerMixin):
                 widgets = self._create_alerting_dashboard_widgets()
             else:
                 raise ValueError(f"Unknown dashboard type: {dashboard_type}")
-            
+
             # Convert widgets to dashboard body
             dashboard_body = self._widgets_to_dashboard_body(widgets)
-            
+
             # Create the dashboard
             response = self.cloudwatch.put_dashboard(
                 DashboardName=dashboard_name,
                 DashboardBody=dashboard_body
             )
-            
+
             self.log_info(
                 f"Created CloudWatch dashboard: {dashboard_name}",
                 dashboard_type=dashboard_type.value,
                 widget_count=len(widgets)
             )
-            
+
             return True
-            
+
         except Exception as e:
             self.log_error(f"Failed to create dashboard {dashboard_name}: {e}")
             return False
-    
+
     async def create_all_dashboards(self) -> Dict[str, bool]:
         """Create all standard dashboards"""
         results = {}
-        
+
         for dashboard_type in DashboardType:
             dashboard_name = f"StockAnalysis-{dashboard_type.value.title()}"
             success = await self.create_dashboard(dashboard_type, dashboard_name)
             results[dashboard_name] = success
-        
+
         return results
-    
+
     async def delete_dashboard(self, dashboard_name: str) -> bool:
         """Delete a CloudWatch dashboard"""
         if not self.enabled:
             return False
-        
+
         try:
             self.cloudwatch.delete_dashboards(
                 DashboardNames=[dashboard_name]
             )
-            
+
             self.log_info(f"Deleted CloudWatch dashboard: {dashboard_name}")
             return True
-            
+
         except Exception as e:
             self.log_error(f"Failed to delete dashboard {dashboard_name}: {e}")
             return False
-    
+
     async def list_dashboards(self) -> List[str]:
         """List all CloudWatch dashboards"""
         if not self.enabled:
             return []
-        
+
         try:
             response = self.cloudwatch.list_dashboards()
             dashboard_names = [
-                dashboard['DashboardName'] 
+                dashboard['DashboardName']
                 for dashboard in response.get('DashboardEntries', [])
                 if dashboard['DashboardName'].startswith('StockAnalysis-')
             ]
-            
+
             return dashboard_names
-            
+
         except Exception as e:
             self.log_error(f"Failed to list dashboards: {e}")
             return []
-    
+
     async def create_alarms(self) -> Dict[str, bool]:
         """Create CloudWatch alarms for critical metrics"""
         if not self.enabled:
             return {}
-        
+
         alarms = [
             {
                 "name": "StockAnalysis-HighErrorRate",
@@ -444,9 +444,9 @@ class CloudWatchDashboardService(LoggerMixin):
                 "comparison": "LessThanThreshold"
             }
         ]
-        
+
         results = {}
-        
+
         for alarm_config in alarms:
             try:
                 self.cloudwatch.put_metric_alarm(
@@ -463,14 +463,14 @@ class CloudWatchDashboardService(LoggerMixin):
                     Unit='None',
                     TreatMissingData='notBreaching'
                 )
-                
+
                 results[alarm_config["name"]] = True
                 self.log_info(f"Created alarm: {alarm_config['name']}")
-                
+
             except Exception as e:
                 results[alarm_config["name"]] = False
                 self.log_error(f"Failed to create alarm {alarm_config['name']}: {e}")
-        
+
         return results
 
 
@@ -492,19 +492,19 @@ async def initialize_dashboards():
     if service.enabled:
         # Create all dashboards
         dashboard_results = await service.create_all_dashboards()
-        
+
         # Create alarms
         alarm_results = await service.create_alarms()
-        
+
         service.log_info(
             "Dashboard initialization complete",
             dashboards_created=sum(dashboard_results.values()),
             alarms_created=sum(alarm_results.values())
         )
-        
+
         return {
             "dashboards": dashboard_results,
             "alarms": alarm_results
         }
-    
+
     return {"dashboards": {}, "alarms": {}}

@@ -18,34 +18,34 @@ logger = logging.getLogger(__name__)
 
 class ServiceContainer:
     """Dependency injection container for application services"""
-    
+
     def __init__(self):
         self._data_fetcher: Optional[DataFetcher] = None
         self._yahoo_client: Optional[YahooFinanceClient] = None
         self._cache_manager: Optional[AdvancedCacheManager] = None
         self._database_service: Optional[DatabaseService] = None
-    
+
     @property
     def data_fetcher(self) -> DataFetcher:
         """Get or create DataFetcher instance"""
         if self._data_fetcher is None:
             self._data_fetcher = DataFetcher()
         return self._data_fetcher
-    
+
     @property
     def yahoo_client(self) -> YahooFinanceClient:
         """Get or create YahooFinanceClient instance"""
         if self._yahoo_client is None:
             self._yahoo_client = YahooFinanceClient()
         return self._yahoo_client
-    
+
     @property
     def cache_manager(self) -> AdvancedCacheManager:
         """Get or create CacheManager instance"""
         if self._cache_manager is None:
             self._cache_manager = AdvancedCacheManager()
         return self._cache_manager
-    
+
     @property
     def database_service(self) -> DatabaseService:
         """Get or create DatabaseService instance"""
@@ -59,7 +59,7 @@ class ServiceContainer:
                     operation="initialization"
                 )
         return self._database_service
-    
+
     async def cleanup(self):
         """Cleanup resources"""
         # Close database connections, cache connections, etc.
@@ -89,7 +89,7 @@ async def get_correlation_id(request: Request) -> str:
     correlation_id = request.headers.get("x-correlation-id")
     if not correlation_id:
         correlation_id = generate_correlation_id()
-    
+
     # Set in context for logging
     set_correlation_id(correlation_id)
     return correlation_id
@@ -154,7 +154,7 @@ async def startup_services():
     """Initialize services on application startup"""
     logger.info("Initializing application services...")
     container = get_service_container()
-    
+
     # Pre-initialize critical services to catch errors early
     try:
         _ = container.database_service
@@ -162,14 +162,14 @@ async def startup_services():
     except Exception as e:
         logger.error(f"Failed to initialize database service: {e}")
         # Don't raise here - let individual requests handle the error
-    
+
     try:
         _ = container.cache_manager
         logger.info("Cache manager initialized")
     except Exception as e:
         logger.warning(f"Cache manager initialization failed: {e}")
         # Cache is not critical for startup
-    
+
     logger.info("Service initialization complete")
 
 
@@ -177,9 +177,9 @@ async def shutdown_services():
     """Cleanup services on application shutdown"""
     logger.info("Shutting down application services...")
     global _service_container
-    
+
     if _service_container:
         await _service_container.cleanup()
         _service_container = None
-    
+
     logger.info("Service shutdown complete")

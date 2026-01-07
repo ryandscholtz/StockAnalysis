@@ -8,20 +8,20 @@ import json
 def test_live_prices_endpoint():
     """Test the /api/watchlist/live-prices endpoint"""
     print("=== Testing Live Prices Endpoint ===\n")
-    
+
     try:
         # Test the endpoint
         url = "http://127.0.0.1:8000/api/watchlist/live-prices"
         print(f"Making request to: {url}")
-        
+
         response = requests.get(url, timeout=60)
         print(f"Status Code: {response.status_code}")
-        
+
         if response.status_code == 200:
             data = response.json()
             print("Response received successfully!")
             print(f"Number of tickers: {len(data.get('live_prices', {}))}")
-            
+
             # Display detailed results
             for ticker, result in data.get('live_prices', {}).items():
                 print(f"\n--- {ticker} ---")
@@ -36,7 +36,7 @@ def test_live_prices_endpoint():
         else:
             print(f"Error: {response.status_code}")
             print(f"Response: {response.text}")
-            
+
     except requests.exceptions.ConnectionError:
         print("❌ Connection failed - is the backend server running?")
     except Exception as e:

@@ -35,7 +35,7 @@ def test_api_search_endpoint():
     assert "results" in data
 
 
-@pytest.mark.integration  
+@pytest.mark.integration
 def test_api_presets_endpoint():
     """Test API presets endpoint"""
     client = TestClient(app)

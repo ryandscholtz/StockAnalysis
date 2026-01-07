@@ -24,21 +24,21 @@ async def get_watchlist_live_prices_async():
         db_service = DatabaseService(db_path="stock_analysis.db")
         watchlist_items = db_service.get_watchlist()
         tickers = [item['ticker'] for item in watchlist_items]
-        
+
         if not tickers:
             return {"live_prices": {}, "message": "No tickers in watchlist"}
-        
+
         # Check cache first
         cache_key = f"live_prices:{'_'.join(sorted(tickers))}"
         cached_result = cache_manager.get(cache_key)
-        
+
         if cached_result:
             return {
                 "live_prices": cached_result,
                 "cached": True,
                 "message": "Returned cached live prices"
             }
-        
+
         # Start background task
         task_id = task_manager.create_task(
             "live_prices",
@@ -46,14 +46,14 @@ async def get_watchlist_live_prices_async():
             tickers,
             metadata={"tickers": tickers, "cache_key": cache_key}
         )
-        
+
         return {
             "task_id": task_id,
             "status": "started",
             "message": f"Started background task to fetch prices for {len(tickers)} tickers",
             "poll_url": f"/api/tasks/{task_id}"
         }
-        
+
     except Exception as e:
         logger.error(f"Error starting live prices task: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -76,7 +76,7 @@ async def analyze_stock_async(
                 weights_dict = json.loads(analysis_weights)
             except json.JSONDecodeError:
                 raise HTTPException(status_code=400, detail="Invalid analysis_weights JSON")
-        
+
         # Check cache first
         cache_key = cache_manager._generate_key(
             "stock_analysis",
@@ -84,7 +84,7 @@ async def analyze_stock_async(
             business_type=business_type,
             weights=weights_dict
         )
-        
+
         cached_result = cache_manager.get(cache_key)
         if cached_result:
             return {
@@ -92,7 +92,7 @@ async def analyze_stock_async(
                 "cached": True,
                 "message": f"Returned cached analysis for {ticker.upper()}"
             }
-        
+
         # Start background task
         task_id = task_manager.create_task(
             "stock_analysis",
@@ -106,14 +106,14 @@ async def analyze_stock_async(
                 "cache_key": cache_key
             }
         )
-        
+
         return {
             "task_id": task_id,
             "status": "started",
             "message": f"Started background analysis for {ticker.upper()}",
             "poll_url": f"/api/tasks/{task_id}"
         }
-        
+
     except Exception as e:
         logger.error(f"Error starting analysis task for {ticker}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -124,18 +124,18 @@ async def get_task_status(task_id: str):
     Get the status and results of a background task
     """
     task_status = task_manager.get_task_status(task_id)
-    
+
     if not task_status:
         raise HTTPException(status_code=404, detail="Task not found")
-    
+
     # If task is completed and has results, cache them
-    if (task_status['status'] == 'completed' and 
-        task_status['result'] and 
+    if (task_status['status'] == 'completed' and
+        task_status['result'] and
         task_status.get('metadata', {}).get('cache_key')):
-        
+
         cache_key = task_status['metadata']['cache_key']
         cache_manager.set(cache_key, task_status['result'], ttl_minutes=30)
-    
+
     return task_status
 
 @router.delete("/tasks/{task_id}")
@@ -144,10 +144,10 @@ async def cancel_task(task_id: str):
     Cancel a running background task
     """
     success = task_manager.cancel_task(task_id)
-    
+
     if not success:
         raise HTTPException(status_code=404, detail="Task not found or not running")
-    
+
     return {"message": f"Task {task_id} cancelled successfully"}
 
 @router.get("/tasks")
@@ -156,7 +156,7 @@ async def list_tasks(status: Optional[str] = Query(None)):
     List all background tasks, optionally filtered by status
     """
     all_tasks = []
-    
+
     for task_id in task_manager.tasks:
         task_status = task_manager.get_task_status(task_id)
         if status is None or task_status['status'] == status:
@@ -166,7 +166,7 @@ async def list_tasks(status: Optional[str] = Query(None)):
                 task_summary['has_result'] = task_summary['result'] is not None
                 del task_summary['result']
             all_tasks.append(task_summary)
-    
+
     return {"tasks": all_tasks, "total": len(all_tasks)}
 
 @router.get("/cache/stats")
@@ -190,10 +190,10 @@ async def clear_cache_by_prefix(key_prefix: str):
     Clear cached data by key prefix
     """
     keys_to_delete = [key for key in cache_manager.cache.keys() if key.startswith(key_prefix)]
-    
+
     for key in keys_to_delete:
         cache_manager.delete(key)
-    
+
     return {
         "message": f"Cleared {len(keys_to_delete)} cache entries with prefix '{key_prefix}'",
         "deleted_count": len(keys_to_delete)
@@ -208,7 +208,7 @@ async def get_cached_watchlist():
     try:
         db_service = DatabaseService(db_path="stock_analysis.db")
         watchlist_items = db_service.get_watchlist()
-        
+
         return {
             "items": watchlist_items,
             "total": len(watchlist_items),
@@ -227,13 +227,13 @@ async def get_cached_quote(ticker: str):
     """
     try:
         from app.data.api_client import YahooFinanceClient
-        
+
         yahoo_client = YahooFinanceClient()
-        
+
         # Run in thread pool to avoid blocking
         loop = asyncio.get_event_loop()
         quote = await loop.run_in_executor(None, yahoo_client.get_quote, ticker.upper())
-        
+
         if quote and quote.get('success'):
             return {
                 "ticker": ticker.upper(),
@@ -249,7 +249,7 @@ async def get_cached_quote(ticker: str):
                 "cached": True,
                 "timestamp": datetime.now().isoformat()
             }
-            
+
     except Exception as e:
         logger.error(f"Error getting cached quote for {ticker}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -263,14 +263,14 @@ async def detailed_health_check():
         # Check database
         db_service = DatabaseService(db_path="stock_analysis.db")
         watchlist_count = len(db_service.get_watchlist())
-        
+
         # Check background tasks
         running_tasks = len(task_manager.running_tasks)
         total_tasks = len(task_manager.tasks)
-        
+
         # Check cache
         cache_stats = cache_manager.get_stats()
-        
+
         return {
             "status": "healthy",
             "timestamp": datetime.now().isoformat(),
@@ -288,7 +288,7 @@ async def detailed_health_check():
                 "cache_utilization": f"{cache_stats['utilization_percent']}%"
             }
         }
-        
+
     except Exception as e:
         logger.error(f"Health check failed: {e}")
         return {

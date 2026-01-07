@@ -7,17 +7,17 @@ import asyncio
 
 class ProgressTracker:
     """Track and report progress of analysis"""
-    
+
     def __init__(self, total_steps: int = 7):
         self.total_steps = total_steps
         self.current_step = 0
         self.current_task = ""
         self.callback: Optional[Callable] = None
-    
+
     def set_callback(self, callback: Callable):
         """Set callback function to report progress"""
         self.callback = callback
-    
+
     async def update(self, step: int, task: str):
         """Update progress"""
         self.current_step = step
@@ -46,9 +46,8 @@ class ProgressTracker:
                 print(f"Error in progress callback: {e}")
                 import traceback
                 traceback.print_exc()
-    
+
     async def step(self, task: str):
         """Increment step and update"""
         self.current_step += 1
         await self.update(self.current_step, task)
-

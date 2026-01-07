@@ -9,16 +9,16 @@ from pathlib import Path
 
 def main():
     """Run the test suite with appropriate configuration"""
-    
+
     # Get the directory containing this script
     script_dir = Path(__file__).parent
     test_dir = script_dir / "tests"
-    
+
     # Ensure test directory exists
     if not test_dir.exists():
         print(f"❌ Test directory not found: {test_dir}")
         return 1
-    
+
     # Default pytest arguments
     pytest_args = [
         str(test_dir),  # Test directory
@@ -28,7 +28,7 @@ def main():
         "-x",           # Stop on first failure
         "--disable-warnings",  # Disable warnings for cleaner output
     ]
-    
+
     # Add coverage if available
     try:
         import coverage
@@ -40,7 +40,7 @@ def main():
         print("📊 Running tests with coverage analysis")
     except ImportError:
         print("📋 Running tests without coverage (install pytest-cov for coverage)")
-    
+
     # Parse command line arguments
     if len(sys.argv) > 1:
         if "help" in sys.argv[1] or "-h" in sys.argv[1]:
@@ -62,21 +62,21 @@ def main():
             # Treat as specific test file or pattern
             pytest_args = [sys.argv[1]] + pytest_args[1:]
             print(f"🎯 Running specific tests: {sys.argv[1]}")
-    
+
     print(f"🚀 Starting test suite...")
     print(f"📁 Test directory: {test_dir}")
     print(f"⚙️  Pytest args: {' '.join(pytest_args)}")
     print("-" * 60)
-    
+
     # Run pytest
     exit_code = pytest.main(pytest_args)
-    
+
     print("-" * 60)
     if exit_code == 0:
         print("✅ All tests passed!")
     else:
         print(f"❌ Tests failed with exit code: {exit_code}")
-    
+
     return exit_code
 
 def print_help():

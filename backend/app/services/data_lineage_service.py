@@ -57,12 +57,12 @@ class LineageNode:
 
 class DataLineageService:
     """Service for tracking data lineage and transformations"""
-    
+
     def __init__(self):
         self.sources: Dict[str, DataSource] = {}
         self.transformations: Dict[str, DataTransformation] = {}
         self.lineage_graph: Dict[str, LineageNode] = {}
-    
+
     def register_source(
         self,
         name: str,
@@ -73,7 +73,7 @@ class DataLineageService:
     ) -> str:
         """Register a new data source"""
         source_id = source_id or str(uuid.uuid4())
-        
+
         source = DataSource(
             id=source_id,
             name=name,
@@ -81,13 +81,13 @@ class DataLineageService:
             location=location,
             metadata=metadata or {}
         )
-        
+
         self.sources[source_id] = source
         self.lineage_graph[source_id] = LineageNode(source=source)
-        
+
         logger.info(f"Registered data source: {name} ({source_id})")
         return source_id
-    
+
     def record_transformation(
         self,
         name: str,
@@ -101,16 +101,16 @@ class DataLineageService:
     ) -> str:
         """Record a data transformation"""
         transformation_id = transformation_id or str(uuid.uuid4())
-        
+
         # Validate input sources exist
         for source_id in input_source_ids:
             if source_id not in self.sources:
                 raise ValueError(f"Input source {source_id} not found")
-        
+
         # Validate output source exists
         if output_source_id not in self.sources:
             raise ValueError(f"Output source {output_source_id} not found")
-        
+
         transformation = DataTransformation(
             id=transformation_id,
             name=name,
@@ -121,38 +121,38 @@ class DataLineageService:
             execution_time_ms=execution_time_ms,
             metadata=metadata or {}
         )
-        
+
         self.transformations[transformation_id] = transformation
-        
+
         # Update lineage graph
         output_node = self.lineage_graph[output_source_id]
         output_node.transformations.append(transformation)
-        
+
         for input_source_id in input_source_ids:
             # Add upstream relationship
             output_node.upstream_nodes.add(input_source_id)
             # Add downstream relationship
             input_node = self.lineage_graph[input_source_id]
             input_node.downstream_nodes.add(output_source_id)
-        
+
         logger.info(f"Recorded transformation: {name} ({transformation_id})")
         return transformation_id
-    
+
     def trace_lineage_upstream(self, source_id: str, max_depth: int = 10) -> Dict[str, Any]:
         """Trace data lineage upstream from a given source"""
         if source_id not in self.lineage_graph:
             raise ValueError(f"Source {source_id} not found")
-        
+
         visited = set()
         lineage = {}
-        
+
         def _trace_upstream(current_id: str, depth: int) -> Dict[str, Any]:
             if depth > max_depth or current_id in visited:
                 return {}
-            
+
             visited.add(current_id)
             node = self.lineage_graph[current_id]
-            
+
             result = {
                 "source": {
                     "id": node.source.id,
@@ -174,28 +174,28 @@ class DataLineageService:
                 ],
                 "upstream": {}
             }
-            
+
             for upstream_id in node.upstream_nodes:
                 result["upstream"][upstream_id] = _trace_upstream(upstream_id, depth + 1)
-            
+
             return result
-        
+
         return _trace_upstream(source_id, 0)
-    
+
     def trace_lineage_downstream(self, source_id: str, max_depth: int = 10) -> Dict[str, Any]:
         """Trace data lineage downstream from a given source"""
         if source_id not in self.lineage_graph:
             raise ValueError(f"Source {source_id} not found")
-        
+
         visited = set()
-        
+
         def _trace_downstream(current_id: str, depth: int) -> Dict[str, Any]:
             if depth > max_depth or current_id in visited:
                 return {}
-            
+
             visited.add(current_id)
             node = self.lineage_graph[current_id]
-            
+
             result = {
                 "source": {
                     "id": node.source.id,
@@ -217,43 +217,43 @@ class DataLineageService:
                 ],
                 "downstream": {}
             }
-            
+
             for downstream_id in node.downstream_nodes:
                 result["downstream"][downstream_id] = _trace_downstream(downstream_id, depth + 1)
-            
+
             return result
-        
+
         return _trace_downstream(source_id, 0)
-    
+
     def get_transformation_path(self, from_source_id: str, to_source_id: str) -> List[str]:
         """Get the transformation path between two sources"""
         if from_source_id not in self.lineage_graph or to_source_id not in self.lineage_graph:
             raise ValueError("Source not found")
-        
+
         # Simple BFS to find path
         from collections import deque
-        
+
         queue = deque([(from_source_id, [from_source_id])])
         visited = set()
-        
+
         while queue:
             current_id, path = queue.popleft()
-            
+
             if current_id == to_source_id:
                 return path
-            
+
             if current_id in visited:
                 continue
-            
+
             visited.add(current_id)
             node = self.lineage_graph[current_id]
-            
+
             for downstream_id in node.downstream_nodes:
                 if downstream_id not in visited:
                     queue.append((downstream_id, path + [downstream_id]))
-        
+
         return []  # No path found
-    
+
     def get_lineage_summary(self) -> Dict[str, Any]:
         """Get a summary of the lineage graph"""
         return {
@@ -270,25 +270,25 @@ class DataLineageService:
                 if not node.downstream_nodes
             ]
         }
-    
+
     def validate_lineage_integrity(self) -> List[str]:
         """Validate the integrity of the lineage graph"""
         issues = []
-        
+
         # Check for orphaned transformations
         for transformation in self.transformations.values():
             for input_id in transformation.input_sources:
                 if input_id not in self.sources:
                     issues.append(f"Transformation {transformation.id} references missing input source {input_id}")
-            
+
             if transformation.output_source not in self.sources:
                 issues.append(f"Transformation {transformation.id} references missing output source {transformation.output_source}")
-        
+
         # Check for circular dependencies
         def has_cycle(source_id: str, visited: Set[str], rec_stack: Set[str]) -> bool:
             visited.add(source_id)
             rec_stack.add(source_id)
-            
+
             node = self.lineage_graph.get(source_id)
             if node:
                 for downstream_id in node.downstream_nodes:
@@ -297,14 +297,14 @@ class DataLineageService:
                             return True
                     elif downstream_id in rec_stack:
                         return True
-            
+
             rec_stack.remove(source_id)
             return False
-        
+
         visited = set()
         for source_id in self.sources:
             if source_id not in visited:
                 if has_cycle(source_id, visited, set()):
                     issues.append(f"Circular dependency detected involving source {source_id}")
-        
+
         return issues

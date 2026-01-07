@@ -34,7 +34,7 @@ def _format_api_attempts_comment(api_attempts: list, success: bool = False) -> s
     """Format API attempts into a detailed comment for the frontend"""
     if not api_attempts:
         return "No API attempt details available"
-    
+
     if success:
         # For successful requests, show what worked
         successful_attempts = [attempt for attempt in api_attempts if attempt.get('status') == 'success']
@@ -46,7 +46,7 @@ def _format_api_attempts_comment(api_attempts: list, success: bool = False) -> s
     else:
         # For failed requests, show detailed breakdown of what was tried
         comment_parts = []
-        
+
         # Group attempts by API
         api_groups = {}
         for attempt in api_attempts:
@@ -54,7 +54,7 @@ def _format_api_attempts_comment(api_attempts: list, success: bool = False) -> s
             if api_name not in api_groups:
                 api_groups[api_name] = []
             api_groups[api_name].append(attempt)
-        
+
         for api_name, attempts in api_groups.items():
             failed_attempts = [a for a in attempts if a.get('status') == 'failed']
             if failed_attempts:
@@ -63,9 +63,9 @@ def _format_api_attempts_comment(api_attempts: list, success: bool = False) -> s
                     method = attempt.get('method', 'unknown')
                     error = attempt.get('error', 'unknown error')
                     errors.append(f"{method}: {error}")
-                
+
                 comment_parts.append(f"❌ {api_name} - {'; '.join(errors)}")
-        
+
         if comment_parts:
             return " | ".join(comment_parts)
         else:
@@ -91,12 +91,12 @@ async def get_version():
 async def get_analysis_presets():
     """Get available business type presets and their default weights"""
     from app.config.analysis_weights import BusinessType, AnalysisWeightPresets
-    
+
     presets = {}
     for business_type in BusinessType:
         weights = AnalysisWeightPresets.get_preset(business_type)
         presets[business_type.value] = weights.to_dict()
-    
+
     return {
         "presets": presets,
         "business_types": [bt.value for bt in BusinessType]
@@ -122,7 +122,7 @@ async def search_tickers(q: str = Query(..., min_length=1, description="Search q
         raise HTTPException(status_code=500, detail=str(e))
 
 
-async def _analyze_stock_with_progress(ticker: str, progress_tracker: ProgressTracker, 
+async def _analyze_stock_with_progress(ticker: str, progress_tracker: ProgressTracker,
                                        business_type: Optional[str] = None,
                                        analysis_weights: Optional[dict] = None) -> StockAnalysis:
     """Internal function to perform analysis with progress tracking"""
@@ -142,7 +142,7 @@ async def _analyze_stock_with_progress(ticker: str, progress_tracker: ProgressTr
         import traceback
         logger.error(traceback.format_exc())
         company_data = None
-    
+
     # Check if we have AI-extracted data as fallback
     await progress_tracker.update(1, "Checking for AI-extracted data...")
     ai_data = {}
@@ -159,7 +159,7 @@ async def _analyze_stock_with_progress(ticker: str, progress_tracker: ProgressTr
         import traceback
         logger.warning(traceback.format_exc())
         # Continue without AI data if database check fails
-    
+
     if not company_data:
         # If Yahoo Finance doesn't have the ticker, try to create CompanyData from AI-extracted data
         if ai_data and (ai_data.get('income_statement') or ai_data.get('balance_sheet') or ai_data.get('cashflow')):
@@ -177,13 +177,13 @@ async def _analyze_stock_with_progress(ticker: str, progress_tracker: ProgressTr
             except Exception as e:
                 logger.warning(f"Could not get price from Yahoo Finance: {e}")
                 current_price = None
-            
+
             # If we still don't have a price, we can't do full analysis, but we can still try
             if not current_price:
                 logger.warning(f"Could not get current price for {ticker}. Using placeholder price for analysis.")
                 # Use a placeholder price - the analysis will still work with AI data
                 current_price = 1.0  # Placeholder
-            
+
             await progress_tracker.update(1, "Building CompanyData object from AI data...")
             try:
                 company_data = CompanyData(
@@ -196,7 +196,7 @@ async def _analyze_stock_with_progress(ticker: str, progress_tracker: ProgressTr
                     currency='USD',
                     financial_currency='USD'
                 )
-                
+
                 # Apply key metrics from AI data if available
                 if 'key_metrics' in ai_data and 'latest' in ai_data['key_metrics']:
                     metrics = ai_data['key_metrics']['latest']
@@ -204,7 +204,7 @@ async def _analyze_stock_with_progress(ticker: str, progress_tracker: ProgressTr
                         company_data.shares_outstanding = metrics['shares_outstanding']
                     if 'market_cap' in metrics:
                         company_data.market_cap = metrics['market_cap']
-                
+
                 logger.info(f"Created CompanyData from AI-extracted data for {ticker}")
                 logger.info(f"Income statement periods: {len(company_data.income_statement)}")
                 logger.info(f"Balance sheet periods: {len(company_data.balance_sheet)}")
@@ -227,14 +227,14 @@ async def _analyze_stock_with_progress(ticker: str, progress_tracker: ProgressTr
                 # Check if this is an international ticker
                 exchange_suffixes = ['.JO', '.L', '.TO', '.PA', '.DE', '.HK', '.SS', '.SZ', '.T', '.AS', '.BR', '.MX', '.SA', '.SW', '.VI', '.ST', '.OL', '.CO', '.HE', '.IC', '.LS', '.MC', '.MI', '.NX', '.TA', '.TW', '.V', '.WA']
                 is_international = any(ticker.upper().endswith(suffix) for suffix in exchange_suffixes)
-                
+
                 # Check if backup sources are configured
                 from app.data.backup_clients import BackupDataFetcher
                 backup_fetcher = BackupDataFetcher()
-                has_backup = ((backup_fetcher.alpha_vantage_client and backup_fetcher.alpha_vantage_client.api_key) or 
-                             backup_fetcher.fmp_client.api_key or 
+                has_backup = ((backup_fetcher.alpha_vantage_client and backup_fetcher.alpha_vantage_client.api_key) or
+                             backup_fetcher.fmp_client.api_key or
                              backup_fetcher.marketstack_client.api_key)
-                
+
                 if is_international:
                     error_detail += "For international tickers, the system tried Yahoo Finance first (which supports international exchanges), "
                     error_detail += "then Google Finance and other backup APIs, but none returned data. "
@@ -250,12 +250,12 @@ async def _analyze_stock_with_progress(ticker: str, progress_tracker: ProgressTr
             else:
                 error_detail += f". AI-extracted data exists but is incomplete (keys: {list(ai_data.keys())}). Please ensure income_statement, balance_sheet, or cashflow data is available."
             raise HTTPException(status_code=404, detail=error_detail)
-    
+
     # Apply manual data if available (in-memory store - backward compatibility)
     if ticker.upper() in manual_data_store:
         manual_data = manual_data_store[ticker.upper()]
         _apply_manual_data(company_data, manual_data)
-    
+
     # Also load AI-extracted data from database and apply it
     if ai_data:
         await progress_tracker.update(1, "Applying AI-extracted data to company data...")
@@ -271,7 +271,7 @@ async def _analyze_stock_with_progress(ticker: str, progress_tracker: ProgressTr
         if 'key_metrics' in ai_data:
             logger.info(f"Key metrics in AI data: {ai_data['key_metrics']}")
         logger.info(f"AFTER applying: shares_outstanding={company_data.shares_outstanding}, market_cap={company_data.market_cap}")
-    
+
     # Log data availability for debugging
     await progress_tracker.update(1, "Data preparation complete, starting analysis...")
     logger.info(f"\n=== Data Availability for {ticker} ===")
@@ -279,13 +279,13 @@ async def _analyze_stock_with_progress(ticker: str, progress_tracker: ProgressTr
     logger.info(f"Balance sheets: {len(company_data.balance_sheet)} periods")
     logger.info(f"Cash flow statements: {len(company_data.cashflow)} periods")
     logger.info(f"Key metrics - shares_outstanding: {company_data.shares_outstanding}, market_cap: {company_data.market_cap}")
-    
+
     # Validate we have at least some data
     if not company_data.income_statement and not company_data.balance_sheet and not company_data.cashflow:
         error_msg = f"No financial data available for {ticker}. Cannot perform analysis."
         logger.error(error_msg)
         raise HTTPException(status_code=400, detail=error_msg)
-    
+
     if company_data.income_statement:
         first_period = list(company_data.income_statement.values())[0]
         if isinstance(first_period, dict):
@@ -295,7 +295,7 @@ async def _analyze_stock_with_progress(ticker: str, progress_tracker: ProgressTr
         if isinstance(first_period, dict):
             logger.info(f"Cash flow keys (sample): {list(first_period.keys())[:10]}")
     logger.info("=" * 50)
-    
+
     # Step 2: Get risk-free rate
     await progress_tracker.update(2, "Getting market data (risk-free rate)...")
     await asyncio.sleep(0.1)
@@ -306,7 +306,7 @@ async def _analyze_stock_with_progress(ticker: str, progress_tracker: ProgressTr
         logger.warning(f"Error getting risk-free rate: {e}. Using default 4%")
         risk_free_rate = 0.04  # Default 4%
         await progress_tracker.update(2, "Using default risk-free rate (4%)")
-    
+
     # Step 3: Analyze financial health (needed for valuation)
     await progress_tracker.update(3, "Analyzing financial health and ratios...")
     await asyncio.sleep(0.1)
@@ -319,7 +319,7 @@ async def _analyze_stock_with_progress(ticker: str, progress_tracker: ProgressTr
         import traceback
         logger.error(traceback.format_exc())
         raise
-    
+
     # Step 4: Analyze business quality (needed for valuation)
     await progress_tracker.update(4, "Assessing business quality and competitive moats...")
     await asyncio.sleep(0.1)
@@ -332,13 +332,13 @@ async def _analyze_stock_with_progress(ticker: str, progress_tracker: ProgressTr
         import traceback
         logger.error(traceback.format_exc())
         raise
-    
+
     # Step 5: Determine business type and get analysis weights
     await progress_tracker.update(5, "Determining business type and analysis weights...")
     await asyncio.sleep(0.1)
-    
+
     from app.config.analysis_weights import AnalysisWeightPresets, BusinessType, AnalysisWeights
-    
+
     # Calculate revenue growth for business type detection
     revenue_growth = 0.0
     asset_intensity = 0.0
@@ -352,7 +352,7 @@ async def _analyze_stock_with_progress(ticker: str, progress_tracker: ProgressTr
                 prev_rev = previous.get('Total Revenue', 0) or previous.get('Revenue', 0) or 0
                 if prev_rev > 0:
                     revenue_growth = (latest_rev - prev_rev) / prev_rev
-    
+
     if company_data.balance_sheet and company_data.income_statement:
         sorted_bs_dates = sorted(company_data.balance_sheet.keys(), reverse=True)
         sorted_is_dates = sorted(company_data.income_statement.keys(), reverse=True)
@@ -364,7 +364,7 @@ async def _analyze_stock_with_progress(ticker: str, progress_tracker: ProgressTr
                 revenue = latest_is.get('Total Revenue', 0) or latest_is.get('Revenue', 0) or 0
                 if revenue > 0:
                     asset_intensity = total_assets / revenue
-    
+
     # Detect or use provided business type
     detected_business_type = business_type
     if not detected_business_type:
@@ -395,7 +395,7 @@ async def _analyze_stock_with_progress(ticker: str, progress_tracker: ProgressTr
             detected_business_type = AnalysisWeightPresets.detect_business_type(
                 company_data.sector, company_data.industry, revenue_growth, asset_intensity
             ).value
-    
+
     # Get weights (use provided or preset)
     weights = None
     if analysis_weights:
@@ -407,9 +407,9 @@ async def _analyze_stock_with_progress(ticker: str, progress_tracker: ProgressTr
         except ValueError:
             business_type_enum = BusinessType.DEFAULT
         weights = AnalysisWeightPresets.get_preset(business_type_enum)
-    
+
     await progress_tracker.update(5, f"Business type: {detected_business_type}, using custom weights" if analysis_weights else f"Business type: {detected_business_type}")
-    
+
     # Step 6: Calculate DCF valuation (with quality scores and custom weights)
     await progress_tracker.update(6, "Calculating Discounted Cash Flow (DCF) model...")
     await asyncio.sleep(0.1)
@@ -430,7 +430,7 @@ async def _analyze_stock_with_progress(ticker: str, progress_tracker: ProgressTr
         import traceback
         logger.error(traceback.format_exc())
         raise
-    
+
     # Step 7: Calculate margin of safety
     await progress_tracker.update(7, "Calculating margin of safety and investment recommendation...")
     await asyncio.sleep(0.1)
@@ -444,21 +444,21 @@ async def _analyze_stock_with_progress(ticker: str, progress_tracker: ProgressTr
         beta=company_data.beta or 1.0,
         market_cap=company_data.market_cap
     )
-    
+
     # Step 8: Analyze management quality
     await progress_tracker.update(8, "Evaluating management quality...")
     await asyncio.sleep(0.1)
     management_analyzer = ManagementQualityAnalyzer(company_data)
     management_result = management_analyzer.analyze()
-    
+
     # Step 9: Calculate growth metrics and price ratios
     await progress_tracker.update(9, "Calculating growth metrics and valuation ratios...")
-    
+
     # Step 10: Run specialized analyzers if applicable
     bank_metrics = None
     reit_metrics = None
     insurance_metrics = None
-    
+
     if detected_business_type == 'bank':
         await progress_tracker.update(10, "Running bank-specific analysis...")
         try:
@@ -495,15 +495,15 @@ async def _analyze_stock_with_progress(ticker: str, progress_tracker: ProgressTr
     growth_calculator = GrowthMetricsCalculator(company_data)
     growth_metrics_dict = growth_calculator.calculate()
     growth_metrics = GrowthMetrics(**growth_metrics_dict) if any(v is not None for v in growth_metrics_dict.values()) else None
-    
+
     price_ratios_calculator = PriceRatiosCalculator(company_data)
     price_ratios_dict = price_ratios_calculator.calculate()
     price_ratios = PriceRatios(**price_ratios_dict) if any(v is not None for v in price_ratios_dict.values()) else None
-    
+
     # Build response
     from datetime import datetime
     from dataclasses import asdict
-    
+
     # Check for missing data (after all data has been applied)
     logger.info(f"=== Checking for missing data ===")
     logger.info(f"Before identify_missing_data: shares_outstanding={company_data.shares_outstanding}, market_cap={company_data.market_cap}")
@@ -520,7 +520,7 @@ async def _analyze_stock_with_progress(ticker: str, progress_tracker: ProgressTr
             key_metrics=missing.get('key_metrics', []),
             has_missing_data=True
         )
-    
+
     # Analyze data quality and identify assumptions
     # Log key metrics before quality check for debugging
     logger.info(f"=== Before DataQualityAnalyzer ===")
@@ -541,18 +541,18 @@ async def _analyze_stock_with_progress(ticker: str, progress_tracker: ProgressTr
     if quality_warnings:
         for warning in quality_warnings:
             logger.info(f"  Warning: {warning.field} - {warning.message} (severity: {warning.severity}, category: {warning.category})")
-    
+
     # Convert dataclass to dict for Pydantic, handling NaN values
     valuation_dict = asdict(valuation_result.breakdown)
     # Replace NaN with 0.0 for Pydantic validation
     for key, value in valuation_dict.items():
         if isinstance(value, float) and math.isnan(value):
             valuation_dict[key] = 0.0
-    
+
     # Convert weights to API model
     from app.api.models import AnalysisWeights as AnalysisWeightsModel
     weights_model = AnalysisWeightsModel(**weights.to_dict())
-    
+
     analysis = StockAnalysis(
         ticker=ticker.upper(),
         companyName=company_data.company_name,
@@ -580,7 +580,7 @@ async def _analyze_stock_with_progress(ticker: str, progress_tracker: ProgressTr
         reitMetrics=reit_metrics,
         insuranceMetrics=insurance_metrics
     )
-    
+
     return analysis
 
 
@@ -590,7 +590,7 @@ def _apply_manual_data(company_data, manual_data: dict):
         data_type = entry.get('data_type')
         period = entry.get('period')
         data = entry.get('data', {})
-        
+
         if data_type == 'income_statement':
             if period not in company_data.income_statement:
                 company_data.income_statement[period] = {}
@@ -618,21 +618,21 @@ def _apply_ai_extracted_data(company_data, ai_data: dict):
             if period not in company_data.income_statement:
                 company_data.income_statement[period] = {}
             company_data.income_statement[period].update(data)
-    
+
     # Apply balance sheet data
     if 'balance_sheet' in ai_data:
         for period, data in ai_data['balance_sheet'].items():
             if period not in company_data.balance_sheet:
                 company_data.balance_sheet[period] = {}
             company_data.balance_sheet[period].update(data)
-    
+
     # Apply cash flow data
     if 'cashflow' in ai_data:
         for period, data in ai_data['cashflow'].items():
             if period not in company_data.cashflow:
                 company_data.cashflow[period] = {}
             company_data.cashflow[period].update(data)
-    
+
     # Apply key metrics
     if 'key_metrics' in ai_data:
         logger.info(f"Found key_metrics in AI data: {ai_data['key_metrics']}")
@@ -655,8 +655,8 @@ def _apply_ai_extracted_data(company_data, ai_data: dict):
 
 @router.get("/analyze/{ticker}")
 async def analyze_stock(
-    ticker: str, 
-    stream: bool = Query(False, description="Stream progress updates"), 
+    ticker: str,
+    stream: bool = Query(False, description="Stream progress updates"),
     force_refresh: bool = Query(False, description="Force new analysis even if cached"),
     business_type: Optional[str] = Query(None, description="Business type preset (e.g., 'bank', 'reit', 'insurance')"),
     weights: Optional[str] = Query(None, description="JSON-encoded analysis weights")
@@ -674,18 +674,18 @@ async def analyze_stock(
         if ticker_upper.endswith(f'-{suffix}'):
             ticker = ticker_upper[:-len(suffix)-1] + '.' + suffix
             break
-    
+
     # Check database first (unless force_refresh is True)
     if not force_refresh:
         try:
             from app.database.db_service import DatabaseService
             from datetime import date, datetime
             db_service = DatabaseService(db_path="stock_analysis.db")
-            
+
             # First check if we have analysis for today
             today = date.today().isoformat()
             existing_analysis = db_service.get_analysis(ticker, today)
-            
+
             if existing_analysis and existing_analysis.get('status') == 'success':
                 logger.info(f"Found fresh analysis for {ticker} from today ({today}), returning cached result")
                 analysis_data = existing_analysis.get('analysis_data', {})
@@ -710,18 +710,18 @@ async def analyze_stock(
                     logger.info(f"Found analysis for {ticker} from {analysis_date}, but not from today ({today}). Running fresh analysis.")
                 else:
                     logger.info(f"No previous analysis found for {ticker}. Running fresh analysis.")
-                    
+
         except Exception as e:
             logger.warning(f"Error checking database for cached analysis: {e}, will run new analysis")
             import traceback
             logger.warning(traceback.format_exc())
-    
+
     if stream:
         # Stream progress via SSE
         async def generate() -> AsyncGenerator[str, None]:
             progress_queue = asyncio.Queue()
             progress_tracker = ProgressTracker(total_steps=10)
-            
+
             async def progress_callback(update: dict):
                 try:
                     await progress_queue.put(update)
@@ -730,22 +730,22 @@ async def analyze_stock(
                     logger.error(f"Error in progress callback: {e}")
                     import traceback
                     traceback.print_exc()
-            
+
             progress_tracker.set_callback(progress_callback)
-            
+
             # Send initial progress immediately
             initial_progress = {'type': 'progress', 'step': 0, 'total': 8, 'task': 'Initializing analysis...', 'progress': 0}
             yield f"data: {json.dumps(initial_progress)}\n\n"
             logger.info(f"Sent initial progress: {initial_progress}")  # Debug log
-            
+
             # Stream progress updates
             analysis_complete = False
             analysis_result = None
             analysis_error = None
-            
+
             # Small delay to ensure initial progress is sent and flushed
             await asyncio.sleep(0.2)
-            
+
             # Parse weights if provided
             analysis_weights_dict = None
             if weights:
@@ -753,13 +753,13 @@ async def analyze_stock(
                     analysis_weights_dict = json.loads(weights)
                 except json.JSONDecodeError:
                     logger.warning(f"Invalid weights JSON, ignoring: {weights}")
-            
+
             # Start analysis in background AFTER ensuring initial progress is sent
             logger.info(f"Starting analysis task for {ticker}")
             analysis_task = asyncio.create_task(
                 _analyze_stock_with_progress(ticker, progress_tracker, business_type, analysis_weights_dict)
             )
-            
+
             # Monitor analysis task
             async def monitor_analysis():
                 nonlocal analysis_complete, analysis_result, analysis_error
@@ -780,9 +780,9 @@ async def analyze_stock(
                     logger.error(f"Analysis error for {ticker}: {e}\n{error_traceback}")
                     analysis_error = f"Analysis failed: {str(e)}"
                     analysis_complete = True
-            
+
             monitor_task = asyncio.create_task(monitor_analysis())
-            
+
             # Stream progress and wait for completion
             last_progress_time = asyncio.get_event_loop().time()
             while not analysis_complete:
@@ -808,13 +808,13 @@ async def analyze_stock(
                         # Send a normal heartbeat to keep connection alive (every 2 seconds)
                         yield f"data: {json.dumps({'type': 'heartbeat'})}\n\n"
                     continue
-            
+
             # Wait for analysis to complete
             await monitor_task
-            
+
             # Debug logging
             logger.info(f"Analysis complete for {ticker}. Error: {analysis_error}, Result: {analysis_result is not None}")
-            
+
             # Save analysis to database if successful
             if analysis_result and not analysis_error:
                 try:
@@ -837,7 +837,7 @@ async def analyze_stock(
                     import traceback
                     logger.error(traceback.format_exc())
                     # Don't fail the request if database save fails
-            
+
             # Send final result
             if analysis_error:
                 error_data = {'type': 'error', 'message': analysis_error}
@@ -852,7 +852,7 @@ async def analyze_stock(
                     elif isinstance(obj, float) and (math.isnan(obj) or not math.isfinite(obj)):
                         return None
                     return obj
-                
+
                 result_data = analysis_result.model_dump(mode='json')
                 result_data = replace_nan(result_data)
                 complete_data = {'type': 'complete', 'data': result_data}
@@ -860,7 +860,7 @@ async def analyze_stock(
             else:
                 error_data = {'type': 'error', 'message': 'Analysis completed but no result returned'}
                 yield f"data: {json.dumps(error_data)}\n\n"
-        
+
         return StreamingResponse(generate(), media_type="text/event-stream")
     else:
         # Non-streaming response
@@ -871,10 +871,10 @@ async def analyze_stock(
                 analysis_weights_dict = json.loads(weights)
             except json.JSONDecodeError:
                 logger.warning(f"Invalid weights JSON, ignoring: {weights}")
-        
+
         progress_tracker = ProgressTracker(total_steps=10)
         analysis = await _analyze_stock_with_progress(ticker, progress_tracker, business_type, analysis_weights_dict)
-        
+
         # Save analysis to database
         if analysis:
             try:
@@ -897,7 +897,7 @@ async def analyze_stock(
                 import traceback
                 logger.error(traceback.format_exc())
                 # Don't fail the request if database save fails
-        
+
         return analysis
 
 
@@ -909,18 +909,18 @@ async def add_manual_data(entry: ManualDataEntry):
     """
     try:
         from app.database.db_service import DatabaseService
-        
+
         ticker_upper = entry.ticker.upper()
-        
+
         # Normalize period for key_metrics (should be 'latest')
         period = entry.period
         if entry.data_type == 'key_metrics':
             period = 'latest'
-        
+
         # Store in memory (for backward compatibility)
         if ticker_upper not in manual_data_store:
             manual_data_store[ticker_upper] = {}
-        
+
         entry_key = f"{entry.data_type}_{period}"
         manual_data_store[ticker_upper][entry_key] = {
             'ticker': ticker_upper,
@@ -928,7 +928,7 @@ async def add_manual_data(entry: ManualDataEntry):
             'period': period,
             'data': entry.data
         }
-        
+
         # Save to database (like PDF upload does)
         db_service = DatabaseService(db_path="stock_analysis.db")
         logger.info(f"Saving manual data for {ticker_upper}: data_type={entry.data_type}, period={period}, data_keys={list(entry.data.keys())}, data_values={entry.data}")
@@ -939,7 +939,7 @@ async def add_manual_data(entry: ManualDataEntry):
             data=entry.data,
             source='manual_entry'
         )
-        
+
         if save_success:
             # Verify the save by reading it back immediately
             saved_data = db_service.get_ai_extracted_data(ticker_upper, entry.data_type)
@@ -964,16 +964,16 @@ async def add_manual_data(entry: ManualDataEntry):
         else:
             logger.error(f"✗ FAILED to save manual data to database for {ticker_upper}!")
             logger.error(f"  Data that failed to save: data_type={entry.data_type}, period={period}, data={entry.data}")
-        
+
         # Count updated periods
         updated_periods = len(manual_data_store[ticker_upper])
-        
+
         # Build success message
         if save_success:
             message = f"Manual data added and saved successfully. {updated_periods} period(s) stored for {ticker_upper}."
         else:
             message = f"Manual data added (memory only). {updated_periods} period(s) stored for {ticker_upper}. Database save failed."
-        
+
         return ManualDataResponse(
             success=True,
             message=message,
@@ -998,15 +998,15 @@ async def extract_pdf_images(
         # Validate file type
         if not file.filename.lower().endswith('.pdf'):
             raise HTTPException(status_code=400, detail="Only PDF files are supported")
-        
+
         # Read PDF content
         pdf_bytes = await file.read()
         if len(pdf_bytes) == 0:
             raise HTTPException(status_code=400, detail="PDF file is empty")
-        
+
         if len(pdf_bytes) > 50 * 1024 * 1024:  # 50MB limit
             raise HTTPException(status_code=400, detail="PDF file too large (max 50MB)")
-        
+
         # Check if pdf2image is available
         try:
             from pdf2image import convert_from_bytes
@@ -1016,7 +1016,7 @@ async def extract_pdf_images(
                 status_code=400,
                 detail="PDF to image conversion requires pdf2image and Pillow. Install with: pip install pdf2image Pillow. Also install Poppler from https://github.com/oschwartz10612/poppler-windows/releases/"
             )
-        
+
         # Convert PDF pages to images
         try:
             images = convert_from_bytes(pdf_bytes, dpi=150)  # Lower DPI for faster processing and smaller images
@@ -1029,10 +1029,10 @@ async def extract_pdf_images(
                 )
             else:
                 raise HTTPException(status_code=400, detail=f"PDF to image conversion failed: {convert_error}")
-        
+
         if not images:
             raise HTTPException(status_code=400, detail="No images could be extracted from PDF. The PDF may be corrupted or empty.")
-        
+
         # Convert images to base64
         image_data = []
         for i, image in enumerate(images):
@@ -1041,7 +1041,7 @@ async def extract_pdf_images(
                 buffer = io.BytesIO()
                 image.save(buffer, format='PNG')
                 img_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
-                
+
                 image_data.append({
                     'page_number': i + 1,
                     'image_base64': f'data:image/png;base64,{img_base64}',
@@ -1051,14 +1051,14 @@ async def extract_pdf_images(
             except Exception as e:
                 logger.error(f"Failed to convert page {i+1} to base64: {e}")
                 continue
-        
+
         return JSONResponse(content={
             'success': True,
             'total_pages': len(images),
             'images': image_data,
             'message': f'Successfully extracted {len(image_data)} page(s) from PDF'
         })
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -1074,20 +1074,20 @@ async def _process_pdf_background(job_id: int, pdf_bytes: bytes, ticker: str, fi
     import os
     from app.database.db_service import DatabaseService
     db_service = DatabaseService(db_path="stock_analysis.db")
-    
+
     ticker_upper = ticker.upper()
-    
+
     try:
         # Update job: starting processing
         db_service.update_pdf_job(job_id, current_task="Initializing PDF processing...")
-        
+
         # Extract text and data from PDF (with OCR fallback for image-based PDFs)
         extractor = PDFExtractor()
-        
+
         # Get page count
         total_pages = extractor.get_pdf_page_count(pdf_bytes)
         db_service.update_pdf_job(job_id, total_pages=total_pages, current_task=f"PDF loaded: {total_pages} pages")
-        
+
         try:
             pdf_text = extractor.extract_text_from_pdf(pdf_bytes, use_ocr=True)
         except Exception as e:
@@ -1097,11 +1097,11 @@ async def _process_pdf_background(job_id: int, pdf_bytes: bytes, ticker: str, fi
                 return
             db_service.fail_pdf_job(job_id, f"Failed to extract text from PDF: {error_msg}")
             return
-        
+
         if not pdf_text or len(pdf_text.strip()) < 100:
             db_service.fail_pdf_job(job_id, "Could not extract text from PDF. File may be corrupted or image-based.")
             return
-        
+
         # Create progress callback to update job status
         def progress_callback(current_page: int, total: int):
             """Update job progress"""
@@ -1121,7 +1121,7 @@ async def _process_pdf_background(job_id: int, pdf_bytes: bytes, ticker: str, fi
                     )
             except Exception as e:
                 logger.warning(f"Failed to update job progress: {e}")
-        
+
         # Use LLM to extract financial data
         extraction_error = None
         extraction_error_type = None
@@ -1134,22 +1134,22 @@ async def _process_pdf_background(job_id: int, pdf_bytes: bytes, ticker: str, fi
             "error_message": None,
             "textract_enabled": extractor.use_textract if hasattr(extractor, 'use_textract') else False
         }
-        
+
         raw_llm_response = None
         try:
             logger.info(f"Starting extraction for {ticker_upper} (job {job_id})")
             db_service.update_pdf_job(job_id, current_task="Starting extraction...")
-            
+
             # Use per-page processing with progress callback
             extracted_data, raw_llm_response = await extractor.extract_financial_data_per_page(
                 pdf_bytes, ticker_upper, progress_callback=progress_callback
             )
-            
+
             logger.info(f"Extraction completed for {ticker_upper} (job {job_id})")
             extraction_details["extraction_method"] = "textract" if extractor.use_textract else "local_extraction"
-            
+
             # EC2 auto-stop no longer needed (using Textract instead)
-            
+
             if raw_llm_response:
                 extraction_details["raw_llm_response_preview"] = raw_llm_response[:2000] if len(raw_llm_response) > 2000 else raw_llm_response
                 extraction_details["raw_llm_response_length"] = len(raw_llm_response)
@@ -1191,13 +1191,13 @@ async def _process_pdf_background(job_id: int, pdf_bytes: bytes, ticker: str, fi
                 "cashflow": {},
                 "key_metrics": {}
             }
-        
+
         # Analyze extracted data
         income_statement = extracted_data.get('income_statement', {})
         balance_sheet = extracted_data.get('balance_sheet', {})
         cashflow = extracted_data.get('cashflow', {})
         key_metrics = extracted_data.get('key_metrics', {})
-        
+
         # Analyze PDF text for financial keywords to diagnose issues
         pdf_text_lower = pdf_text.lower()
         financial_keywords = {
@@ -1206,17 +1206,17 @@ async def _process_pdf_background(job_id: int, pdf_bytes: bytes, ticker: str, fi
             "cash_flow": ["operating cash flow", "cash from operations", "capital expenditures", "capex", "free cash flow", "financing activities"],
             "dates": ["2024", "2023", "2022", "fiscal year", "year ended", "quarter ended", "period ended"]
         }
-        
+
         # Check for financial keywords in PDF
         found_keywords = {}
         for category, keywords in financial_keywords.items():
             matches = [kw for kw in keywords if kw in pdf_text_lower]
             if matches:
                 found_keywords[category] = len(matches)
-        
+
         extraction_details["financial_keywords_detected"] = found_keywords
         extraction_details["pdf_contains_financial_data"] = len(found_keywords) > 0
-        
+
         # Analyze what the LLM actually returned
         llm_response_analysis = []
         if raw_llm_response:
@@ -1237,29 +1237,29 @@ async def _process_pdf_background(job_id: int, pdf_bytes: bytes, ticker: str, fi
                             llm_response_analysis.append(f"LLM returned {key} as {type(value).__name__}")
                 except:
                     llm_response_analysis.append(f"LLM response is not valid JSON structure")
-            
+
             # Show preview of what LLM said
             preview = raw_llm_response[:1000] if len(raw_llm_response) > 1000 else raw_llm_response
             extraction_details["raw_llm_response_preview"] = preview
-        
+
         extraction_details["llm_response_analysis"] = llm_response_analysis
-        
+
         total_periods = (
             (len(income_statement) if isinstance(income_statement, dict) else 0) +
             (len(balance_sheet) if isinstance(balance_sheet, dict) else 0) +
             (len(cashflow) if isinstance(cashflow, dict) else 0) +
             (1 if key_metrics and isinstance(key_metrics, dict) and len(key_metrics) > 0 else 0)
         )
-        
+
         extraction_details["income_statement_periods"] = len(income_statement) if isinstance(income_statement, dict) else 0
         extraction_details["balance_sheet_periods"] = len(balance_sheet) if isinstance(balance_sheet, dict) else 0
         extraction_details["cashflow_periods"] = len(cashflow) if isinstance(cashflow, dict) else 0
         extraction_details["has_key_metrics"] = bool(key_metrics and isinstance(key_metrics, dict) and len(key_metrics) > 0)
         extraction_details["total_periods_found"] = total_periods
-        
+
         # Store extracted data in database
         db_service.update_pdf_job(job_id, current_task="Saving extracted data to database...")
-        
+
         updated_periods = 0
         db_save_results = {
             'saved': 0,
@@ -1267,7 +1267,7 @@ async def _process_pdf_background(job_id: int, pdf_bytes: bytes, ticker: str, fi
             'verified': 0,
             'details': []
         }
-        
+
         # Process income statement data
         if income_statement and isinstance(income_statement, dict):
             for period, data in income_statement.items():
@@ -1287,7 +1287,7 @@ async def _process_pdf_background(job_id: int, pdf_bytes: bytes, ticker: str, fi
                 else:
                     db_save_results['failed'] += 1
                 updated_periods += 1
-        
+
         # Process balance sheet data
         if balance_sheet and isinstance(balance_sheet, dict):
             for period, data in balance_sheet.items():
@@ -1307,7 +1307,7 @@ async def _process_pdf_background(job_id: int, pdf_bytes: bytes, ticker: str, fi
                 else:
                     db_save_results['failed'] += 1
                 updated_periods += 1
-        
+
         # Process cash flow data
         if cashflow and isinstance(cashflow, dict):
             for period, data in cashflow.items():
@@ -1327,7 +1327,7 @@ async def _process_pdf_background(job_id: int, pdf_bytes: bytes, ticker: str, fi
                 else:
                     db_save_results['failed'] += 1
                 updated_periods += 1
-        
+
         # Process key metrics
         if 'key_metrics' in extracted_data and extracted_data['key_metrics']:
             save_success = db_service.save_ai_extracted_data(
@@ -1346,14 +1346,14 @@ async def _process_pdf_background(job_id: int, pdf_bytes: bytes, ticker: str, fi
             else:
                 db_save_results['failed'] += 1
             updated_periods += 1
-        
+
         extraction_details['database_save'] = db_save_results
-        
+
         # Build helpful diagnostics and recommendations (similar to sync endpoint)
         if updated_periods == 0:
             diagnostic_parts = []
             llm_response_analysis = extraction_details.get("llm_response_analysis", [])
-            
+
             # Check if PDF contains financial keywords
             if extraction_details.get("pdf_contains_financial_data"):
                 keywords_info = extraction_details.get("financial_keywords_detected", {})
@@ -1361,22 +1361,22 @@ async def _process_pdf_background(job_id: int, pdf_bytes: bytes, ticker: str, fi
                 diagnostic_parts.append(f"PDF text analysis: Financial keywords detected ({keyword_summary}), but LLM did not extract structured data.")
             else:
                 diagnostic_parts.append("PDF text analysis: No financial keywords detected. The PDF may not contain standard financial statements.")
-            
+
             # Check what LLM returned
             if llm_response_analysis:
                 diagnostic_parts.append(f"LLM response analysis: {'; '.join(llm_response_analysis)}")
-            
+
             # Check structure
             if income_statement == {} and balance_sheet == {} and cashflow == {} and not key_metrics:
                 diagnostic_parts.append("LLM returned empty objects for all financial statement types.")
             else:
                 diagnostic_parts.append(f"LLM returned partial structure: Income Statement ({extraction_details.get('income_statement_periods', 0)} periods), Balance Sheet ({extraction_details.get('balance_sheet_periods', 0)} periods), Cash Flow ({extraction_details.get('cashflow_periods', 0)} periods), Key Metrics ({'Yes' if extraction_details.get('has_key_metrics') else 'No'})")
-            
+
             # Add actionable recommendations
             if extraction_details.get("pdf_contains_financial_data") and updated_periods == 0:
                 # Textract-based extraction troubleshooting
                 textract_enabled = extraction_details.get("textract_enabled", False)
-                
+
                 if textract_enabled:
                     diagnostic_parts.append("RECOMMENDATION: PDF contains financial data but Textract extraction failed.")
                     diagnostic_parts.append("Troubleshooting steps:")
@@ -1393,16 +1393,16 @@ async def _process_pdf_background(job_id: int, pdf_bytes: bytes, ticker: str, fi
                     diagnostic_parts.append("  3. Ensure PDF has complete financial statements with clear labels")
             elif not extraction_details.get("pdf_contains_financial_data"):
                 diagnostic_parts.append("RECOMMENDATION: Upload a document with complete financial statements (10-K filing, annual report, or quarterly report with Income Statement, Balance Sheet, and Cash Flow sections).")
-            
+
             # Check PDF text quality
             if extraction_details["pdf_text_length"] < 500:
                 diagnostic_parts.append(f"PDF text is very short ({extraction_details['pdf_text_length']} characters). The PDF may be image-based or corrupted.")
             elif extraction_details["pdf_text_length"] < 1000:
                 diagnostic_parts.append(f"PDF text is short ({extraction_details['pdf_text_length']} characters). The document may not contain complete financial statements.")
-            
+
             extraction_details['diagnostics'] = diagnostic_parts
             extraction_details['llm_response_analysis'] = llm_response_analysis
-        
+
         # Build result message
         result = {
             "success": True,
@@ -1410,7 +1410,7 @@ async def _process_pdf_background(job_id: int, pdf_bytes: bytes, ticker: str, fi
             "extracted_data": extracted_data,
             "extraction_details": extraction_details
         }
-        
+
         # Complete job
         db_service.complete_pdf_job(
             job_id,
@@ -1418,7 +1418,7 @@ async def _process_pdf_background(job_id: int, pdf_bytes: bytes, ticker: str, fi
             extraction_details=extraction_details
         )
         logger.info(f"PDF processing completed for {ticker_upper} (job {job_id}): {updated_periods} periods extracted")
-        
+
     except Exception as e:
         import traceback
         error_traceback = traceback.format_exc()
@@ -1440,7 +1440,7 @@ async def upload_pdf(
         # Validate file type
         if not file.filename or not file.filename.lower().endswith('.pdf'):
             raise HTTPException(status_code=400, detail="Only PDF files are supported")
-        
+
         # Read PDF content
         try:
             pdf_bytes = await file.read()
@@ -1449,15 +1449,15 @@ async def upload_pdf(
             import traceback
             logger.error(f"Traceback: {traceback.format_exc()}")
             raise HTTPException(status_code=400, detail=f"Failed to read PDF file: {str(read_error)}")
-        
+
         if len(pdf_bytes) == 0:
             raise HTTPException(status_code=400, detail="PDF file is empty")
-        
+
         if len(pdf_bytes) > 50 * 1024 * 1024:  # 50MB limit
             raise HTTPException(status_code=400, detail="PDF file too large (max 50MB)")
-        
+
         ticker_upper = ticker.upper()
-        
+
         # Extract text and data from PDF (with OCR fallback for image-based PDFs)
         extractor = PDFExtractor()
         try:
@@ -1466,21 +1466,21 @@ async def upload_pdf(
             error_msg = str(e)
             if "OCR" in error_msg and "not installed" in error_msg:
                 raise HTTPException(
-                    status_code=400, 
+                    status_code=400,
                     detail=f"{error_msg}. For scanned PDFs, install OCR dependencies: pip install pytesseract pdf2image Pillow, and install Tesseract OCR from https://github.com/tesseract-ocr/tesseract"
                 )
             raise HTTPException(status_code=400, detail=f"Failed to extract text from PDF: {error_msg}")
-        
+
         if not pdf_text or len(pdf_text.strip()) < 100:
             raise HTTPException(
-                status_code=400, 
+                status_code=400,
                 detail="Could not extract text from PDF. File may be corrupted or image-based. OCR was attempted but may need Tesseract OCR installed. See server logs for details."
             )
-        
+
         # Llama-only mode: Check if Ollama is available
         import os
         logger.info(f"Using Textract for PDF extraction")
-        
+
         # Use LLM to extract financial data
         extraction_error = None
         extraction_error_type = None
@@ -1493,16 +1493,16 @@ async def upload_pdf(
             "error_message": None,
             "textract_enabled": extractor.use_textract if hasattr(extractor, 'use_textract') else False
         }
-        
+
         raw_llm_response = None
         try:
             logger.info(f"Starting extraction for {ticker_upper} (sync mode)")
             # Extract financial data (Textract processes entire PDF at once)
             extracted_data, raw_llm_response = await extractor.extract_financial_data_per_page(pdf_bytes, ticker_upper)
-            
+
             logger.info(f"Extraction completed for {ticker_upper}")
             extraction_details["extraction_method"] = "textract" if extractor.use_textract else "local_extraction"
-            
+
             if raw_llm_response:
                 extraction_details["raw_llm_response_preview"] = raw_llm_response[:2000] if len(raw_llm_response) > 2000 else raw_llm_response
                 extraction_details["raw_llm_response_length"] = len(raw_llm_response)
@@ -1548,7 +1548,7 @@ async def upload_pdf(
                 "cashflow": {},
                 "key_metrics": {}
             }
-        
+
         # Analyze PDF text for financial keywords to diagnose issues
         pdf_text_lower = pdf_text.lower()
         financial_keywords = {
@@ -1557,31 +1557,31 @@ async def upload_pdf(
             "cash_flow": ["operating cash flow", "cash from operations", "capital expenditures", "capex", "free cash flow", "financing activities"],
             "dates": ["2024", "2023", "2022", "fiscal year", "year ended", "quarter ended", "period ended"]
         }
-        
+
         # Analyze extracted data to determine why it might be empty
         income_statement = extracted_data.get('income_statement', {})
         balance_sheet = extracted_data.get('balance_sheet', {})
         cashflow = extracted_data.get('cashflow', {})
         key_metrics = extracted_data.get('key_metrics', {})
-        
+
         total_periods = (
             (len(income_statement) if isinstance(income_statement, dict) else 0) +
             (len(balance_sheet) if isinstance(balance_sheet, dict) else 0) +
             (len(cashflow) if isinstance(cashflow, dict) else 0) +
             (1 if key_metrics and isinstance(key_metrics, dict) and len(key_metrics) > 0 else 0)
         )
-        
+
         extraction_details["income_statement_periods"] = len(income_statement) if isinstance(income_statement, dict) else 0
         extraction_details["balance_sheet_periods"] = len(balance_sheet) if isinstance(balance_sheet, dict) else 0
         extraction_details["cashflow_periods"] = len(cashflow) if isinstance(cashflow, dict) else 0
         extraction_details["has_key_metrics"] = bool(key_metrics and isinstance(key_metrics, dict) and len(key_metrics) > 0)
         extraction_details["total_periods_found"] = total_periods
-        
+
         # Analyze what the LLM actually returned
         llm_response_analysis = extraction_details.get("llm_response_analysis", [])
         if not llm_response_analysis:
             llm_response_analysis = []
-        
+
         if raw_llm_response:
             extraction_details["raw_llm_response_length"] = len(raw_llm_response)
             # Check if LLM returned empty objects
@@ -1600,50 +1600,50 @@ async def upload_pdf(
                             llm_response_analysis.append(f"LLM returned {key} as {type(value).__name__}")
                 except:
                     llm_response_analysis.append(f"LLM response is not valid JSON structure")
-            
+
             # Show preview of what LLM said
             preview = raw_llm_response[:1000] if len(raw_llm_response) > 1000 else raw_llm_response
             extraction_details["raw_llm_response_preview"] = preview
             extraction_details["llm_response_analysis"] = llm_response_analysis
-        
+
         # Check for financial keywords in PDF
         found_keywords = {}
         for category, keywords in financial_keywords.items():
             matches = [kw for kw in keywords if kw in pdf_text_lower]
             if matches:
                 found_keywords[category] = len(matches)
-        
+
         extraction_details["financial_keywords_detected"] = found_keywords
         extraction_details["pdf_contains_financial_data"] = len(found_keywords) > 0
-        
+
         # Log extracted data for debugging
         logger.info(f"Extracted data for {ticker_upper}: {json.dumps(extracted_data, indent=2, default=str)}")
         logger.info(f"Extracted data keys: {list(extracted_data.keys())}")
         logger.info(f"Income statement periods: {len(income_statement) if isinstance(income_statement, dict) else 0}")
         logger.info(f"Balance sheet periods: {len(balance_sheet) if isinstance(balance_sheet, dict) else 0}")
         logger.info(f"Cashflow periods: {len(cashflow) if isinstance(cashflow, dict) else 0}")
-        
+
         # Note: raw_llm_response is already set from the extraction call above
         # If it wasn't set, try to get it from extraction_details
         if not raw_llm_response and extraction_details.get("raw_llm_response_preview"):
             # Try to reconstruct from preview if available
             raw_llm_response = extraction_details.get("raw_llm_response_preview", "")
-        
+
         if total_periods == 0 and not extraction_error and not raw_llm_response:
             # Fallback: serialize extracted_data if we don't have raw response
             raw_llm_response = json.dumps(extracted_data, indent=2, default=str)
             logger.warning(f"LLM returned data structure but no periods extracted. Using serialized extracted_data as fallback.")
             if len(raw_llm_response) > 0:
                 extraction_details["raw_llm_response_preview"] = raw_llm_response[:1000]  # First 1000 chars for debugging
-        
+
         # Store extracted data in both in-memory store (for backward compatibility) and database
         if ticker_upper not in manual_data_store:
             manual_data_store[ticker_upper] = {}
-        
+
         # Also save to database for persistence
         from app.database.db_service import DatabaseService
         db_service = DatabaseService(db_path="stock_analysis.db")
-        
+
         updated_periods = 0
         db_save_results = {
             'saved': 0,
@@ -1651,7 +1651,7 @@ async def upload_pdf(
             'verified': 0,
             'details': []
         }
-        
+
         # Process income statement data
         if income_statement and isinstance(income_statement, dict):
             for period, data in income_statement.items():
@@ -1685,7 +1685,7 @@ async def upload_pdf(
                     db_save_results['failed'] += 1
                     db_save_results['details'].append(f"Income Statement {period}: Save failed ✗")
                 updated_periods += 1
-        
+
         # Process balance sheet data
         if balance_sheet and isinstance(balance_sheet, dict):
             for period, data in balance_sheet.items():
@@ -1719,7 +1719,7 @@ async def upload_pdf(
                     db_save_results['failed'] += 1
                     db_save_results['details'].append(f"Balance Sheet {period}: Save failed ✗")
                 updated_periods += 1
-        
+
         # Process cash flow data
         if cashflow and isinstance(cashflow, dict):
             for period, data in cashflow.items():
@@ -1753,7 +1753,7 @@ async def upload_pdf(
                     db_save_results['failed'] += 1
                     db_save_results['details'].append(f"Cash Flow {period}: Save failed ✗")
                 updated_periods += 1
-        
+
         # Process key metrics
         if 'key_metrics' in extracted_data and extracted_data['key_metrics']:
             # Store key metrics with a special period
@@ -1787,11 +1787,11 @@ async def upload_pdf(
                 db_save_results['failed'] += 1
                 db_save_results['details'].append(f"Key Metrics: Save failed ✗")
             updated_periods += 1
-        
+
         # Add database save results to extraction details
         extraction_details['database_save'] = db_save_results
         logger.info(f"Database save results for {ticker_upper}: {db_save_results['saved']} saved, {db_save_results['verified']} verified, {db_save_results['failed']} failed")
-        
+
         # Add database save feedback to message
         db_feedback = ""
         if db_save_results['saved'] > 0:
@@ -1803,12 +1803,12 @@ async def upload_pdf(
                 db_feedback = f"\n\n⚠️ Database: {db_save_results['saved']} period(s) saved but verification incomplete for {ticker_upper}."
         elif db_save_results['failed'] > 0:
             db_feedback = f"\n\n❌ Database: Failed to save {db_save_results['failed']} data period(s) for {ticker_upper}."
-        
+
         # Create appropriate message with specific feedback
         if updated_periods == 0:
             # Build detailed error message
             error_parts = []
-            
+
             # Llama-only mode: Check if Ollama is running
             llama_url = os.getenv("LLAMA_API_URL", "http://localhost:11434")
             if extraction_error_type == "validation_error":
@@ -1824,11 +1824,11 @@ async def upload_pdf(
                     error_parts.append(f"LLM API error: {extraction_error}")
             elif extraction_error:
                 error_parts.append(f"Extraction error: {extraction_error}")
-            
+
             # Analyze what went wrong with specific diagnostics
             if total_periods == 0:
                 diagnostic_parts = []
-                
+
                 # Check if PDF contains financial keywords
                 if extraction_details.get("pdf_contains_financial_data"):
                     keywords_info = extraction_details.get("financial_keywords_detected", {})
@@ -1836,32 +1836,32 @@ async def upload_pdf(
                     diagnostic_parts.append(f"PDF text analysis: Financial keywords detected ({keyword_summary}), but LLM did not extract structured data.")
                 else:
                     diagnostic_parts.append("PDF text analysis: No financial keywords detected. The PDF may not contain standard financial statements.")
-                
+
                 # Check what LLM returned
                 provider_name = extraction_details.get("llm_provider", "unknown").upper()
                 if llm_response_analysis:
                     diagnostic_parts.append(f"LLM response analysis ({provider_name}): {'; '.join(llm_response_analysis)}")
-                
+
                 # Check raw LLM response
                 if raw_llm_response:
                     preview = raw_llm_response[:500].replace('\n', ' ').replace('\r', ' ')
                     provider_name = extraction_details.get("llm_provider", "unknown").upper()
                     diagnostic_parts.append(f"LLM raw response preview ({provider_name}): {preview}...")
-                
+
                 # Check structure
                 provider_name = extraction_details.get("llm_provider", "unknown").upper()
                 if income_statement == {} and balance_sheet == {} and cashflow == {} and not key_metrics:
                     diagnostic_parts.append(f"LLM ({provider_name}) returned empty objects for all financial statement types.")
                 else:
                     diagnostic_parts.append(f"LLM ({provider_name}) returned partial structure: Income Statement ({extraction_details['income_statement_periods']} periods), Balance Sheet ({extraction_details['balance_sheet_periods']} periods), Cash Flow ({extraction_details['cashflow_periods']} periods), Key Metrics ({'Yes' if extraction_details.get('has_key_metrics') else 'No'})")
-                
+
                 # Add actionable advice
                 provider_name = extraction_details.get("llm_provider", "unknown").upper()
                 if extraction_details.get("pdf_contains_financial_data") and total_periods == 0:
                     # Llama-only mode: All extractions use Llama
                     # Textract-based extraction troubleshooting
                     textract_enabled = extraction_details.get("textract_enabled", False)
-                    
+
                     if textract_enabled:
                         diagnostic_parts.append("RECOMMENDATION: PDF contains financial data but Textract extraction failed.")
                         diagnostic_parts.append("Troubleshooting: (1) Check AWS Textract IAM permissions, (2) Verify AWS credentials, (3) Ensure PDF has complete financial statements, (4) Verify document format matches 10-K/annual report structure")
@@ -1870,18 +1870,18 @@ async def upload_pdf(
                         diagnostic_parts.append("Troubleshooting: (1) Enable Textract (USE_TEXTRACT=true), (2) Configure AWS credentials, (3) Ensure PDF has complete financial statements")
                 elif not extraction_details.get("pdf_contains_financial_data"):
                     diagnostic_parts.append("RECOMMENDATION: Upload a document with complete financial statements (10-K filing, annual report, or quarterly report with Income Statement, Balance Sheet, and Cash Flow sections).")
-                
+
                 error_parts.extend(diagnostic_parts)
-            
+
             # Check PDF text quality
             if extraction_details["pdf_text_length"] < 500:
                 error_parts.append(f"PDF text is very short ({extraction_details['pdf_text_length']} characters). The PDF may be image-based or corrupted.")
             elif extraction_details["pdf_text_length"] < 1000:
                 error_parts.append(f"PDF text is short ({extraction_details['pdf_text_length']} characters). The document may not contain complete financial statements.")
-            
+
             if not error_parts:
                 error_parts.append("No financial data could be extracted. The PDF may not contain standard financial statements or the format may not be recognized.")
-            
+
             # Format diagnostics with better structure
             if len(error_parts) > 1:
                 error_message = "\n".join([f"• {part}" for part in error_parts])
@@ -1890,7 +1890,7 @@ async def upload_pdf(
             message = f"PDF processed successfully! Extracted {updated_periods} data period(s) for {ticker_upper}.\n\nDiagnostics:\n{error_message}{db_feedback}"
         else:
             message = f"PDF processed successfully! Extracted {updated_periods} data period(s) for {ticker_upper}. The analysis will be updated automatically.{db_feedback}"
-        
+
         return ManualDataResponse(
             success=True,
             message=message,
@@ -1917,11 +1917,11 @@ async def get_pdf_job_status(job_id: int):
     """
     from app.database.db_service import DatabaseService
     db_service = DatabaseService(db_path="stock_analysis.db")
-    
+
     job = db_service.get_pdf_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail=f"PDF job {job_id} not found")
-    
+
     return PDFJobStatusResponse(**job)
 
 
@@ -1939,7 +1939,7 @@ async def upload_pdf_sync(
         # Validate file type
         if not file.filename or not file.filename.lower().endswith('.pdf'):
             raise HTTPException(status_code=400, detail="Only PDF files are supported")
-        
+
         # Read PDF content
         try:
             pdf_bytes = await file.read()
@@ -1948,15 +1948,15 @@ async def upload_pdf_sync(
             import traceback
             logger.error(f"Traceback: {traceback.format_exc()}")
             raise HTTPException(status_code=400, detail=f"Failed to read PDF file: {str(read_error)}")
-        
+
         if len(pdf_bytes) == 0:
             raise HTTPException(status_code=400, detail="PDF file is empty")
-        
+
         if len(pdf_bytes) > 50 * 1024 * 1024:  # 50MB limit
             raise HTTPException(status_code=400, detail="PDF file too large (max 50MB)")
-        
+
         ticker_upper = ticker.upper()
-        
+
         # Extract text and data from PDF (with OCR fallback for image-based PDFs)
         extractor = PDFExtractor()
         try:
@@ -1965,21 +1965,21 @@ async def upload_pdf_sync(
             error_msg = str(e)
             if "OCR" in error_msg and "not installed" in error_msg:
                 raise HTTPException(
-                    status_code=400, 
+                    status_code=400,
                     detail=f"{error_msg}. For scanned PDFs, install OCR dependencies: pip install pytesseract pdf2image Pillow, and install Tesseract OCR from https://github.com/tesseract-ocr/tesseract"
                 )
             raise HTTPException(status_code=400, detail=f"Failed to extract text from PDF: {error_msg}")
-        
+
         if not pdf_text or len(pdf_text.strip()) < 100:
             raise HTTPException(
-                status_code=400, 
+                status_code=400,
                 detail="Could not extract text from PDF. File may be corrupted or image-based. OCR was attempted but may need Tesseract OCR installed. See server logs for details."
             )
-        
+
         # Llama-only mode: Check if Ollama is available
         import os
         logger.info(f"Using Textract for PDF extraction")
-        
+
         # Use LLM to extract financial data
         extraction_error = None
         extraction_error_type = None
@@ -1992,7 +1992,7 @@ async def upload_pdf_sync(
             "error_message": None,
             "textract_enabled": extractor.use_textract if hasattr(extractor, 'use_textract') else False
         }
-        
+
         raw_llm_response = None
         try:
             logger.info(f"Starting LLM extraction for {ticker_upper} using Llama-only mode")
@@ -2000,7 +2000,7 @@ async def upload_pdf_sync(
             extracted_data, raw_llm_response = await extractor.extract_financial_data_per_page(pdf_bytes, ticker_upper)
             logger.info(f"LLM extraction completed successfully for {ticker_upper} (concurrent per-page processing)")
             extraction_details["extraction_method"] = "textract" if extractor.use_textract else "local_extraction"
-            
+
             # Record activity for auto-stop after processing completes
             if extractor.auto_start_ec2 and extractor._ec2_manager:
                 extractor._ec2_manager.record_activity()
@@ -2050,7 +2050,7 @@ async def upload_pdf_sync(
                 "cashflow": {},
                 "key_metrics": {}
             }
-        
+
         # Analyze PDF text for financial keywords to diagnose issues
         pdf_text_lower = pdf_text.lower()
         financial_keywords = {
@@ -2059,31 +2059,31 @@ async def upload_pdf_sync(
             "cash_flow": ["operating cash flow", "cash from operations", "capital expenditures", "capex", "free cash flow", "financing activities"],
             "dates": ["2024", "2023", "2022", "fiscal year", "year ended", "quarter ended", "period ended"]
         }
-        
+
         # Analyze extracted data to determine why it might be empty
         income_statement = extracted_data.get('income_statement', {})
         balance_sheet = extracted_data.get('balance_sheet', {})
         cashflow = extracted_data.get('cashflow', {})
         key_metrics = extracted_data.get('key_metrics', {})
-        
+
         total_periods = (
             (len(income_statement) if isinstance(income_statement, dict) else 0) +
             (len(balance_sheet) if isinstance(balance_sheet, dict) else 0) +
             (len(cashflow) if isinstance(cashflow, dict) else 0) +
             (1 if key_metrics and isinstance(key_metrics, dict) and len(key_metrics) > 0 else 0)
         )
-        
+
         extraction_details["income_statement_periods"] = len(income_statement) if isinstance(income_statement, dict) else 0
         extraction_details["balance_sheet_periods"] = len(balance_sheet) if isinstance(balance_sheet, dict) else 0
         extraction_details["cashflow_periods"] = len(cashflow) if isinstance(cashflow, dict) else 0
         extraction_details["has_key_metrics"] = bool(key_metrics and isinstance(key_metrics, dict) and len(key_metrics) > 0)
         extraction_details["total_periods_found"] = total_periods
-        
+
         # Analyze what the LLM actually returned
         llm_response_analysis = extraction_details.get("llm_response_analysis", [])
         if not llm_response_analysis:
             llm_response_analysis = []
-        
+
         if raw_llm_response:
             extraction_details["raw_llm_response_length"] = len(raw_llm_response)
             # Check if LLM returned empty objects
@@ -2102,50 +2102,50 @@ async def upload_pdf_sync(
                             llm_response_analysis.append(f"LLM returned {key} as {type(value).__name__}")
                 except:
                     llm_response_analysis.append(f"LLM response is not valid JSON structure")
-            
+
             # Show preview of what LLM said
             preview = raw_llm_response[:1000] if len(raw_llm_response) > 1000 else raw_llm_response
             extraction_details["raw_llm_response_preview"] = preview
             extraction_details["llm_response_analysis"] = llm_response_analysis
-        
+
         # Check for financial keywords in PDF
         found_keywords = {}
         for category, keywords in financial_keywords.items():
             matches = [kw for kw in keywords if kw in pdf_text_lower]
             if matches:
                 found_keywords[category] = len(matches)
-        
+
         extraction_details["financial_keywords_detected"] = found_keywords
         extraction_details["pdf_contains_financial_data"] = len(found_keywords) > 0
-        
+
         # Log extracted data for debugging
         logger.info(f"Extracted data for {ticker_upper}: {json.dumps(extracted_data, indent=2, default=str)}")
         logger.info(f"Extracted data keys: {list(extracted_data.keys())}")
         logger.info(f"Income statement periods: {len(income_statement) if isinstance(income_statement, dict) else 0}")
         logger.info(f"Balance sheet periods: {len(balance_sheet) if isinstance(balance_sheet, dict) else 0}")
         logger.info(f"Cashflow periods: {len(cashflow) if isinstance(cashflow, dict) else 0}")
-        
+
         # Note: raw_llm_response is already set from the extraction call above
         # If it wasn't set, try to get it from extraction_details
         if not raw_llm_response and extraction_details.get("raw_llm_response_preview"):
             # Try to reconstruct from preview if available
             raw_llm_response = extraction_details.get("raw_llm_response_preview", "")
-        
+
         if total_periods == 0 and not extraction_error and not raw_llm_response:
             # Fallback: serialize extracted_data if we don't have raw response
             raw_llm_response = json.dumps(extracted_data, indent=2, default=str)
             logger.warning(f"LLM returned data structure but no periods extracted. Using serialized extracted_data as fallback.")
             if len(raw_llm_response) > 0:
                 extraction_details["raw_llm_response_preview"] = raw_llm_response[:1000]  # First 1000 chars for debugging
-        
+
         # Store extracted data in both in-memory store (for backward compatibility) and database
         if ticker_upper not in manual_data_store:
             manual_data_store[ticker_upper] = {}
-        
+
         # Also save to database for persistence
         from app.database.db_service import DatabaseService
         db_service = DatabaseService(db_path="stock_analysis.db")
-        
+
         updated_periods = 0
         db_save_results = {
             'saved': 0,
@@ -2153,7 +2153,7 @@ async def upload_pdf_sync(
             'verified': 0,
             'details': []
         }
-        
+
         # Process income statement data
         if income_statement and isinstance(income_statement, dict):
             for period, data in income_statement.items():
@@ -2187,7 +2187,7 @@ async def upload_pdf_sync(
                     db_save_results['failed'] += 1
                     db_save_results['details'].append(f"Income Statement {period}: Save failed ✗")
                 updated_periods += 1
-        
+
         # Process balance sheet data
         if balance_sheet and isinstance(balance_sheet, dict):
             for period, data in balance_sheet.items():
@@ -2221,7 +2221,7 @@ async def upload_pdf_sync(
                     db_save_results['failed'] += 1
                     db_save_results['details'].append(f"Balance Sheet {period}: Save failed ✗")
                 updated_periods += 1
-        
+
         # Process cash flow data
         if cashflow and isinstance(cashflow, dict):
             for period, data in cashflow.items():
@@ -2255,7 +2255,7 @@ async def upload_pdf_sync(
                     db_save_results['failed'] += 1
                     db_save_results['details'].append(f"Cash Flow {period}: Save failed ✗")
                 updated_periods += 1
-        
+
         # Process key metrics
         if 'key_metrics' in extracted_data and extracted_data['key_metrics']:
             # Store key metrics with a special period
@@ -2289,11 +2289,11 @@ async def upload_pdf_sync(
                 db_save_results['failed'] += 1
                 db_save_results['details'].append(f"Key Metrics: Save failed ✗")
             updated_periods += 1
-        
+
         # Add database save results to extraction details
         extraction_details['database_save'] = db_save_results
         logger.info(f"Database save results for {ticker_upper}: {db_save_results['saved']} saved, {db_save_results['verified']} verified, {db_save_results['failed']} failed")
-        
+
         # Add database save feedback to message
         db_feedback = ""
         if db_save_results['saved'] > 0:
@@ -2305,12 +2305,12 @@ async def upload_pdf_sync(
                 db_feedback = f"\n\n⚠️ Database: {db_save_results['saved']} period(s) saved but verification incomplete for {ticker_upper}."
         elif db_save_results['failed'] > 0:
             db_feedback = f"\n\n❌ Database: Failed to save {db_save_results['failed']} data period(s) for {ticker_upper}."
-        
+
         # Create appropriate message with specific feedback
         if updated_periods == 0:
             # Build detailed error message
             error_parts = []
-            
+
             # Llama-only mode: Check if Ollama is running
             llama_url = os.getenv("LLAMA_API_URL", "http://localhost:11434")
             if extraction_error_type == "validation_error":
@@ -2326,11 +2326,11 @@ async def upload_pdf_sync(
                     error_parts.append(f"LLM API error: {extraction_error}")
             elif extraction_error:
                 error_parts.append(f"Extraction error: {extraction_error}")
-            
+
             # Analyze what went wrong with specific diagnostics
             if total_periods == 0:
                 diagnostic_parts = []
-                
+
                 # Check if PDF contains financial keywords
                 if extraction_details.get("pdf_contains_financial_data"):
                     keywords_info = extraction_details.get("financial_keywords_detected", {})
@@ -2338,32 +2338,32 @@ async def upload_pdf_sync(
                     diagnostic_parts.append(f"PDF text analysis: Financial keywords detected ({keyword_summary}), but LLM did not extract structured data.")
                 else:
                     diagnostic_parts.append("PDF text analysis: No financial keywords detected. The PDF may not contain standard financial statements.")
-                
+
                 # Check what LLM returned
                 provider_name = extraction_details.get("llm_provider", "unknown").upper()
                 if llm_response_analysis:
                     diagnostic_parts.append(f"LLM response analysis ({provider_name}): {'; '.join(llm_response_analysis)}")
-                
+
                 # Check raw LLM response
                 if raw_llm_response:
                     preview = raw_llm_response[:500].replace('\n', ' ').replace('\r', ' ')
                     provider_name = extraction_details.get("llm_provider", "unknown").upper()
                     diagnostic_parts.append(f"LLM raw response preview ({provider_name}): {preview}...")
-                
+
                 # Check structure
                 provider_name = extraction_details.get("llm_provider", "unknown").upper()
                 if income_statement == {} and balance_sheet == {} and cashflow == {} and not key_metrics:
                     diagnostic_parts.append(f"LLM ({provider_name}) returned empty objects for all financial statement types.")
                 else:
                     diagnostic_parts.append(f"LLM ({provider_name}) returned partial structure: Income Statement ({extraction_details['income_statement_periods']} periods), Balance Sheet ({extraction_details['balance_sheet_periods']} periods), Cash Flow ({extraction_details['cashflow_periods']} periods), Key Metrics ({'Yes' if extraction_details.get('has_key_metrics') else 'No'})")
-                
+
                 # Add actionable advice
                 provider_name = extraction_details.get("llm_provider", "unknown").upper()
                 if extraction_details.get("pdf_contains_financial_data") and total_periods == 0:
                     # Llama-only mode: All extractions use Llama
                     # Textract-based extraction troubleshooting
                     textract_enabled = extraction_details.get("textract_enabled", False)
-                    
+
                     if textract_enabled:
                         diagnostic_parts.append("RECOMMENDATION: PDF contains financial data but Textract extraction failed.")
                         diagnostic_parts.append("Troubleshooting: (1) Check AWS Textract IAM permissions, (2) Verify AWS credentials, (3) Ensure PDF has complete financial statements, (4) Verify document format matches 10-K/annual report structure")
@@ -2372,18 +2372,18 @@ async def upload_pdf_sync(
                         diagnostic_parts.append("Troubleshooting: (1) Enable Textract (USE_TEXTRACT=true), (2) Configure AWS credentials, (3) Ensure PDF has complete financial statements")
                 elif not extraction_details.get("pdf_contains_financial_data"):
                     diagnostic_parts.append("RECOMMENDATION: Upload a document with complete financial statements (10-K filing, annual report, or quarterly report with Income Statement, Balance Sheet, and Cash Flow sections).")
-                
+
                 error_parts.extend(diagnostic_parts)
-            
+
             # Check PDF text quality
             if extraction_details["pdf_text_length"] < 500:
                 error_parts.append(f"PDF text is very short ({extraction_details['pdf_text_length']} characters). The PDF may be image-based or corrupted.")
             elif extraction_details["pdf_text_length"] < 1000:
                 error_parts.append(f"PDF text is short ({extraction_details['pdf_text_length']} characters). The document may not contain complete financial statements.")
-            
+
             if not error_parts:
                 error_parts.append("No financial data could be extracted. The PDF may not contain standard financial statements or the format may not be recognized.")
-            
+
             # Format diagnostics with better structure
             if len(error_parts) > 1:
                 error_message = "\n".join([f"• {part}" for part in error_parts])
@@ -2392,7 +2392,7 @@ async def upload_pdf_sync(
             message = f"PDF processed successfully! Extracted {updated_periods} data period(s) for {ticker_upper}.\n\nDiagnostics:\n{error_message}{db_feedback}"
         else:
             message = f"PDF processed successfully! Extracted {updated_periods} data period(s) for {ticker_upper}. The analysis will be updated automatically.{db_feedback}"
-        
+
         return ManualDataResponse(
             success=True,
             message=message,
@@ -2420,16 +2420,16 @@ async def check_ai_data(ticker: str):
     try:
         from app.database.db_service import DatabaseService
         db_service = DatabaseService(db_path="stock_analysis.db")
-        
+
         has_data = db_service.has_ai_extracted_data(ticker)
         ai_data = db_service.get_ai_extracted_data(ticker) if has_data else {}
-        
+
         # Count periods
         income_periods = len(ai_data.get('income_statement', {}))
         balance_periods = len(ai_data.get('balance_sheet', {}))
         cashflow_periods = len(ai_data.get('cashflow', {}))
         has_key_metrics = 'key_metrics' in ai_data and bool(ai_data['key_metrics'])
-        
+
         return {
             "ticker": ticker.upper(),
             "has_ai_data": has_data,
@@ -2454,10 +2454,10 @@ async def get_quote(ticker: str):
     try:
         data_fetcher = DataFetcher()
         company_data = await data_fetcher.fetch_company_data(ticker)
-        
+
         if not company_data:
             raise HTTPException(status_code=404, detail=f"Ticker {ticker} not found")
-        
+
         return QuoteResponse(
             ticker=ticker.upper(),
             companyName=company_data.company_name,
@@ -2481,21 +2481,21 @@ async def compare_stocks(request: CompareRequest):
             # Fetch data
             data_fetcher = DataFetcher()
             company_data = await data_fetcher.fetch_company_data(ticker)
-            
+
             if not company_data:
                 continue
-            
+
             # Apply manual data if available (in-memory store - backward compatibility)
             if ticker.upper() in manual_data_store:
                 manual_data = manual_data_store[ticker.upper()]
                 _apply_manual_data(company_data, manual_data)
-            
+
             # Also load AI-extracted data from database
             try:
                 from app.database.db_service import DatabaseService
                 db_service = DatabaseService(db_path="stock_analysis.db")
                 ai_data = db_service.get_ai_extracted_data(ticker)
-                
+
                 if ai_data:
                     # Apply AI-extracted data to company_data
                     _apply_ai_extracted_data(company_data, ai_data)
@@ -2503,22 +2503,22 @@ async def compare_stocks(request: CompareRequest):
             except Exception as e:
                 logger.warning(f"Error loading AI-extracted data from database for {ticker}: {e}")
                 # Continue without AI data if database load fails
-            
+
             # Get risk-free rate
             risk_free_rate = data_fetcher.get_risk_free_rate()
-            
+
             # Calculate intrinsic value
             intrinsic_calc = IntrinsicValueCalculator(company_data, risk_free_rate)
             valuation_result = intrinsic_calc.calculate()
-            
+
             # Analyze financial health
             health_analyzer = FinancialHealthAnalyzer(company_data)
             health_result = health_analyzer.analyze()
-            
+
             # Analyze business quality
             quality_analyzer = BusinessQualityAnalyzer(company_data)
             quality_result = quality_analyzer.analyze()
-            
+
             # Calculate margin of safety
             margin_calc = MarginOfSafetyCalculator(
                 current_price=company_data.current_price,
@@ -2530,19 +2530,19 @@ async def compare_stocks(request: CompareRequest):
                 beta=company_data.beta or 1.0,
                 market_cap=company_data.market_cap
             )
-            
+
             # Build analysis
             from datetime import datetime
             from dataclasses import asdict
             import math
-            
+
             # Convert dataclass to dict for Pydantic, handling NaN values
             valuation_dict = asdict(valuation_result.breakdown)
             # Replace NaN with 0.0 for Pydantic validation
             for key, value in valuation_dict.items():
                 if isinstance(value, float) and math.isnan(value):
                     valuation_dict[key] = 0.0
-            
+
             analysis = StockAnalysis(
                 ticker=ticker.upper(),
                 companyName=company_data.company_name,
@@ -2558,11 +2558,11 @@ async def compare_stocks(request: CompareRequest):
                 businessQuality=quality_result,
                 timestamp=datetime.now()
             )
-            
+
             analyses.append(analysis)
-        
+
         return CompareResponse(analyses=analyses)
-        
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -2581,14 +2581,14 @@ async def batch_analyze_stocks(request: BatchAnalysisRequest):
     """
     # Import here to avoid circular import
     from app.api.batch_analysis import BatchAnalyzer
-    
+
     try:
         if not request.tickers or len(request.tickers) == 0:
             raise HTTPException(status_code=400, detail="Tickers list cannot be empty")
-        
+
         if len(request.tickers) > 1000:
             raise HTTPException(status_code=400, detail="Maximum 1000 tickers per batch")
-        
+
         # Create batch analyzer
         analyzer = BatchAnalyzer(
             max_concurrent=5,
@@ -2599,11 +2599,11 @@ async def batch_analyze_stocks(request: BatchAnalysisRequest):
             dynamodb_table="stock-analyses",
             dynamodb_region="us-east-1"
         )
-        
+
         # Run analysis
         from datetime import date
         analysis_date = date.today().isoformat()
-        
+
         summary = await analyzer.analyze_ticker_list(
             tickers=request.tickers,
             exchange_name=request.exchange_name,
@@ -2611,13 +2611,13 @@ async def batch_analyze_stocks(request: BatchAnalysisRequest):
             skip_existing=request.skip_existing,
             analysis_date=analysis_date
         )
-        
+
         return {
             "success": True,
             "summary": summary,
             "message": f"Batch analysis completed. Processed {summary.get('successful', 0)} tickers successfully, {summary.get('failed', 0)} failed."
         }
-        
+
     except HTTPException:
         # Re-raise HTTP exceptions as-is (they'll be handled by exception handler with CORS)
         raise
@@ -2643,10 +2643,10 @@ async def get_batch_results(
         from datetime import date
         from app.database.db_service import DatabaseService
         import os
-        
+
         if analysis_date is None:
             analysis_date = date.today().isoformat()
-        
+
         # Initialize database service
         use_dynamodb = os.getenv('USE_DYNAMODB', 'false').lower() == 'true'
         if use_dynamodb:
@@ -2657,12 +2657,12 @@ async def get_batch_results(
             )
         else:
             db_service = DatabaseService(db_path="stock_analysis.db")
-        
+
         # Get all analyses for this exchange and date
         print(f"Fetching batch results for exchange: {exchange}, date: {analysis_date}")
         analyses = db_service.get_exchange_analyses(exchange, analysis_date)
         print(f"Found {len(analyses)} analyses for exchange '{exchange}'")
-        
+
         # Debug: If no results, try to see what exchanges exist
         if len(analyses) == 0:
             print(f"Warning: No analyses found for exchange '{exchange}' on {analysis_date}")
@@ -2678,7 +2678,7 @@ async def get_batch_results(
                     ).all()
                     exchanges_list = [e[0] for e in existing_exchanges if e[0]]
                     print(f"Available exchanges in database for {analysis_date}: {exchanges_list}")
-                    
+
                     # If exchange is 'Custom' and no results, try getting all analyses for today (in case exchange wasn't set)
                     if exchange.lower() == 'custom':
                         print("Trying to get all analyses for today (exchange may be NULL or different)")
@@ -2689,7 +2689,7 @@ async def get_batch_results(
                         print(f"Found {len(all_analyses)} total analyses for date {analysis_date}")
                         # Filter to only include those with NULL exchange or 'Custom' exchange
                         filtered_analyses = [
-                            a for a in all_analyses 
+                            a for a in all_analyses
                             if not a.exchange or a.exchange.lower() == 'custom'
                         ]
                         if len(filtered_analyses) > 0:
@@ -2703,30 +2703,30 @@ async def get_batch_results(
                     print(f"Error checking available exchanges: {e}")
                 finally:
                     session.close()
-        
+
         # Calculate fair value percentage and sort
         results = []
         for analysis in analyses:
             current_price = analysis.get('current_price')
             fair_value = analysis.get('fair_value')
-            
+
             # Skip if missing essential data
             if not current_price or not fair_value or current_price <= 0:
                 continue
-                
+
             fair_value_pct = (fair_value / current_price) * 100
-            
+
             # Extract company name from analysis_data if not in top level
             company_name = analysis.get('company_name')
             if not company_name and analysis.get('analysis_data'):
                 analysis_data = analysis.get('analysis_data', {})
                 if isinstance(analysis_data, dict):
                     company_name = analysis_data.get('companyName') or analysis_data.get('company_name')
-            
+
             # Fallback to ticker if no company name found
             if not company_name:
                 company_name = analysis.get('ticker', 'N/A')
-            
+
             results.append({
                 'ticker': analysis.get('ticker'),
                 'company_name': company_name,
@@ -2738,17 +2738,17 @@ async def get_batch_results(
                 'financial_health_score': float(analysis.get('financial_health_score')) if analysis.get('financial_health_score') is not None else None,
                 'business_quality_score': float(analysis.get('business_quality_score')) if analysis.get('business_quality_score') is not None else None,
             })
-        
+
         # Sort by fair_value_pct (lowest to highest - best deals first)
         results.sort(key=lambda x: x['fair_value_pct'] if x['fair_value_pct'] is not None else float('inf'))
-        
+
         return {
             'exchange': exchange,
             'analysis_date': analysis_date,
             'total': len(results),
             'results': results
         }
-        
+
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -2763,14 +2763,14 @@ async def get_watchlist():
         from app.database.db_service import DatabaseService
         from datetime import date
         db_service = DatabaseService(db_path="stock_analysis.db")
-        
+
         watchlist_items = db_service.get_watchlist()
         today = date.today().isoformat()
-        
+
         # Batch fetch all analysis data in one query for better performance
         tickers = [item['ticker'] for item in watchlist_items]
         latest_analyses = {}
-        
+
         if tickers:
             try:
                 # Use efficient batch query method
@@ -2778,17 +2778,17 @@ async def get_watchlist():
             except Exception as e:
                 logger.warning(f"Error batch fetching analysis data: {e}")
                 latest_analyses = {}
-        
+
         # Enrich items with cached analysis data only (no live API calls for performance)
         enriched_items = []
         for item in watchlist_items:
             ticker = item['ticker']
             latest_analysis = latest_analyses.get(ticker)
-            
+
             # Determine cache status
             cache_status = "missing"
             needs_refresh = True
-            
+
             if latest_analysis:
                 analysis_date = latest_analysis.get('analysis_date')
                 if analysis_date == today:
@@ -2797,7 +2797,7 @@ async def get_watchlist():
                 else:
                     cache_status = "stale"
                     needs_refresh = True
-                
+
                 # Update item with essential analysis data only
                 item['current_price'] = latest_analysis.get('current_price')
                 item['fair_value'] = latest_analysis.get('fair_value')
@@ -2807,7 +2807,7 @@ async def get_watchlist():
                 item['analysis_date'] = analysis_date
                 item['financial_health_score'] = latest_analysis.get('financial_health_score')
                 item['business_quality_score'] = latest_analysis.get('business_quality_score')
-            
+
             # Add cache information
             item['cache_info'] = {
                 'status': cache_status,
@@ -2815,15 +2815,15 @@ async def get_watchlist():
                 'last_updated': latest_analysis.get('analysis_date') if latest_analysis else None,
                 'is_today': latest_analysis.get('analysis_date') == today if latest_analysis else False
             }
-            
+
             # Note: Removed live price fetching for performance
             # Live prices will be fetched on individual stock view or manual refresh
-            
+
             enriched_items.append(item)
-        
+
         logger.info(f"Watchlist loaded: {len(enriched_items)} items (optimized - no live API calls)")
         return {"items": enriched_items, "total": len(enriched_items)}
-        
+
     except Exception as e:
         logger.error(f"Error getting watchlist: {e}")
         import traceback
@@ -2838,30 +2838,30 @@ async def get_watchlist_live_prices():
         from app.database.db_service import DatabaseService
         import concurrent.futures
         import functools
-        
+
         db_service = DatabaseService(db_path="stock_analysis.db")
-        
+
         watchlist_items = db_service.get_watchlist()
         tickers = [item['ticker'] for item in watchlist_items]
-        
+
         live_prices = {}
         yahoo_client = YahooFinanceClient()
-        
+
         # Create a wrapper function with timeout for individual ticker calls
         def get_quote_with_timeout(ticker, timeout_seconds=20):
             """Get quote with a timeout to prevent hanging"""
             try:
                 import signal
                 import time
-                
+
                 start_time = time.time()
                 result = yahoo_client.get_quote(ticker)
                 end_time = time.time()
-                
+
                 # Log timing for debugging
                 duration = end_time - start_time
                 logger.info(f"Quote for {ticker} took {duration:.2f} seconds")
-                
+
                 return result
             except Exception as e:
                 logger.warning(f"Timeout or error getting quote for {ticker}: {e}")
@@ -2870,23 +2870,23 @@ async def get_watchlist_live_prices():
                     'error_detail': f'Request for {ticker} failed: {str(e)}',
                     'symbol': ticker
                 }
-        
+
         # Process tickers in parallel with a reasonable timeout
         max_workers = min(4, len(tickers))  # Limit concurrent requests to avoid overwhelming API
-        
+
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             # Submit all tasks
             future_to_ticker = {
-                executor.submit(get_quote_with_timeout, ticker): ticker 
+                executor.submit(get_quote_with_timeout, ticker): ticker
                 for ticker in tickers
             }
-            
+
             # Collect results with overall timeout
             for future in concurrent.futures.as_completed(future_to_ticker, timeout=45):
                 ticker = future_to_ticker[future]
                 try:
                     quote = future.result(timeout=25)  # Individual result timeout
-                    
+
                     if quote:
                         if quote.get('success'):
                             # Successful quote
@@ -2913,7 +2913,7 @@ async def get_watchlist_live_prices():
                             'success': False,
                             'comment': 'Yahoo Finance API returned empty response - ticker may not exist or be delisted'
                         }
-                        
+
                 except concurrent.futures.TimeoutError:
                     logger.warning(f"Timeout getting live price for {ticker}")
                     live_prices[ticker] = {
@@ -2929,7 +2929,7 @@ async def get_watchlist_live_prices():
                         'success': False,
                         'comment': f'Error processing request for {ticker}: {error_msg}'
                     }
-        
+
         # Handle any tickers that weren't processed (shouldn't happen with proper timeout handling)
         for ticker in tickers:
             if ticker not in live_prices:
@@ -2938,10 +2938,10 @@ async def get_watchlist_live_prices():
                     'success': False,
                     'comment': f'Request for {ticker} was not completed within the timeout period'
                 }
-        
+
         logger.info(f"Live prices completed for {len(live_prices)} tickers")
         return {"live_prices": live_prices}
-        
+
     except Exception as e:
         logger.error(f"Error getting live prices: {e}")
         import traceback
@@ -2961,7 +2961,7 @@ async def add_to_watchlist(
     try:
         from app.database.db_service import DatabaseService
         db_service = DatabaseService(db_path="stock_analysis.db")
-        
+
         # Try to get company name and info from API if not provided
         company_info = {}
         if not company_name:
@@ -2980,7 +2980,7 @@ async def add_to_watchlist(
                     }
             except Exception as e:
                 logger.warning(f"Could not get company name for {ticker}: {e}")
-        
+
         # Auto-detect business type if enabled
         detected_business_type = None
         if auto_detect_business_type and company_info:
@@ -2995,23 +2995,23 @@ async def add_to_watchlist(
                 logger.info(f"Auto-detected business type for {ticker}: {detected_business_type.value}")
             except Exception as e:
                 logger.warning(f"Error in auto-detecting business type for {ticker}: {e}")
-        
+
         success = db_service.add_to_watchlist(
             ticker=ticker.upper(),
             company_name=company_name,
             exchange=exchange,
             notes=notes
         )
-        
+
         response = {
             "success": True,
             "message": f"{ticker.upper()} added to watchlist"
         }
-        
+
         if detected_business_type:
             response["detected_business_type"] = detected_business_type.value
             response["message"] += f" (Auto-detected business type: {detected_business_type.value.replace('_', ' ').title()})"
-        
+
         return response
     except HTTPException:
         raise
@@ -3028,9 +3028,9 @@ async def remove_from_watchlist(ticker: str):
     try:
         from app.database.db_service import DatabaseService
         db_service = DatabaseService(db_path="stock_analysis.db")
-        
+
         success = db_service.remove_from_watchlist(ticker.upper())
-        
+
         if success:
             return {"success": True, "message": f"{ticker.upper()} removed from watchlist"}
         else:
@@ -3051,21 +3051,21 @@ async def get_watchlist_item(ticker: str, force_refresh: bool = Query(False, des
         from app.database.db_service import DatabaseService
         from datetime import date, datetime
         db_service = DatabaseService(db_path="stock_analysis.db")
-        
+
         # Get watchlist item
         watchlist_item = db_service.get_watchlist_item(ticker.upper())
         if not watchlist_item:
             raise HTTPException(status_code=404, detail="Stock not found in watchlist")
-        
+
         # Check if we need to refresh analysis data
         should_refresh_analysis = force_refresh
         analysis_cache_status = "fresh"
-        
+
         if not force_refresh:
             # Check if analysis exists for today
             today = date.today().isoformat()
             existing_analysis = db_service.get_analysis(ticker.upper(), today)
-            
+
             if not existing_analysis or existing_analysis.get('status') != 'success':
                 # No analysis for today, check latest analysis
                 latest_analysis = db_service.get_latest_analysis(ticker.upper())
@@ -3082,14 +3082,14 @@ async def get_watchlist_item(ticker: str, force_refresh: bool = Query(False, des
                     should_refresh_analysis = True
                     analysis_cache_status = "missing"
                     logger.info(f"No analysis found for {ticker}, will refresh")
-        
+
         # Get or refresh analysis data
         if should_refresh_analysis:
             logger.info(f"Refreshing analysis for {ticker} (cache_status: {analysis_cache_status})")
             try:
                 # Run new analysis
                 analysis = await _analyze_stock_with_progress(ticker.upper())
-                
+
                 # Save to database
                 from datetime import date
                 db_service.save_analysis(
@@ -3116,7 +3116,7 @@ async def get_watchlist_item(ticker: str, force_refresh: bool = Query(False, des
                     company_name=analysis.companyName,
                     currency=analysis.currency
                 )
-                
+
                 # Update watchlist item with latest analysis data
                 db_service.update_watchlist_item(
                     ticker=ticker.upper(),
@@ -3126,10 +3126,10 @@ async def get_watchlist_item(ticker: str, force_refresh: bool = Query(False, des
                     recommendation=analysis.recommendation,
                     last_analyzed_at=datetime.utcnow()
                 )
-                
+
                 latest_analysis = analysis.model_dump(mode='json')
                 analysis_cache_status = "refreshed"
-                
+
             except Exception as e:
                 logger.error(f"Error refreshing analysis for {ticker}: {e}")
                 # Fall back to latest cached analysis if available
@@ -3142,14 +3142,14 @@ async def get_watchlist_item(ticker: str, force_refresh: bool = Query(False, des
         else:
             # Use cached analysis
             latest_analysis = db_service.get_latest_analysis(ticker.upper())
-        
+
         # Get all AI-extracted financial data
         ai_data = db_service.get_ai_extracted_data(ticker.upper())
-        
+
         # Transform key_metrics structure: flatten 'latest' period for frontend
         if 'key_metrics' in ai_data and 'latest' in ai_data['key_metrics']:
             ai_data['key_metrics'] = ai_data['key_metrics']['latest']
-        
+
         # Get current quote (always fresh for price updates)
         current_quote = None
         price_error = None
@@ -3158,13 +3158,13 @@ async def get_watchlist_item(ticker: str, force_refresh: bool = Query(False, des
             yahoo_client = YahooFinanceClient()
             loop = asyncio.get_event_loop()
             current_quote = await loop.run_in_executor(None, yahoo_client.get_quote, ticker.upper())
-            
+
             # If Yahoo Finance fails, try backup sources
             if not current_quote:
                 logger.debug(f"Yahoo Finance failed for {ticker}, trying backup sources...")
                 from app.data.backup_clients import BackupDataFetcher
                 backup_fetcher = BackupDataFetcher()
-                
+
                 backup_price = backup_fetcher.get_current_price(ticker)
                 if backup_price:
                     backup_info = backup_fetcher.get_company_info(ticker)
@@ -3185,7 +3185,7 @@ async def get_watchlist_item(ticker: str, force_refresh: bool = Query(False, des
                 price_error = "Price API timeout - please try again"
             else:
                 price_error = "Price data unavailable - API may be temporarily unavailable"
-        
+
         return {
             "watchlist_item": watchlist_item,
             "latest_analysis": latest_analysis,
@@ -3217,16 +3217,16 @@ async def update_watchlist_item(
     try:
         from app.database.db_service import DatabaseService
         db_service = DatabaseService(db_path="stock_analysis.db")
-        
+
         # Handle string "null" from query parameters - convert to None
         if notes is not None and notes.lower() == "null":
             notes = None
-        
+
         success = db_service.update_watchlist_item(
             ticker=ticker.upper(),
             notes=notes
         )
-        
+
         if success:
             return {"success": True, "message": f"{ticker.upper()} updated"}
         else:
@@ -3250,17 +3250,17 @@ async def auto_assign_business_type(ticker: str):
         from app.data.data_fetcher import DataFetcher, YahooFinanceClient
         from app.ai.business_type_detector import BusinessTypeDetector
         from app.config.analysis_weights import AnalysisWeightPresets
-        
+
         # Try to fetch company information
         yahoo_client = YahooFinanceClient()
         loop = asyncio.get_event_loop()
-        
+
         quote = None
         try:
             quote = await loop.run_in_executor(None, yahoo_client.get_quote, ticker.upper())
         except Exception as e:
             logger.warning(f"Could not get quote for {ticker}: {e}")
-        
+
         # Prepare company info for AI detection (with fallback for missing data)
         if quote:
             company_info = {
@@ -3280,7 +3280,7 @@ async def auto_assign_business_type(ticker: str):
                 'description': f"Company with ticker symbol {ticker.upper()}",
                 'business_summary': f"Company with ticker symbol {ticker.upper()}"
             }
-        
+
         # Use AI detector with fallback
         detector = BusinessTypeDetector()
         detected_business_type = detector.detect_with_fallback(
@@ -3288,13 +3288,13 @@ async def auto_assign_business_type(ticker: str):
             sector=company_info.get('sector'),
             industry=company_info.get('industry')
         )
-        
+
         # Get weights for the detected type
         weights = AnalysisWeightPresets.get_preset(detected_business_type)
-        
+
         # Determine the source of detection
         data_source = "Yahoo Finance + AI" if quote else "Rule-based (Yahoo Finance unavailable)"
-        
+
         return {
             "success": True,
             "ticker": ticker.upper(),

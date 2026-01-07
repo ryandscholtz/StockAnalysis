@@ -10,23 +10,25 @@ from unittest.mock import Mock
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+
 @pytest.fixture
 def temp_database():
     """Create a temporary database for testing"""
     temp_db = tempfile.NamedTemporaryFile(delete=False, suffix='.db')
     temp_db.close()
-    
+
     yield temp_db.name
-    
+
     # Cleanup
     if os.path.exists(temp_db.name):
         os.unlink(temp_db.name)
+
 
 @pytest.fixture
 def mock_yahoo_client():
     """Create a mock Yahoo Finance client"""
     mock_client = Mock()
-    
+
     # Mock successful quote response
     mock_client.get_quote.return_value = {
         'price': 150.25,
@@ -37,7 +39,7 @@ def mock_yahoo_client():
         'success': True,
         'api_attempts': []
     }
-    
+
     # Mock search response
     mock_client.search_tickers.return_value = [
         {
@@ -46,8 +48,9 @@ def mock_yahoo_client():
             'exchange': 'NASDAQ'
         }
     ]
-    
+
     return mock_client
+
 
 @pytest.fixture
 def sample_watchlist_data():
@@ -71,6 +74,7 @@ def sample_watchlist_data():
         }
     ]
 
+
 @pytest.fixture
 def sample_analysis_data():
     """Sample analysis data for testing"""
@@ -91,26 +95,28 @@ def sample_analysis_data():
         }
     }
 
+
 @pytest.fixture(autouse=True)
 def setup_test_environment():
     """Setup test environment before each test"""
     # Set test environment variables
     os.environ['TESTING'] = 'true'
     os.environ['LOG_LEVEL'] = 'ERROR'  # Reduce log noise during tests
-    
+
     yield
-    
+
     # Cleanup
     if 'TESTING' in os.environ:
         del os.environ['TESTING']
     if 'LOG_LEVEL' in os.environ:
         del os.environ['LOG_LEVEL']
 
+
 @pytest.fixture
 def mock_cache_manager():
     """Create a mock cache manager"""
     mock_cache = Mock()
-    
+
     # Mock cache operations
     mock_cache.get.return_value = None  # Cache miss by default
     mock_cache.set.return_value = True
@@ -123,14 +129,15 @@ def mock_cache_manager():
         'max_size_mb': 100.0,
         'utilization_percent': 0.0
     }
-    
+
     return mock_cache
+
 
 @pytest.fixture
 def mock_task_manager():
     """Create a mock background task manager"""
     mock_manager = Mock()
-    
+
     # Mock task operations
     mock_manager.create_task.return_value = "test_task_id_123"
     mock_manager.get_task_status.return_value = {
@@ -142,10 +149,12 @@ def mock_task_manager():
         'error': None
     }
     mock_manager.cancel_task.return_value = True
-    
+
     return mock_manager
 
 # Pytest configuration
+
+
 def pytest_configure(config):
     """Configure pytest"""
     # Add custom markers
@@ -158,6 +167,7 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "api: marks tests that require external API calls"
     )
+
 
 def pytest_collection_modifyitems(config, items):
     """Modify test collection"""

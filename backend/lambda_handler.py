@@ -39,17 +39,17 @@ handler = Mangum(
 def lambda_handler(event, context):
     """
     AWS Lambda handler function
-    
+
     Args:
         event: Lambda event object from API Gateway
         context: Lambda context object
-        
+
     Returns:
         API Gateway response object
     """
     # Add correlation ID from API Gateway if available
     if 'requestContext' in event and 'requestId' in event['requestContext']:
         os.environ['CORRELATION_ID'] = event['requestContext']['requestId']
-    
+
     # Call the Mangum handler
     return handler(event, context)

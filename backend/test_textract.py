@@ -18,22 +18,22 @@ def test_textract():
     try:
         # Import the TextractExtractor
         from app.data.textract_extractor import TextractExtractor
-        
+
         # Read the test PDF file (Test.pdf should trigger OCR fallback)
         pdf_path = "../TestData/Test.pdf"
         if not os.path.exists(pdf_path):
             logger.error(f"Test PDF not found at {pdf_path}")
             return False
-        
+
         with open(pdf_path, 'rb') as f:
             pdf_bytes = f.read()
-        
+
         logger.info(f"Loaded PDF: {len(pdf_bytes)} bytes")
-        
+
         # Initialize Textract extractor
         logger.info("Initializing TextractExtractor with OCR fallback...")
         extractor = TextractExtractor()
-        
+
         # Test 1: Extract text only
         logger.info("=== Test 1: Extract text only ===")
         try:
@@ -43,7 +43,7 @@ def test_textract():
         except Exception as e:
             logger.error(f"✗ Text extraction failed: {e}")
             return False
-        
+
         # Test 2: Extract tables
         logger.info("=== Test 2: Extract tables ===")
         try:
@@ -56,14 +56,14 @@ def test_textract():
         except Exception as e:
             logger.error(f"✗ Table extraction failed: {e}")
             return False
-        
+
         # Test 3: Extract financial data
         logger.info("=== Test 3: Extract financial data ===")
         try:
             financial_data, raw_text = extractor.extract_financial_data(pdf_bytes, "TEST")
             logger.info(f"✓ Financial data extraction successful")
             logger.info(f"Raw text length: {len(raw_text)} characters")
-            
+
             # Show what was extracted
             for statement_type, data in financial_data.items():
                 if data:
@@ -79,10 +79,10 @@ def test_textract():
             import traceback
             logger.error(traceback.format_exc())
             return False
-        
+
         logger.info("=== All tests completed successfully! ===")
         return True
-        
+
     except Exception as e:
         logger.error(f"Test setup failed: {e}")
         import traceback
@@ -94,16 +94,16 @@ def test_aws_credentials():
     try:
         import boto3
         from botocore.exceptions import ClientError
-        
+
         logger.info("=== Testing AWS credentials and Textract access ===")
-        
+
         # Get AWS profile and region from environment
         aws_profile = os.getenv("AWS_PROFILE", "Cerebrum")
         aws_region = os.getenv("AWS_REGION", "eu-west-1")
-        
+
         logger.info(f"Using AWS profile: {aws_profile}")
         logger.info(f"Using AWS region: {aws_region}")
-        
+
         # Test session creation
         try:
             session = boto3.Session(profile_name=aws_profile, region_name=aws_region)
@@ -112,7 +112,7 @@ def test_aws_credentials():
             logger.error(f"✗ Failed to create AWS session: {e}")
             logger.error("Check that AWS CLI is configured with the correct profile")
             return False
-        
+
         # Test Textract client
         try:
             textract = session.client('textract')
@@ -120,7 +120,7 @@ def test_aws_credentials():
         except Exception as e:
             logger.error(f"✗ Failed to create Textract client: {e}")
             return False
-        
+
         # Test Textract permissions with a simple call
         try:
             # This should fail gracefully if we don't have permissions
@@ -142,21 +142,21 @@ def test_aws_credentials():
         except Exception as e:
             logger.error(f"✗ Unexpected error testing Textract: {e}")
             return False
-        
+
         return True
-        
+
     except Exception as e:
         logger.error(f"AWS credentials test failed: {e}")
         return False
 
 if __name__ == "__main__":
     logger.info("Starting Textract manual test...")
-    
+
     # Test AWS credentials first
     if not test_aws_credentials():
         logger.error("AWS credentials test failed. Cannot proceed with Textract test.")
         sys.exit(1)
-    
+
     # Test Textract functionality
     if test_textract():
         logger.info("✓ All tests passed! Textract is working correctly.")
