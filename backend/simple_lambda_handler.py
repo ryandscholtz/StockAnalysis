@@ -100,6 +100,76 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 })
             }
         
+        # Individual watchlist item endpoint
+        if path.startswith('/api/watchlist/'):
+            ticker = path.split('/')[-1].upper()
+            return {
+                'statusCode': 200,
+                'headers': headers,
+                'body': json.dumps({
+                    'watchlist_item': {
+                        'ticker': ticker,
+                        'company_name': f'{ticker} Inc.' if ticker == 'AAPL' else f'{ticker} Corporation',
+                        'exchange': 'NASDAQ',
+                        'added_at': '2024-01-01T00:00:00Z',
+                        'current_price': 150.00,
+                        'fair_value': 180.00,
+                        'margin_of_safety_pct': 16.67,
+                        'recommendation': 'BUY'
+                    },
+                    'latest_analysis': {
+                        'ticker': ticker,
+                        'companyName': f'{ticker} Inc.' if ticker == 'AAPL' else f'{ticker} Corporation',
+                        'currentPrice': 150.00,
+                        'fairValue': 180.00,
+                        'recommendation': 'BUY',
+                        'analysisDate': '2024-01-01',
+                        'financialHealthScore': 85,
+                        'businessQualityScore': 90,
+                        'valuationScore': 75,
+                        'growthScore': 80
+                    }
+                })
+            }
+        
+        # Analysis endpoint - return mock analysis data
+        if path.startswith('/api/analyze/'):
+            ticker = path.split('/')[-1].upper()
+            return {
+                'statusCode': 200,
+                'headers': headers,
+                'body': json.dumps({
+                    'ticker': ticker,
+                    'companyName': f'{ticker} Inc.' if ticker == 'AAPL' else f'{ticker} Corporation',
+                    'currentPrice': 150.00,
+                    'fairValue': 180.00,
+                    'recommendation': 'BUY',
+                    'analysisDate': '2024-01-01',
+                    'financialHealthScore': 85,
+                    'businessQualityScore': 90,
+                    'valuationScore': 75,
+                    'growthScore': 80,
+                    'marginOfSafety': 16.67,
+                    'sector': 'Technology',
+                    'industry': 'Consumer Electronics',
+                    'marketCap': 2800000000000,
+                    'peRatio': 25.5,
+                    'pbRatio': 8.2,
+                    'debtToEquity': 1.73,
+                    'roe': 0.26,
+                    'roic': 0.29,
+                    'revenueGrowth': 0.08,
+                    'earningsGrowth': 0.12,
+                    'summary': f'Mock analysis for {ticker}. This is a simplified response for demonstration purposes.',
+                    'risks': ['Market volatility', 'Competition', 'Regulatory changes'],
+                    'strengths': ['Strong brand', 'Innovation', 'Financial position'],
+                    'missingData': {
+                        'has_missing_data': False,
+                        'missing_fields': []
+                    }
+                })
+            }
+        
         # Watchlist live prices endpoint
         if path == '/api/watchlist/live-prices':
             return {
@@ -218,7 +288,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'body': json.dumps({
                 'error': 'Not Found',
                 'message': f'Endpoint {path} not found',
-                'available_endpoints': ['/health', '/api/search', '/api/watchlist', '/api/watchlist/live-prices', '/api/analysis-presets', '/docs', '/openapi.json']
+                'available_endpoints': ['/health', '/api/search', '/api/watchlist', '/api/watchlist/{ticker}', '/api/analyze/{ticker}', '/api/watchlist/live-prices', '/api/analysis-presets', '/docs', '/openapi.json']
             })
         }
     
