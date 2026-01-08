@@ -34,7 +34,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         }
     
     # Health check endpoint
-    if path in ['/', '/health']:
+    if path in ['/health']:
         return {
             'statusCode': 200,
             'headers': headers,

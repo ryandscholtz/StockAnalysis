@@ -233,7 +233,7 @@ jobs:
     - name: Health check
       run: |
         echo "Running health check against ${{ steps.endpoints.outputs.api-endpoint }}"
-        curl -f "${{ steps.endpoints.outputs.api-endpoint }}/health" || exit 1
+        curl -f "${{ steps.endpoints.outputs.api-endpoint }}health" || exit 1
         
     - name: Smoke tests
       run: |
