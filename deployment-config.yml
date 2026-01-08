@@ -3,7 +3,7 @@
 environments:
   staging:
     aws_region: us-east-1
-    stack_name: StockAnalysisStack-staging
+    stack_name: StockAnalysisInfrastructure-staging
     domain: staging-api.stockanalysis.com
     database_table: stock-analyses-staging
     cache_cluster: stock-analysis-staging-cache
@@ -21,7 +21,7 @@ environments:
     
   production:
     aws_region: us-east-1
-    stack_name: StockAnalysisStack-production
+    stack_name: StockAnalysisInfrastructure-production
     domain: api.stockanalysis.com
     database_table: stock-analyses-production
     cache_cluster: stock-analysis-prod-cache

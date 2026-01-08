@@ -197,8 +197,9 @@ jobs:
     - name: Extract API endpoint
       id: endpoints
       run: |
-        API_ENDPOINT=$(jq -r '.StockAnalysisStack.ApiEndpoint' outputs.json)
+        API_ENDPOINT=$(jq -r '.["StockAnalysisInfrastructure-${{ inputs.environment }}"].ApiUrl' outputs.json)
         echo "api-endpoint=$API_ENDPOINT" >> $GITHUB_OUTPUT
+        echo "Extracted API endpoint: $API_ENDPOINT"
         
     - name: Health check
       run: |
