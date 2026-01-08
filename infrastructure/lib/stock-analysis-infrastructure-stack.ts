@@ -133,7 +133,7 @@ export class StockAnalysisInfrastructureStack extends cdk.Stack {
     this.apiFunction = new lambda.Function(this, 'ApiFunction', {
       functionName: `stock-analysis-api-${environment}`,
       runtime: lambda.Runtime.PYTHON_3_11,
-      handler: 'lambda_handler.lambda_handler',
+      handler: 'simple_lambda_handler.lambda_handler',
       code: lambda.Code.fromAsset('../backend/dist'), // Assumes packaged code
       role: lambdaRole,
       timeout: cdk.Duration.seconds(900), // 15 minutes for complex analysis

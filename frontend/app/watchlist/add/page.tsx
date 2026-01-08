@@ -26,8 +26,10 @@ export default function AddToWatchlistPage() {
       searchTimeoutRef.current = setTimeout(async () => {
         try {
           const results = await stockApi.searchTickers(searchQuery.trim())
-          setSuggestions(results)
-          setShowSuggestions(results.length > 0)
+          // Ensure results is always an array
+          const safeResults = Array.isArray(results) ? results : []
+          setSuggestions(safeResults)
+          setShowSuggestions(safeResults.length > 0)
           setSelectedIndex(-1)
         } catch (error: any) {
           // Show error if it's a connection issue

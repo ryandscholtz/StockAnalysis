@@ -47,8 +47,10 @@ export default function MultiplePDFUpload({ onAllComplete, onItemComplete }: Mul
       searchTimeoutRef.current = setTimeout(async () => {
         try {
           const results = await stockApi.searchTickers(query.trim())
-          setSuggestions(results)
-          setShowSuggestions(results.length > 0)
+          // Ensure results is always an array
+          const safeResults = Array.isArray(results) ? results : []
+          setSuggestions(safeResults)
+          setShowSuggestions(safeResults.length > 0)
           setSelectedIndex(-1)
         } catch (error) {
           console.error('Search error:', error)

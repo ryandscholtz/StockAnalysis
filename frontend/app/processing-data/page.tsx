@@ -45,9 +45,11 @@ export default function ProcessingDataPage() {
       searchTimeoutRef.current = setTimeout(async () => {
         try {
           const results = await stockApi.searchTickers(searchQuery.trim())
-          setSuggestions(results)
+          // Ensure results is always an array
+          const safeResults = Array.isArray(results) ? results : []
+          setSuggestions(safeResults)
           // Show suggestions if we have results and the input is likely focused
-          if (results.length > 0 && searchQuery.trim().length > 0) {
+          if (safeResults.length > 0 && searchQuery.trim().length > 0) {
             setShowSuggestions(true)
           } else {
             setShowSuggestions(false)

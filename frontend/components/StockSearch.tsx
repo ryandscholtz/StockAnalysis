@@ -42,8 +42,10 @@ export default function StockSearch({ onSearch }: StockSearchProps) {
         try {
           const results = await stockApi.searchTickers(ticker.trim())
           console.log('Search results:', results) // Debug: verify data structure
-          setSuggestions(results)
-          setShowSuggestions(results.length > 0)
+          // Ensure results is always an array
+          const safeResults = Array.isArray(results) ? results : []
+          setSuggestions(safeResults)
+          setShowSuggestions(safeResults.length > 0)
           setSelectedIndex(-1)
         } catch (error: any) {
           console.error('Search error:', error)
