@@ -241,7 +241,7 @@ export default function WatchlistPage() {
         </div>
       )}
 
-      {watchlist.length === 0 ? (
+      {watchlist && watchlist.length === 0 ? (
         <div style={{
           padding: '60px 20px',
           textAlign: 'center',
@@ -277,7 +277,7 @@ export default function WatchlistPage() {
           display: 'grid',
           gap: '16px'
         }}>
-          {watchlist.map((item) => (
+          {watchlist && watchlist.map((item) => (
             <div
               key={item.ticker}
               onClick={() => router.push(`/watchlist/${item.ticker}`)}
