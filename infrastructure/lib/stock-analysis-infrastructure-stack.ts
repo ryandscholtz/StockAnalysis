@@ -136,8 +136,8 @@ export class StockAnalysisInfrastructureStack extends cdk.Stack {
       handler: 'lambda_handler.lambda_handler',
       code: lambda.Code.fromAsset('../backend/dist'), // Assumes packaged code
       role: lambdaRole,
-      timeout: cdk.Duration.seconds(30),
-      memorySize: environment === 'production' ? 1024 : 512,
+      timeout: cdk.Duration.seconds(900), // 15 minutes for complex analysis
+      memorySize: environment === 'production' ? 3008 : 1024, // Max memory for production
       
       // Environment variables
       environment: {
@@ -202,6 +202,12 @@ export class StockAnalysisInfrastructureStack extends cdk.Stack {
     
     // Main API routes (proxy all to Lambda)
     apiResource.addProxy({
+      defaultIntegration: lambdaIntegration,
+      anyMethod: true
+    });
+    
+    // Add root proxy to catch all other routes for FastAPI
+    this.api.root.addProxy({
       defaultIntegration: lambdaIntegration,
       anyMethod: true
     });
