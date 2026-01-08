@@ -165,7 +165,12 @@ export class StockAnalysisInfrastructureStack extends cdk.Stack {
       // CORS configuration
       defaultCorsPreflightOptions: {
         allowOrigins: environment === 'production' 
-          ? [props.domainName || 'https://stockanalysis.cerebrum.com']
+          ? [
+              props.domainName || 'https://stockanalysis.cerebrum.com',
+              'http://localhost:3000',
+              'http://localhost:3001',
+              'http://127.0.0.1:3000'
+            ]
           : apigateway.Cors.ALL_ORIGINS,
         allowMethods: apigateway.Cors.ALL_METHODS,
         allowHeaders: ['Content-Type', 'X-Amz-Date', 'Authorization', 'X-Api-Key', 'X-Correlation-Id']
