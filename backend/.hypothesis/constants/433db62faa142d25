@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Documents\GitHub\StockAnalysis\backend\app\services\streaming_service.py
+# hypothesis_version: 6.150.0
+
+[0.1, 0.5, 1.0, 30.0, 100.0, 100, 1000, 'active', 'analysis_progress', 'buffer_size', 'completed', 'created_at', 'critical', 'data', 'description', 'disconnected', 'error', 'error_count', 'high', 'id', 'initializing', 'last_message', 'latency_ms', 'latency_threshold_ms', 'low', 'market_data', 'message_count', 'normal', 'paused', 'price', 'priority', 'progress_percent', 'status', 'step', 'stream_id', 'symbol', 'ticker', 'timestamp', 'total_steps', 'type', 'volume', 'within_threshold']

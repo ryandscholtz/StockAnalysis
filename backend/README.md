@@ -1,6 +1,6 @@
 # Stock Analysis Backend API
 
-FastAPI backend for the Stock Analysis Tool using Charlie Munger's investment methodology.
+FastAPI backend for the Stock Analysis Tool using value investing principles.
 
 ## Setup
 

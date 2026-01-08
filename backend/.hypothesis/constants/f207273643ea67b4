@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Documents\GitHub\StockAnalysis\backend\app\background_tasks.py
+# hypothesis_version: 6.149.1
+
+[0.0, 100.0, 300, 'No data returned', 'Unknown error', 'cancelled', 'comment', 'company_name', 'completed', 'completed_at', 'created_at', 'dict', 'error', 'error_detail', 'failed', 'id', 'live_prices', 'metadata', 'pending', 'price', 'progress', 'result', 'running', 'started_at', 'status', 'success', 'task_type']

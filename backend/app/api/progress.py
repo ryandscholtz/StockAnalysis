@@ -7,17 +7,17 @@ import asyncio
 
 class ProgressTracker:
     """Track and report progress of analysis"""
-    
+
     def __init__(self, total_steps: int = 7):
         self.total_steps = total_steps
         self.current_step = 0
         self.current_task = ""
         self.callback: Optional[Callable] = None
-    
+
     def set_callback(self, callback: Callable):
         """Set callback function to report progress"""
         self.callback = callback
-    
+
     async def update(self, step: int, task: str):
         """Update progress"""
         self.current_step = step
@@ -25,20 +25,29 @@ class ProgressTracker:
         if self.callback:
             try:
                 progress_data = {
+                    'type': 'progress',  # Required for frontend to recognize as progress update
                     'step': step,
                     'total': self.total_steps,
                     'task': task,
                     'progress': (step / self.total_steps) * 100
                 }
                 print(f"ProgressTracker.update: Step {step}/{self.total_steps} - {task}")  # Debug log
-                await self.callback(progress_data)
+                # Ensure callback is awaited and completes before continuing
+                if asyncio.iscoroutinefunction(self.callback):
+                    await self.callback(progress_data)
+                else:
+                    # If callback is not async, call it directly
+                    result = self.callback(progress_data)
+                    if asyncio.iscoroutine(result):
+                        await result
+                # Small delay to ensure the update is processed
+                await asyncio.sleep(0.05)
             except Exception as e:
                 print(f"Error in progress callback: {e}")
                 import traceback
                 traceback.print_exc()
-    
+
     async def step(self, task: str):
         """Increment step and update"""
         self.current_step += 1
         await self.update(self.current_step, task)
-

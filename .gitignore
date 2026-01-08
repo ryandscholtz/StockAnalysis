@@ -56,3 +56,9 @@ htmlcov/
 *.temp
 .cache/
 
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+stock_analysis.db
+

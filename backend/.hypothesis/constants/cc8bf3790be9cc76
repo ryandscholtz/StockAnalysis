@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Documents\GitHub\StockAnalysis\backend\app\database\connection.py
+# hypothesis_version: 6.149.1
+
+[0.5, 1.0, 60.0, 300.0, 'T', 'active_connections', 'close', 'connection_pool', 'failure_count', 'last_failure_time', 'max_size', 'min_size', 'operation_count', 'pooled_connections', 'success_rate', 'total_connections']

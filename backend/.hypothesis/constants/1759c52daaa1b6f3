@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Documents\GitHub\StockAnalysis\backend\app\core\logging.py
+# hypothesis_version: 6.149.0
+
+['%Y-%m-%d %H:%M:%S', 'INFO', 'Z', 'app', 'args', 'correlation_id', 'created', 'exc_info', 'exc_text', 'exception', 'extra', 'fastapi', 'filename', 'funcName', 'function', 'getMessage', 'level', 'levelname', 'levelno', 'line', 'lineno', 'logger', 'message', 'module', 'msecs', 'msg', 'name', 'pathname', 'process', 'processName', 'relativeCreated', 'stack_info', 'thread', 'threadName', 'timestamp', 'uvicorn', 'uvicorn.access']

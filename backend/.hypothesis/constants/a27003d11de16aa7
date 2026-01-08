@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Documents\GitHub\StockAnalysis\backend\app\core\middleware.py
+# hypothesis_version: 6.149.1
+
+[300, 429, 1000, '1 minute', '1; mode=block', '60', 'DENY', 'HTTP request started', 'Rate limit exceeded', 'Referrer-Policy', 'Retry-After', 'X-Forwarded-For', 'X-Frame-Options', 'X-RateLimit-Limit', 'X-RateLimit-Reset', 'X-User-ID', 'X-XSS-Protection', 'category', 'client_id', 'client_ip', 'content-length', 'details', 'duration_ms', 'error', 'https', 'limit', 'message', 'method', 'nosniff', 'path', 'query_params', 'rate_limit', 'response_size', 'status_code', 'unknown', 'url', 'user-agent', 'user_agent', 'window', 'x-correlation-id']

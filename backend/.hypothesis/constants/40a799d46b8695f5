@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Documents\GitHub\StockAnalysis\backend\app\analysis\margin_of_safety.py
+# hypothesis_version: 6.149.1
+
+[0.0, 1.0, 1.5, 5.0, 10.0, 30.0, 50.0, 999.0, 100, 2000000000, 'Avoid', 'Buy', 'Hold', 'Strong Buy']

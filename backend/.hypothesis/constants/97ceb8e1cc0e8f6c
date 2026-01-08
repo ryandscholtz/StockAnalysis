@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Documents\GitHub\StockAnalysis\backend\app\core\app.py
+# hypothesis_version: 6.149.0
+
+[100, 3600, '%y%m%d-%H:%M', '*', ',', '/', '/api', '/docs', '/health', '/metrics', '/redoc', '2.0.0', 'ALLOWED_ORIGINS', 'Authentication', 'DELETE', 'EC2_AUTO_STOP', 'ENVIRONMENT', 'GET', 'HEAD', 'Health', 'INFO', 'LOG_LEVEL', 'OPTIONS', 'Optimized Endpoints', 'PATCH', 'POST', 'PUT', 'STRUCTURED_LOGGING', 'Stock Analysis', 'Stock Analysis API', 'WebSocket Streaming', 'XRAY_ENABLED', 'Z', 'active_entries', 'analyses_completed', 'analyses_failed', 'analyses_in_progress', 'api_performance', 'build_timestamp', 'business', 'cache', 'cloudwatch_enabled', 'completed', 'error', 'error_rate_percent', 'failed', 'false', 'healthy', 'hit_ratio_percent', 'in_progress', 'message', 'metrics', 'metrics_namespace', 'production', 'status', 'stock-analysis-api', 'system', 'timestamp', 'total_entries', 'true', 'utilization_percent', 'version']

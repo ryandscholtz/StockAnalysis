@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Documents\GitHub\StockAnalysis\backend\app\config\analysis_weights.py
+# hypothesis_version: 6.149.0
+
+[-0.1, 0.0, 0.01, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.7, 0.8, 1.0, 2.0, 'AnalysisWeights', 'accounting', 'advisory', 'asset_heavy', 'automotive', 'bank', 'banking', 'biotech', 'cloud', 'consulting', 'consumer', 'credit', 'cyclical', 'default', 'distressed', 'e-commerce', 'ecommerce', 'electric', 'energy', 'equipment', 'financial services', 'franchise', 'franchising', 'gas', 'growth', 'health', 'healthcare', 'high_growth', 'industrial', 'insurance', 'internet', 'internet retail', 'legal', 'machinery', 'manufacturing', 'mature', 'medical', 'mining', 'oil', 'online retail', 'petroleum', 'pharmaceutical', 'real estate', 'recurring revenue', 'reinsurance', 'reit', 'retail', 'saas', 'semiconductor', 'software', 'stores', 'subscription', 'tech', 'technology', 'utilities', 'utility', 'water']

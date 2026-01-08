@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Documents\GitHub\StockAnalysis\backend\app\data\data_agent.py
+# hypothesis_version: 6.149.1
+
+[200, '-', '.', '10-K', '10-k', 'CIK', 'EBIT', 'Net Income', 'Operating Income', 'SEC_USER_AGENT', 'Total Revenue', 'User-Agent', 'a', 'action', 'alpha_vantage', 'annual', 'annualReports', 'balance_sheet', 'cashflow', 'cik', 'cik_str', 'count', 'data-test', 'div', 'filingDate', 'filing_date', 'filing_url', 'fin-row', 'financial', 'financial_links', 'getcompany', 'href', 'html.parser', 'https://www.sec.gov', 'income_statement', 'insufficient_periods', 'ir_url', 'key_metrics', 'market_cap', 'note', 'report', 'root.App.main', 'script', 'sec', 'sec_filing_url', 'shares_outstanding', 'source', 'td', 'ticker', 'tr', 'type', 'url']

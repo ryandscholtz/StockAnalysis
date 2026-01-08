@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\LocalCache\local-packages\Python312\site-packages\botocore\eventstream.py
+# hypothesis_version: 6.149.1
+
+[128, 200, 400, 1024, 4294967295, '!B', '!H', '!I', '!III', '!b', '!h', '!i', '!q', ':event-type', ':message-type', 'body', 'error', 'exception', 'headers', 'initial-response', 'status_code', 'utf-8']

@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Documents\GitHub\StockAnalysis\backend\app\cache_manager.py
+# hypothesis_version: 6.149.0
+
+[100, 300, 1024, 'Cache cleared', 'active_entries', 'cache_data.pkl', 'current_size_mb', 'expired_entries', 'max_size_mb', 'memory', 'rb', 'total_entries', 'utf-8', 'utilization_percent', 'wb']

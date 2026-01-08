@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Documents\GitHub\StockAnalysis\backend\app\data\financial_modeling_prep_client.py
+# hypothesis_version: 6.149.1
+
+[200, 429, 'Capital Expenditures', 'Cost Of Revenue', 'EBIT', 'FMP_API_KEY', 'Free Cash Flow', 'Gross Profit', 'Income Before Tax', 'Inventory', 'Long Term Debt', 'Net Income', 'Operating Cash Flow', 'Operating Income', 'Tax Provision', 'Total Assets', 'Total Current Assets', 'Total Debt', 'Total Liabilities', 'Total Revenue', 'capitalExpenditure', 'costOfRevenue', 'date', 'ebit', 'grossProfit', 'incomeBeforeTax', 'incomeTaxExpense', 'inventory', 'longTermDebt', 'netIncome', 'operatingCashFlow', 'operatingIncome', 'revenue', 'totalAssets', 'totalCurrentAssets', 'totalDebt', 'totalLiabilities']

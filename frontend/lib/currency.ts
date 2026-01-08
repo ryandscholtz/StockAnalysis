@@ -32,16 +32,24 @@ export function getCurrencySymbol(currencyCode?: string): string {
 
 /**
  * Format a price with currency symbol
+ * Returns "-" if amount is null, undefined, NaN, or not a valid number
  */
-export function formatPrice(amount: number, currencyCode?: string): string {
+export function formatPrice(amount: number | null | undefined, currencyCode?: string): string {
+  if (amount === null || amount === undefined || isNaN(amount) || !isFinite(amount)) {
+    return '-'
+  }
   const symbol = getCurrencySymbol(currencyCode)
   return `${symbol}${amount.toFixed(2)}`
 }
 
 /**
  * Format a large number (like market cap) with currency
+ * Returns "-" if amount is null, undefined, NaN, or not a valid number
  */
-export function formatLargeNumber(amount: number, currencyCode?: string): string {
+export function formatLargeNumber(amount: number | null | undefined, currencyCode?: string): string {
+  if (amount === null || amount === undefined || isNaN(amount) || !isFinite(amount)) {
+    return '-'
+  }
   const symbol = getCurrencySymbol(currencyCode)
   
   if (amount >= 1_000_000_000_000) {
@@ -54,5 +62,39 @@ export function formatLargeNumber(amount: number, currencyCode?: string): string
     return `${symbol}${(amount / 1_000).toFixed(2)}K`
   }
   return formatPrice(amount, currencyCode)
+}
+
+/**
+ * Format a number with specified decimal places
+ * Returns "-" if value is null, undefined, NaN, or not a valid number
+ */
+export function formatNumber(value: number | null | undefined, decimals: number = 2): string {
+  if (value === null || value === undefined || isNaN(value) || !isFinite(value)) {
+    return '-'
+  }
+  return value.toFixed(decimals)
+}
+
+/**
+ * Format a percentage value
+ * Returns "-" if value is null, undefined, NaN, or not a valid number
+ */
+export function formatPercent(value: number | null | undefined, decimals: number = 1): string {
+  if (value === null || value === undefined || isNaN(value) || !isFinite(value)) {
+    return '-'
+  }
+  const sign = value >= 0 ? '+' : ''
+  return `${sign}${value.toFixed(decimals)}%`
+}
+
+/**
+ * Format a ratio (like P/E, P/B)
+ * Returns "-" if value is null, undefined, NaN, or not a valid number
+ */
+export function formatRatio(value: number | null | undefined, decimals: number = 2): string {
+  if (value === null || value === undefined || isNaN(value) || !isFinite(value)) {
+    return '-'
+  }
+  return value.toFixed(decimals)
 }
 

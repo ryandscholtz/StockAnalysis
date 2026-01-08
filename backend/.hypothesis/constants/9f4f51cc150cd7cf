@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Documents\GitHub\StockAnalysis\backend\app\api\optimized_routes.py
+# hypothesis_version: 6.149.1
+
+[400, 404, 500, '/cache', '/cache/stats', '/cache/watchlist', '/cache/{key_prefix}', '/health/detailed', '/tasks', '/tasks/{task_id}', 'No data available', 'No response', 'Task not found', 'accessible', 'analysis', 'background_tasks', 'business_type', 'cache', 'cache_key', 'cache_mb', 'cache_utilization', 'cached', 'company_name', 'completed', 'current_size_mb', 'database', 'deleted_count', 'error', 'has_result', 'healthy', 'items', 'live_prices', 'memory_usage', 'message', 'metadata', 'poll_url', 'price', 'quick_quote', 'result', 'running', 'started', 'status', 'stock_analysis', 'stock_analysis.db', 'success', 'task_id', 'tasks', 'ticker', 'tickers', 'timestamp', 'total', 'unhealthy', 'watchlist_items']

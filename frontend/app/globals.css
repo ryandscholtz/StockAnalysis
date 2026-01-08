@@ -1,3 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 * {
   box-sizing: border-box;
   padding: 0;
@@ -22,6 +26,7 @@ a {
   text-decoration: none;
 }
 
+/* Legacy CSS classes for backward compatibility */
 .container {
   max-width: 1200px;
   margin: 0 auto;
@@ -160,5 +165,27 @@ a {
 .score-low {
   background-color: #fee2e2;
   color: #991b1b;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideOut {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
 }
 

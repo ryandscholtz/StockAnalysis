@@ -1,6 +1,6 @@
-# Stock Analysis Tool - Charlie Munger Methodology
+# Stock Analysis Tool
 
-A web-based stock analysis tool that analyzes stocks using Charlie Munger's investment philosophy, focusing on calculating intrinsic value (fair value per share) and comparing it to current market price (cost per share) to determine margin of safety.
+A web-based stock analysis tool that uses value investing principles to analyze stocks, focusing on calculating intrinsic value (fair value per share) and comparing it to current market price (cost per share) to determine margin of safety.
 
 ## Architecture
 
@@ -93,8 +93,10 @@ Frontend will be available at `http://localhost:3000`
 
 ## Documentation
 
-- Backend API docs: `http://localhost:8000/docs` (Swagger UI)
-- Backend API docs: `http://localhost:8000/redoc` (ReDoc)
+- **User Documentation**: Available in the frontend at `/docs` or see `ANALYSIS_WEIGHTS_GUIDE.md` for detailed analysis weights and presets
+- **Analysis Weights Guide**: `ANALYSIS_WEIGHTS_GUIDE.md` - Comprehensive guide to all 15 business type presets and custom weight configuration
+- **Backend API docs**: `http://localhost:8000/docs` (Swagger UI)
+- **Backend API docs**: `http://localhost:8000/redoc` (ReDoc)
 
 ## License
 

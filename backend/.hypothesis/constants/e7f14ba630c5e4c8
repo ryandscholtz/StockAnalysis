@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Documents\GitHub\StockAnalysis\backend\app\core\compression.py
+# hypothesis_version: 6.149.0
+
+[0.0, 1.0, 100, 200, 1024, 'Accept-Encoding', 'accept-encoding', 'application/gzip', 'application/x-gzip', 'application/zip', 'audio/mpeg', 'audio/wav', 'body', 'compressed', 'compressed_size', 'compression_factor', 'compression_ratio', 'content', 'content-encoding', 'content-length', 'content-type', 'decompressed_size', 'error', 'gzip', 'image/gif', 'image/jpeg', 'image/png', 'image/webp', 'inf', 'media_type', 'original_size', 'reason', 'savings_bytes', 'status_code', 'success', 'utf-8', 'vary', 'video/mp4', 'video/mpeg', 'x-compressed-size', 'x-compression-ratio', 'x-original-size']

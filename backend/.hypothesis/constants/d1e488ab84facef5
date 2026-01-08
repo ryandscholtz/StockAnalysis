@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Documents\GitHub\StockAnalysis\backend\app\analysis\management_quality.py
+# hypothesis_version: 6.149.1
+
+[0.0, 0.05, 0.1, 0.15, 0.2, 0.21, 0.3, 0.7, 0.9, 1.1, 5.0, 7.0, 8.0, 10.0, 15.0, 25.0, 30.0, 100.0, 'Cash', 'EBIT', 'Financial discipline', 'Long Term Debt', 'Net Income', 'Operating Income', 'Revenue', 'Strong track record', 'Total Assets', 'Total Debt', 'Total Revenue', 'Weak track record', 'capital_allocation', 'financial_discipline', 'track_record', 'transparency']

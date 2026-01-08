@@ -17,11 +17,11 @@ class MarginOfSafetyResult:
 
 class MarginOfSafetyCalculator:
     """Calculate margin of safety and investment recommendation"""
-    
+
     def __init__(self, current_price: float, fair_value: float):
         self.current_price = current_price
         self.fair_value = fair_value
-    
+
     def calculate(self, business_quality_score: float = 50.0,
                   financial_health_score: float = 50.0,
                   beta: float = 1.0,
@@ -37,23 +37,23 @@ class MarginOfSafetyCalculator:
                 recommendation='Avoid',
                 reasoning='Unable to calculate fair value. Insufficient data.'
             )
-        
+
         # Basic margin of safety
         margin_of_safety = ((self.fair_value - self.current_price) / self.fair_value) * 100
-        
+
         # Upside potential
         if self.current_price > 0:
             upside_potential = ((self.fair_value - self.current_price) / self.current_price) * 100
         else:
             upside_potential = 0.0
-        
+
         # Price to Intrinsic Value ratio
         price_to_iv = self.current_price / self.fair_value
-        
+
         # Calculate required margin based on risk
         base_required_margin = 30.0
         required_margin = base_required_margin
-        
+
         # Adjustments
         if business_quality_score < 60:
             required_margin += 10.0
@@ -63,7 +63,7 @@ class MarginOfSafetyCalculator:
             required_margin += 5.0
         if market_cap and market_cap < 2_000_000_000:  # < $2B
             required_margin += 10.0
-        
+
         # Determine recommendation
         if margin_of_safety > 50.0 and business_quality_score > 70:
             recommendation = 'Strong Buy'
@@ -80,13 +80,13 @@ class MarginOfSafetyCalculator:
                 reasoning = f"Stock is overvalued ({abs(margin_of_safety):.1f}% above fair value). Not recommended for purchase."
             else:
                 reasoning = f"Insufficient margin of safety ({margin_of_safety:.1f}%) or poor business quality. Required margin: {required_margin:.1f}%."
-        
+
         # Add additional context to reasoning
         if business_quality_score < 50:
             reasoning += " Low business quality score increases risk."
         if financial_health_score < 50:
             reasoning += " Poor financial health increases risk."
-        
+
         return MarginOfSafetyResult(
             margin_of_safety=margin_of_safety,
             upside_potential=upside_potential,
@@ -94,4 +94,3 @@ class MarginOfSafetyCalculator:
             recommendation=recommendation,
             reasoning=reasoning
         )
-

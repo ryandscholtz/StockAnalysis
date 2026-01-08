@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\LocalCache\local-packages\Python312\site-packages\pdfminer\ascii85.py
+# hypothesis_version: 6.149.1
+
+[b'\x00\x00\x00\x00', b'!', b'([a-f\\d]{2})', b'0', b'^(?:[a-f\\d]{2}|\\s)*([a-f\\d])[\\s>]*$', b'u', b'z', b'~', '>L']

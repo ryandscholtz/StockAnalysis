@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Documents\GitHub\StockAnalysis\backend\app\core\metrics_middleware.py
+# hypothesis_version: 6.149.0
+
+[400, 401, 403, 404, 429, 500, 600, 1000, '...', '/_next/', '/analyze/', '/analyze/{ticker}', '/api/', '/assets/', '/auth/', '/batch/', '/batch/{operation}', '/favicon.ico', '/quote/', '/quote/{ticker}', '/robots.txt', '/static/', '/watchlist/', '/watchlist/{id}', 'authentication_error', 'authorization_error', 'duration_ms', 'endpoint', 'internal_error', 'method', 'not_found_error', 'rate_limit_error', 'server_error', 'status_code', 'validation_error']

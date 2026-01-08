@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Documents\GitHub\StockAnalysis\backend\app\data\sec_edgar_client.py
+# hypothesis_version: 6.149.1
+
+[200, '-', '0', '01. symbol', '05. price', '10-K', 'BALANCE_SHEET', 'CASH_FLOW', 'Description', 'GLOBAL_QUOTE', 'Global Quote', 'INCOME_STATEMENT', 'Industry', 'MarketCapitalization', 'Name', 'None', 'OVERVIEW', 'Sector', 'Symbol', 'USD', 'User-Agent', 'accessionNumber', 'accession_number', 'annualReports', 'apikey', 'cik_str', 'companyName', 'company_name', 'currency', 'date', 'description', 'filingDate', 'filing_found', 'filings', 'form', 'function', 'https://data.sec.gov', 'industry', 'marketCap', 'market_cap', 'note', 'price', 'recent', 'sector', 'symbol', 'ticker', 'website']

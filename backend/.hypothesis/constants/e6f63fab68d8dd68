@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\LocalCache\local-packages\Python312\site-packages\pydantic\_internal\_model_construction.py
+# hypothesis_version: 6.149.1
+
+[', ', 'BaseModel', '_', '__', '__annotations__', '__class_vars__', '__hash__', '__module__', '__parameters__', '__pydantic_private__', '__qualname__', '__root__', '__signature__', 'args', 'create_model', 'functools', 'model_config', 'model_fields', 'model_post_init', 'my_field', 'origin', 'parameters', 'unpack']

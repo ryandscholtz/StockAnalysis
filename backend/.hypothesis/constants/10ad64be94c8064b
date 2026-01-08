@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\LocalCache\local-packages\Python312\site-packages\botocore\docs\sharedexample.py
+# hypothesis_version: 6.149.1
+
+['# ', '(', ')', ',', ', ', '...', '=', 'Examples', 'Expected Output:', 'ResponseMetadata', '[', '],', '^\\.', 'comments', 'description', 'dict-value', 'ending-brace', 'ending-bracket', 'ending-parenthesis', 'id', 'input', 'input-close', 'list-section', 'map', 'output', 'output-close', 'param-values', 'parameters', 'print(response)', 'shared-examples', 'structure', 'timestamp', '{', '}']

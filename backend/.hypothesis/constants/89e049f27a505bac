@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Documents\GitHub\StockAnalysis\backend\app\core\cdn.py
+# hypothesis_version: 6.149.0
+
+['.avi', '.css', '.doc', '.docx', '.eot', '.gif', '.ico', '.jpeg', '.jpg', '.js', '.m4a', '.mjs', '.mov', '.mp3', '.mp4', '.ogg', '.otf', '.pdf', '.png', '.svg', '.ttf', '.txt', '.wav', '.webm', '.webp', '.woff', '.woff2', '/', '/static', 'CDN_BASE_URL', 'Cache-Control', 'ENVIRONMENT', 'STATIC_BASE_URL', 'X-Asset-Type', 'X-CDN-Base-URL', 'X-CDN-Enabled', 'asset_path', 'asset_type', 'audio', 'cache_control', 'cache_headers', 'cdn_base_url', 'cdn_enabled', 'cdn_url', 'css', 'development', 'document', 'fallback_base_url', 'fallback_url', 'false', 'font', 'image', 'is_cdn_enabled', 'is_served_from_cdn', 'issues', 'js', 'other', 'production', 'public, max-age=3600', 'true', 'valid', 'video']

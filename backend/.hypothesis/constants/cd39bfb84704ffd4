@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\LocalCache\local-packages\Python312\site-packages\starlette\responses.py
+# hypothesis_version: 6.149.1
+
+[b'content-length', b'content-type', b'set-cookie', 200, 204, 304, 307, 1024, ',', '-', '/', ':', ":/%#?=@[]!$&'()*+,;", '; charset=', 'HEAD', 'SameSite', '_headers', 'application/json', 'attachment', 'body', 'content-disposition', 'content-length', 'domain', 'etag', 'expires', 'headers', 'http.disconnect', 'http.response.body', 'http.response.start', 'httponly', 'last-modified', 'latin-1', 'lax', 'location', 'max-age', 'more_body', 'none', 'os.PathLike[str]', 'path', 'rb', 'samesite', 'secure', 'status', 'strict', 'text/', 'text/html', 'text/plain', 'type', 'utf-8', '{}; filename="{}"']

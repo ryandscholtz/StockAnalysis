@@ -1,40 +1,14 @@
 """
 FastAPI application entry point for Stock Analysis Tool
+Modern architecture with dependency injection and structured logging
 """
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from app.api.routes import router
+from dotenv import load_dotenv
 
-app = FastAPI(
-    title="Stock Analysis API",
-    description="Charlie Munger methodology stock analysis API",
-    version="1.0.0"
-)
+# Load environment variables from .env file
+load_dotenv()
 
-# Configure CORS
-app.add_middleware(
-    CORSMiddleware,
-    # Allow local frontend dev servers
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:3001",
-        "http://localhost:3003",
-    ],  # Add production URL later
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Import the modern FastAPI app
+from app.core.app import app
 
-# Include API routes
-app.include_router(router, prefix="/api")
-
-
-@app.get("/")
-async def root():
-    return {"message": "Stock Analysis API", "version": "1.0.0"}
-
-
-@app.get("/health")
-async def health():
-    return {"status": "healthy"}
-
+# Export the app for uvicorn
+__all__ = ["app"]

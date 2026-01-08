@@ -1,6 +1,6 @@
 'use client'
 
-import { StockAnalysis } from '@/lib/api'
+import { StockAnalysis } from '@/types/analysis'
 
 interface FinancialHealthProps {
   analysis: StockAnalysis
@@ -16,11 +16,13 @@ export default function FinancialHealth({ analysis }: FinancialHealthProps) {
     return 'score-low'
   }
 
-  const formatRatio = (value: number, decimals: number = 2) => {
+  const formatRatio = (value: number | null | undefined, decimals: number = 2) => {
+    if (value === null || value === undefined || isNaN(value) || !isFinite(value)) return '-'
     return value.toFixed(decimals)
   }
 
-  const formatPercent = (value: number) => {
+  const formatPercent = (value: number | null | undefined) => {
+    if (value === null || value === undefined || isNaN(value) || !isFinite(value)) return '-'
     return `${(value * 100).toFixed(1)}%`
   }
 

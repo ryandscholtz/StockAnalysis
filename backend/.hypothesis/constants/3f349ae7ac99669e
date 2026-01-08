@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Documents\GitHub\StockAnalysis\backend\app\database\db_service.py
+# hypothesis_version: 6.149.1
+
+[500, 'analysisWeights', 'analysis_date', 'analyzed_at', 'assetBasedValue', 'balance_sheet', 'businessQuality', 'businessType', 'cashflow', 'companyName', 'completed', 'currency', 'currentPrice', 'current_price', 'dcfValue', 'earningsGrowth1Y', 'epvValue', 'error', 'failed', 'fairValue', 'fair_value', 'financialHealth', 'growthMetrics', 'income_statement', 'industry', 'key_metrics', 'llama_vision', 'managementQuality', 'marginOfSafety', 'margin_of_safety_pct', 'marketCap', 'market_cap', 'pbRatio', 'pdf_upload', 'peRatio', 'percentage', 'priceRatios', 'psRatio', 'recommendation', 'revenueGrowth1Y', 'running', 'score', 'sector', 'stock_analysis.db', 'success', 'upsidePotential', 'valuation']

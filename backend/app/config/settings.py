@@ -14,7 +14,7 @@ class UserPreferences:
     forecast_period: int = 5  # 5 years
     circle_of_competence_industries: List[str] = None
     risk_tolerance: str = "moderate"  # "conservative", "moderate", "aggressive"
-    
+
     def __post_init__(self):
         if self.circle_of_competence_industries is None:
             self.circle_of_competence_industries = []
@@ -22,4 +22,3 @@ class UserPreferences:
 
 # Default settings instance
 default_settings = UserPreferences()
-
