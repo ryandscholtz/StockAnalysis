@@ -123,6 +123,25 @@ jobs:
       with:
         python-version: ${{ env.PYTHON_VERSION }}
         
+    - name: Package Lambda function
+      working-directory: ./backend
+      run: |
+        # Create dist directory
+        mkdir -p dist
+        
+        # Copy application code
+        cp -r app dist/
+        cp lambda_handler.py dist/
+        
+        # Install minimal dependencies for Lambda
+        pip install fastapi==0.104.1 pydantic==2.5.0 mangum==0.17.0 boto3==1.34.0 python-dotenv==1.0.0 requests>=2.32.2 -t dist/ --no-deps
+        
+        # Install required dependencies
+        pip install starlette typing-extensions annotated-types pydantic-core botocore jmespath s3transfer urllib3 certifi charset-normalizer idna anyio python-dateutil six -t dist/ --upgrade
+        
+        echo "Lambda package created successfully"
+        ls -la dist/
+        
     - name: Install CDK dependencies
       working-directory: ./infrastructure
       run: npm ci
