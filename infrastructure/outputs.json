@@ -1,0 +1,11 @@
+{
+  "StockAnalysisInfrastructure-production": {
+    "StockAnalysisApiEndpoint9B24A628": "https://dx0w31lbc1.execute-api.eu-west-1.amazonaws.com/production/",
+    "TableName": "stock-analyses-production",
+    "SecretsArn": "arn:aws:secretsmanager:eu-west-1:295202642810:secret:stock-analysis-secrets-production-Mm2Ybk",
+    "ApiUrl": "https://dx0w31lbc1.execute-api.eu-west-1.amazonaws.com/production/",
+    "AlertTopicArn": "arn:aws:sns:eu-west-1:295202642810:stock-analysis-alerts-production",
+    "CriticalAlertTopicArn": "arn:aws:sns:eu-west-1:295202642810:stock-analysis-critical-alerts-production",
+    "DashboardUrl": "https://console.aws.amazon.com/cloudwatch/home?region=eu-west-1#dashboards:name=stock-analysis-production"
+  }
+}
