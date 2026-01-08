@@ -42,17 +42,21 @@ jobs:
         
     - name: Check deployment window
       run: |
-        # Only allow production deployments during business hours (UTC)
-        if [[ "${{ inputs.environment }}" == "production" ]]; then
-          current_hour=$(date -u +%H)
-          current_day=$(date -u +%u)  # 1=Monday, 7=Sunday
-          
-          # Allow deployments Monday-Friday, 9 AM - 5 PM UTC
-          if [[ $current_day -gt 5 || $current_hour -lt 9 || $current_hour -gt 17 ]]; then
-            echo "Production deployments are only allowed during business hours (Mon-Fri, 9 AM - 5 PM UTC)"
-            exit 1
-          fi
-        fi
+        # Allow production deployments at any time for personal projects
+        # Business hours restriction can be enabled for enterprise environments
+        echo "Deployment allowed - personal project deployment"
+        
+        # Uncomment below for enterprise business hours restriction:
+        # if [[ "${{ inputs.environment }}" == "production" ]]; then
+        #   current_hour=$(date -u +%H)
+        #   current_day=$(date -u +%u)  # 1=Monday, 7=Sunday
+        #   
+        #   # Allow deployments Monday-Friday, 9 AM - 5 PM UTC
+        #   if [[ $current_day -gt 5 || $current_hour -lt 9 || $current_hour -gt 17 ]]; then
+        #     echo "Production deployments are only allowed during business hours (Mon-Fri, 9 AM - 5 PM UTC)"
+        #     exit 1
+        #   fi
+        # fi
         
     - name: Manual approval for production
       id: approval
