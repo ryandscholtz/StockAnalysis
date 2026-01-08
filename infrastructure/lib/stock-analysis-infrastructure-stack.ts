@@ -192,6 +192,14 @@ export class StockAnalysisInfrastructureStack extends cdk.Stack {
     const healthResource = this.api.root.addResource('health');
     healthResource.addMethod('GET', lambdaIntegration);
     
+    // Documentation endpoint
+    const docsResource = this.api.root.addResource('docs');
+    docsResource.addMethod('GET', lambdaIntegration);
+    
+    // OpenAPI specification endpoint
+    const openapiResource = this.api.root.addResource('openapi.json');
+    openapiResource.addMethod('GET', lambdaIntegration);
+    
     // Main API routes (proxy all to Lambda)
     apiResource.addProxy({
       defaultIntegration: lambdaIntegration,
