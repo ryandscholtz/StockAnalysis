@@ -10,6 +10,7 @@
 - ✅ `/health` endpoint responding correctly
 - ✅ CORS headers configured
 - ✅ Lambda function deployed successfully
+- ✅ API Gateway routing working
 
 ### Infrastructure
 - ✅ API Gateway
@@ -22,3 +23,12 @@
 1. Add AWS credentials to GitHub Secrets for automated deployments
 2. Integrate full FastAPI application
 3. Configure frontend to use production API endpoint
+
+### Test Commands
+```bash
+# Health check
+curl https://9ye8wru6s5.execute-api.us-east-1.amazonaws.com/production/health
+
+# API test
+curl https://9ye8wru6s5.execute-api.us-east-1.amazonaws.com/production/api/test
+```
