@@ -157,23 +157,30 @@ export class StockAnalysisInfrastructureStack extends cdk.Stack {
         : logs.RetentionDays.ONE_WEEK
     });
 
-    // API Gateway with rate limiting
+    // API Gateway with rate limiting and explicit CORS
     this.api = new apigateway.RestApi(this, 'StockAnalysisApi', {
       restApiName: `Stock Analysis API - ${environment}`,
       description: `Serverless stock analysis API for ${environment}`,
       
       // CORS configuration
       defaultCorsPreflightOptions: {
-        allowOrigins: environment === 'production' 
-          ? [
-              props.domainName || 'https://stockanalysis.cerebrum.com',
-              'http://localhost:3000',
-              'http://localhost:3001',
-              'http://127.0.0.1:3000'
-            ]
-          : apigateway.Cors.ALL_ORIGINS,
-        allowMethods: apigateway.Cors.ALL_METHODS,
-        allowHeaders: ['Content-Type', 'X-Amz-Date', 'Authorization', 'X-Api-Key', 'X-Correlation-Id']
+        allowOrigins: [
+          'http://localhost:3000',
+          'http://localhost:3001', 
+          'http://127.0.0.1:3000',
+          'https://stockanalysis.cerebrum.com'
+        ],
+        allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+        allowHeaders: [
+          'Content-Type', 
+          'X-Amz-Date', 
+          'Authorization', 
+          'X-Api-Key', 
+          'X-Correlation-Id',
+          'X-Requested-With'
+        ],
+        allowCredentials: false,
+        maxAge: cdk.Duration.seconds(86400)
       },
       
       // API Gateway logging
@@ -185,25 +192,60 @@ export class StockAnalysisInfrastructureStack extends cdk.Stack {
       }
     });
 
-    // Lambda integration
+    // Lambda integration with CORS
     const lambdaIntegration = new apigateway.LambdaIntegration(this.apiFunction, {
-      requestTemplates: { 'application/json': '{ "statusCode": "200" }' }
+      requestTemplates: { 'application/json': '{ "statusCode": "200" }' },
+      integrationResponses: [{
+        statusCode: '200',
+        responseParameters: {
+          'method.response.header.Access-Control-Allow-Origin': "'*'",
+          'method.response.header.Access-Control-Allow-Headers': "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Requested-With'",
+          'method.response.header.Access-Control-Allow-Methods': "'GET,POST,PUT,DELETE,OPTIONS'"
+        }
+      }]
     });
 
     // API Gateway routes
     const apiResource = this.api.root.addResource('api');
     
-    // Health check endpoint
+    // Health check endpoint with explicit CORS
     const healthResource = this.api.root.addResource('health');
-    healthResource.addMethod('GET', lambdaIntegration);
+    healthResource.addMethod('GET', lambdaIntegration, {
+      methodResponses: [{
+        statusCode: '200',
+        responseParameters: {
+          'method.response.header.Access-Control-Allow-Origin': true,
+          'method.response.header.Access-Control-Allow-Headers': true,
+          'method.response.header.Access-Control-Allow-Methods': true
+        }
+      }]
+    });
     
     // Documentation endpoint
     const docsResource = this.api.root.addResource('docs');
-    docsResource.addMethod('GET', lambdaIntegration);
+    docsResource.addMethod('GET', lambdaIntegration, {
+      methodResponses: [{
+        statusCode: '200',
+        responseParameters: {
+          'method.response.header.Access-Control-Allow-Origin': true,
+          'method.response.header.Access-Control-Allow-Headers': true,
+          'method.response.header.Access-Control-Allow-Methods': true
+        }
+      }]
+    });
     
     // OpenAPI specification endpoint
     const openapiResource = this.api.root.addResource('openapi.json');
-    openapiResource.addMethod('GET', lambdaIntegration);
+    openapiResource.addMethod('GET', lambdaIntegration, {
+      methodResponses: [{
+        statusCode: '200',
+        responseParameters: {
+          'method.response.header.Access-Control-Allow-Origin': true,
+          'method.response.header.Access-Control-Allow-Headers': true,
+          'method.response.header.Access-Control-Allow-Methods': true
+        }
+      }]
+    });
     
     // Main API routes (proxy all to Lambda)
     apiResource.addProxy({

@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>API Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .result { margin: 10px 0; padding: 10px; border: 1px solid #ccc; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        button { margin: 5px; padding: 10px 15px; }
+    </style>
+</head>
+<body>
+    <h1>Stock Analysis API Test</h1>
+    <p>Testing CORS and API connectivity from browser</p>
+    
+    <button onclick="testVersion()">Test /api/version</button>
+    <button onclick="testWatchlist()">Test /api/watchlist</button>
+    <button onclick="testSearch()">Test /api/search</button>
+    <button onclick="clearResults()">Clear Results</button>
+    
+    <div id="results"></div>
+
+    <script>
+        const API_BASE = 'https://9ye8wru6s5.execute-api.us-east-1.amazonaws.com/production';
+        
+        function addResult(title, content, isError = false) {
+            const resultsDiv = document.getElementById('results');
+            const resultDiv = document.createElement('div');
+            resultDiv.className = `result ${isError ? 'error' : 'success'}`;
+            resultDiv.innerHTML = `<h3>${title}</h3><pre>${content}</pre>`;
+            resultsDiv.appendChild(resultDiv);
+        }
+        
+        function clearResults() {
+            document.getElementById('results').innerHTML = '';
+        }
+        
+        async function testVersion() {
+            try {
+                console.log('Testing /api/version...');
+                const response = await fetch(`${API_BASE}/api/version`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                console.log('Response status:', response.status);
+                console.log('Response headers:', [...response.headers.entries()]);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    addResult('✅ /api/version Success', JSON.stringify({
+                        status: response.status,
+                        data: data,
+                        corsHeaders: {
+                            'Access-Control-Allow-Origin': response.headers.get('Access-Control-Allow-Origin'),
+                            'Access-Control-Allow-Methods': response.headers.get('Access-Control-Allow-Methods'),
+                            'Access-Control-Allow-Headers': response.headers.get('Access-Control-Allow-Headers')
+                        }
+                    }, null, 2));
+                } else {
+                    addResult('❌ /api/version HTTP Error', `Status: ${response.status}\nStatus Text: ${response.statusText}`, true);
+                }
+            } catch (error) {
+                console.error('Version test error:', error);
+                addResult('❌ /api/version Network Error', `Error: ${error.message}\nType: ${error.name}\nThis is likely a CORS issue.`, true);
+            }
+        }
+        
+        async function testWatchlist() {
+            try {
+                console.log('Testing /api/watchlist...');
+                const response = await fetch(`${API_BASE}/api/watchlist`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    addResult('✅ /api/watchlist Success', JSON.stringify({
+                        status: response.status,
+                        itemCount: data.items ? data.items.length : 0,
+                        total: data.total,
+                        corsHeaders: {
+                            'Access-Control-Allow-Origin': response.headers.get('Access-Control-Allow-Origin')
+                        }
+                    }, null, 2));
+                } else {
+                    addResult('❌ /api/watchlist HTTP Error', `Status: ${response.status}\nStatus Text: ${response.statusText}`, true);
+                }
+            } catch (error) {
+                console.error('Watchlist test error:', error);
+                addResult('❌ /api/watchlist Network Error', `Error: ${error.message}\nType: ${error.name}`, true);
+            }
+        }
+        
+        async function testSearch() {
+            try {
+                console.log('Testing /api/search...');
+                const response = await fetch(`${API_BASE}/api/search?q=AAPL`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    addResult('✅ /api/search Success', JSON.stringify({
+                        status: response.status,
+                        resultCount: data.results ? data.results.length : 0,
+                        results: data.results,
+                        corsHeaders: {
+                            'Access-Control-Allow-Origin': response.headers.get('Access-Control-Allow-Origin')
+                        }
+                    }, null, 2));
+                } else {
+                    addResult('❌ /api/search HTTP Error', `Status: ${response.status}\nStatus Text: ${response.statusText}`, true);
+                }
+            } catch (error) {
+                console.error('Search test error:', error);
+                addResult('❌ /api/search Network Error', `Error: ${error.message}\nType: ${error.name}`, true);
+            }
+        }
+        
+        // Test on page load
+        window.onload = function() {
+            console.log('Page loaded, testing API...');
+            setTimeout(testVersion, 1000);
+        };
+    </script>
+</body>
+</html>

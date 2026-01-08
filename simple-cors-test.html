@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Simple CORS Test</title>
+    <meta charset="UTF-8">
+</head>
+<body>
+    <h1>Simple CORS Test</h1>
+    <p>Open browser console to see results</p>
+    <button onclick="runTests()">Run Tests</button>
+    <div id="output"></div>
+
+    <script>
+        const API_BASE = 'https://9ye8wru6s5.execute-api.us-east-1.amazonaws.com/production';
+        
+        async function testEndpoint(endpoint, description) {
+            console.log(`\n=== Testing ${description} ===`);
+            const output = document.getElementById('output');
+            
+            try {
+                const url = `${API_BASE}${endpoint}`;
+                console.log(`URL: ${url}`);
+                
+                const response = await fetch(url, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                console.log(`Status: ${response.status}`);
+                console.log('Headers:', Object.fromEntries(response.headers.entries()));
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('Data:', data);
+                    output.innerHTML += `<p>✅ ${description}: SUCCESS (${response.status})</p>`;
+                    return true;
+                } else {
+                    console.error(`HTTP Error: ${response.status} ${response.statusText}`);
+                    output.innerHTML += `<p>❌ ${description}: HTTP Error ${response.status}</p>`;
+                    return false;
+                }
+            } catch (error) {
+                console.error(`Network Error:`, error);
+                output.innerHTML += `<p>❌ ${description}: ${error.message}</p>`;
+                return false;
+            }
+        }
+        
+        async function runTests() {
+            document.getElementById('output').innerHTML = '<h2>Test Results:</h2>';
+            console.log('Starting CORS tests...');
+            
+            const tests = [
+                ['/api/version', 'API Version'],
+                ['/api/watchlist', 'Watchlist'],
+                ['/api/search?q=AAPL', 'Search'],
+                ['/health', 'Health Check']
+            ];
+            
+            let passed = 0;
+            for (const [endpoint, description] of tests) {
+                if (await testEndpoint(endpoint, description)) {
+                    passed++;
+                }
+                // Wait a bit between tests
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+            
+            console.log(`\n=== Test Summary ===`);
+            console.log(`Passed: ${passed}/${tests.length}`);
+            document.getElementById('output').innerHTML += `<h3>Summary: ${passed}/${tests.length} tests passed</h3>`;
+            
+            if (passed === tests.length) {
+                document.getElementById('output').innerHTML += '<p style="color: green; font-weight: bold;">🎉 All tests passed! CORS is working correctly.</p>';
+            } else {
+                document.getElementById('output').innerHTML += '<p style="color: red; font-weight: bold;">❌ Some tests failed. Check console for details.</p>';
+            }
+        }
+        
+        // Auto-run tests on page load
+        window.onload = function() {
+            setTimeout(runTests, 1000);
+        };
+    </script>
+</body>
+</html>

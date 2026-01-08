@@ -18,12 +18,14 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         path = event.get('path', '/')
         query_params = event.get('queryStringParameters') or {}
         
-        # CORS headers
+        # CORS headers - comprehensive configuration
         headers = {
             'Content-Type': 'application/json',
             'Access-Control-Allow-Origin': '*',
             'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With'
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, X-Api-Key, X-Correlation-Id',
+            'Access-Control-Allow-Credentials': 'false',
+            'Access-Control-Max-Age': '86400'
         }
         
         # Handle OPTIONS requests (CORS preflight)
@@ -31,7 +33,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             return {
                 'statusCode': 200,
                 'headers': headers,
-                'body': json.dumps({'message': 'CORS preflight'})
+                'body': json.dumps({'message': 'CORS preflight successful'})
             }
         
         # Health check endpoint
@@ -43,6 +45,18 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     'status': 'healthy',
                     'message': 'Stock Analysis API - Simplified Handler',
                     'version': '1.0.0'
+                })
+            }
+        
+        # API version endpoint
+        if path == '/api/version':
+            return {
+                'statusCode': 200,
+                'headers': headers,
+                'body': json.dumps({
+                    'version': '1.0.0',
+                    'build_timestamp': '2024-01-01T00:00:00Z',
+                    'api_name': 'Stock Analysis API - Simplified Handler'
                 })
             }
         
@@ -288,7 +302,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'body': json.dumps({
                 'error': 'Not Found',
                 'message': f'Endpoint {path} not found',
-                'available_endpoints': ['/health', '/api/search', '/api/watchlist', '/api/watchlist/{ticker}', '/api/analyze/{ticker}', '/api/watchlist/live-prices', '/api/analysis-presets', '/docs', '/openapi.json']
+                'available_endpoints': ['/health', '/api/version', '/api/search', '/api/watchlist', '/api/watchlist/{ticker}', '/api/analyze/{ticker}', '/api/watchlist/live-prices', '/api/analysis-presets', '/docs', '/openapi.json']
             })
         }
     
@@ -298,7 +312,9 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'statusCode': 500,
             'headers': {
                 'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*'
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, X-Api-Key, X-Correlation-Id'
             },
             'body': json.dumps({
                 'error': 'Internal Server Error',
