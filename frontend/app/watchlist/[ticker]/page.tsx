@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { stockApi, WatchlistItemDetail, StockAnalysis } from '@/lib/api'
+import { stockApi, WatchlistItemDetail } from '@/lib/api'
+import { StockAnalysis } from '@/types/analysis'
 import { formatPrice } from '@/lib/currency'
 import AnalysisCard from '@/components/AnalysisCard'
 import MarginOfSafety from '@/components/MarginOfSafety'
@@ -15,7 +16,8 @@ import MissingDataPrompt from '@/components/MissingDataPrompt'
 import PDFUpload from '@/components/PDFUpload'
 import DataQualityWarnings from '@/components/DataQualityWarnings'
 import ExtractedDataViewer from '@/components/ExtractedDataViewer'
-import AnalysisWeightsConfig, { AnalysisWeights } from '@/components/AnalysisWeightsConfig'
+import AnalysisWeightsConfig from '@/components/AnalysisWeightsConfig'
+import { AnalysisWeights } from '@/types/analysis'
 
 export default function WatchlistDetailPage() {
   const params = useParams()

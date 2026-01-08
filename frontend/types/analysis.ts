@@ -1,3 +1,9 @@
+export interface AnalysisWeights {
+  dcf_weight: number
+  epv_weight: number
+  asset_weight: number
+}
+
 export interface MissingDataInfo {
   income_statement: string[]
   balance_sheet: string[]
@@ -27,6 +33,8 @@ export interface StockAnalysis {
   timestamp: string
   missingData?: MissingDataInfo
   dataQualityWarnings?: DataQualityWarning[]
+  analysisWeights?: AnalysisWeights
+  businessType?: string
 }
 
 export interface ValuationBreakdown {

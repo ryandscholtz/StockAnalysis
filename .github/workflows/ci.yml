@@ -76,7 +76,57 @@ jobs:
       working-directory: ./frontend
       run: |
         # Run only basic tests, skip complex property-based tests
-        npm test -- --testNamePattern="Basic Frontend Tests" --passWithNoTests
+        npm test -- __tests__/basic.test.ts --passWithNoTests
+
+  bundle-size-check:
+    name: Bundle Size Check
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+        
+    - name: Install dependencies
+      working-directory: ./frontend
+      run: npm ci
+      
+    - name: Build and analyze bundle size
+      working-directory: ./frontend
+      run: |
+        npm run build
+        echo "=== Bundle Size Analysis ==="
+        
+        # Get static assets size (actual bundle)
+        if [ -d ".next/static" ]; then
+          STATIC_SIZE=$(du -sh .next/static 2>/dev/null | cut -f1 || echo "N/A")
+          echo "Static assets size: $STATIC_SIZE"
+        fi
+        
+        # Get server bundle size (excluding cache)
+        if [ -d ".next/server" ]; then
+          SERVER_SIZE=$(find .next/server -type f ! -name "*.cache*" -exec du -ch {} + 2>/dev/null | tail -1 | cut -f1 || echo "N/A")
+          echo "Server bundle size: $SERVER_SIZE"
+        fi
+        
+        # Analyze JavaScript chunks
+        if [ -d ".next/static/chunks" ]; then
+          echo "JavaScript chunks:"
+          find .next/static/chunks -name "*.js" -exec ls -lh {} \; | awk '{print $5 " " $9}' | sort -hr | head -10
+        fi
+        
+        # Check for large files (>500KB) in production files only
+        echo "Large files (>500KB):"
+        find .next/static -name "*.js" -size +500k -exec ls -lh {} \; | awk '{print $5 " " $9}' || echo "No large files found"
+        
+        # Production bundle size (excluding cache)
+        PRODUCTION_SIZE=$(find .next/static .next/server -type f ! -path "*/cache/*" -exec du -ch {} + 2>/dev/null | tail -1 | cut -f1 || echo "N/A")
+        echo "Production bundle size: $PRODUCTION_SIZE"
 
   security-scan:
     name: Security Scan
@@ -95,7 +145,7 @@ jobs:
   deploy-staging:
     name: Deploy to Staging
     uses: ./.github/workflows/deploy.yml
-    needs: [backend-tests, frontend-tests]
+    needs: [backend-tests, frontend-tests, bundle-size-check]
     if: github.ref == 'refs/heads/develop' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging')
     with:
       environment: staging
@@ -108,7 +158,7 @@ jobs:
   deploy-production:
     name: Deploy to Production
     uses: ./.github/workflows/deploy.yml
-    needs: [backend-tests, frontend-tests]
+    needs: [backend-tests, frontend-tests, bundle-size-check]
     if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production')
     with:
       environment: production

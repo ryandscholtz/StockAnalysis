@@ -1,12 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-
-export interface AnalysisWeights {
-  dcf_weight: number
-  epv_weight: number
-  asset_weight: number
-}
+import { AnalysisWeights } from '@/types/analysis'
 
 export interface BusinessTypePreset {
   [key: string]: AnalysisWeights

@@ -1,6 +1,6 @@
 'use client'
 
-import { StockAnalysis } from '@/lib/api'
+import { StockAnalysis } from '@/types/analysis'
 
 interface MarginOfSafetyProps {
   analysis: StockAnalysis

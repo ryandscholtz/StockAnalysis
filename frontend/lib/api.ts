@@ -112,11 +112,7 @@ api.interceptors.response.use(
   }
 )
 
-export interface AnalysisWeights {
-  dcf_weight: number
-  epv_weight: number
-  asset_weight: number
-}
+import { StockAnalysis, AnalysisWeights } from '@/types/analysis'
 
 export interface BankMetrics {
   net_interest_margin: number
@@ -148,88 +144,6 @@ export interface InsuranceMetrics {
   return_on_assets: number
   reserve_adequacy?: number | null
   investment_yield?: number | null
-}
-
-export interface StockAnalysis {
-  ticker: string
-  companyName: string
-  currentPrice: number
-  fairValue: number
-  marginOfSafety: number
-  upsidePotential: number
-  priceToIntrinsicValue: number
-  recommendation: 'Strong Buy' | 'Buy' | 'Hold' | 'Avoid'
-  recommendationReasoning: string
-  valuation: {
-    dcf: number
-    earningsPower: number
-    assetBased: number
-    weightedAverage: number
-  }
-  financialHealth: {
-    score: number
-    metrics: {
-      debtToEquity: number
-      currentRatio: number
-      quickRatio: number
-      interestCoverage: number
-      roe: number
-      roic: number
-      roa: number
-      fcfMargin: number
-    }
-  }
-  businessQuality: {
-    score: number
-    moatIndicators: string[]
-    competitivePosition: string
-  }
-  managementQuality?: {
-    score: number
-    strengths: string[]
-    weaknesses: string[]
-  }
-  growthMetrics?: {
-    revenueGrowth1Y?: number | null
-    revenueGrowth3Y?: number | null
-    revenueGrowth5Y?: number | null
-    earningsGrowth1Y?: number | null
-    earningsGrowth3Y?: number | null
-    earningsGrowth5Y?: number | null
-    fcfGrowth1Y?: number | null
-    fcfGrowth3Y?: number | null
-    fcfGrowth5Y?: number | null
-  }
-  priceRatios?: {
-    priceToEarnings?: number | null
-    priceToBook?: number | null
-    priceToSales?: number | null
-    priceToFCF?: number | null
-    enterpriseValueToEBITDA?: number | null
-  }
-  currency?: string
-  financialCurrency?: string
-  timestamp: string
-  dataQualityWarnings?: Array<{
-    category: string
-    field: string
-    message: string
-    severity: string
-    assumed_value?: number | null
-    actual_value?: number | null
-  }>
-  missingData?: {
-    income_statement: string[]
-    balance_sheet: string[]
-    cashflow: string[]
-    key_metrics: string[]
-    has_missing_data: boolean
-  }
-  businessType?: string | null
-  analysisWeights?: AnalysisWeights | null
-  bankMetrics?: BankMetrics | null
-  reitMetrics?: REITMetrics | null
-  insuranceMetrics?: InsuranceMetrics | null
 }
 
 export interface QuoteResponse {
