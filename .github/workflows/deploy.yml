@@ -15,8 +15,6 @@ on:
         required: true
       AWS_SECRET_ACCESS_KEY:
         required: true
-      SLACK_WEBHOOK_URL:
-        required: false
 
 env:
   NODE_VERSION: '18'
@@ -236,15 +234,6 @@ jobs:
       run: |
         echo "Restoring database from backup..."
         # Add database restore logic here
-        
-    - name: Notify rollback
-      uses: 8398a7/action-slack@v3
-      if: always()
-      with:
-        status: failure
-        text: '🚨 ROLLBACK INITIATED: Production deployment failed and has been rolled back!'
-      env:
-        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
   notify-success:
     name: Notify Success
@@ -253,15 +242,10 @@ jobs:
     if: success()
     
     steps:
-    - name: Notify deployment success
-      uses: 8398a7/action-slack@v3
-      with:
-        status: success
-        text: |
-          ✅ Deployment to ${{ inputs.environment }} successful!
-          
-          **Environment:** ${{ inputs.environment }}
-          **Branch:** ${{ github.ref }}
-          **Commit:** ${{ github.sha }}
-      env:
-        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+    - name: Log deployment success
+      run: |
+        echo "✅ Deployment to ${{ inputs.environment }} successful!"
+        echo "Environment: ${{ inputs.environment }}"
+        echo "Branch: ${{ github.ref }}"
+        echo "Commit: ${{ github.sha }}"
+        echo "GitHub will send email notifications for deployment status"

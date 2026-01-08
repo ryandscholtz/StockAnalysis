@@ -6,7 +6,6 @@ import re
 import os
 from typing import Optional, Dict, List
 from datetime import datetime, timedelta
-import xml.etree.ElementTree as ET
 
 
 class SECEdgarClient:
