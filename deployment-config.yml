@@ -23,7 +23,7 @@ environments:
     aws_region: us-east-1
     stack_name: StockAnalysisStack-production
     domain: api.stockanalysis.com
-    database_table: stock-analyses-prod
+    database_table: stock-analyses-production
     cache_cluster: stock-analysis-prod-cache
     monitoring:
       log_level: INFO

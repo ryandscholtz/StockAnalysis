@@ -86,7 +86,7 @@ jobs:
         echo "Creating database backup..."
         # Add DynamoDB backup commands here
         aws dynamodb create-backup \
-          --table-name stock-analyses-prod \
+          --table-name stock-analyses-production \
           --backup-name "pre-deployment-$(date +%Y%m%d-%H%M%S)"
           
     - name: Backup configuration
