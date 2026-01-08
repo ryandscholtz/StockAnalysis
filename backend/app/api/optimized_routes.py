@@ -8,7 +8,7 @@ import logging
 from datetime import datetime
 
 from app.background_tasks import task_manager, fetch_live_prices_background, analyze_stock_background
-from app.cache_manager import cache_manager, cache_async_result
+from app.cache_manager import cache_manager, cache_fastapi_endpoint
 from app.database.db_service import DatabaseService
 from app.core.dependencies import get_yahoo_client
 from app.data.api_client import YahooFinanceClient
@@ -229,7 +229,6 @@ async def get_cached_watchlist():
         }
 
 @router.get("/quote/{ticker}/cached")
-@cache_async_result("quick_quote", ttl_minutes=15)
 async def get_cached_quote(
     ticker: str,
     yahoo_client: YahooFinanceClient = Depends(get_yahoo_client)
@@ -238,9 +237,8 @@ async def get_cached_quote(
     Get basic quote data with caching - for instant price display
     """
     try:
-        # Run in thread pool to avoid blocking
-        loop = asyncio.get_event_loop()
-        quote = await loop.run_in_executor(None, yahoo_client.get_quote, ticker.upper())
+        # Get quote synchronously to avoid thread pool issues
+        quote = yahoo_client.get_quote(ticker.upper())
 
         if quote and quote.get('success'):
             return {

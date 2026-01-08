@@ -692,7 +692,7 @@ export default function WatchlistDetailPage() {
           <DataQualityWarnings warnings={analysis.dataQualityWarnings} />
           
           {/* Show missing data prompt and PDF upload if needed */}
-          {(analysis.fairValue === 0 || (analysis.missingData && analysis.missingData.has_missing_data)) && (
+          {(analysis.fairValue === 0 || (analysis.missingData?.has_missing_data)) && (
             <>
               <PDFUpload
                 ticker={ticker}

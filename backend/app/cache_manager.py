@@ -368,13 +368,14 @@ def cache_result(key_prefix: str, ttl_minutes: int = 60):
         return wrapper
     return decorator
 
-def cache_async_result(key_prefix: str, ttl_minutes: int = 60):
-    """Decorator to cache async function results"""
+def cache_fastapi_endpoint(key_prefix: str, ttl_minutes: int = 60):
+    """Decorator to cache FastAPI endpoint results using path parameters"""
     def decorator(func):
         async def wrapper(*args, **kwargs):
             try:
-                # Generate cache key
-                cache_key = cache_manager._generate_key(key_prefix, args=args, kwargs=kwargs)
+                # Extract ticker from kwargs (FastAPI injects path parameters as kwargs)
+                ticker = kwargs.get('ticker', 'unknown')
+                cache_key = f"{key_prefix}:{ticker.upper()}"
 
                 # Try to get from cache
                 cached_result = cache_manager.get(cache_key)
@@ -386,7 +387,7 @@ def cache_async_result(key_prefix: str, ttl_minutes: int = 60):
                 cache_manager.set(cache_key, result, ttl_minutes)
                 return result
             except Exception as e:
-                logger.error(f"Error in cache_async_result for {key_prefix}: {e}")
+                logger.error(f"Error in cache_fastapi_endpoint for {key_prefix}: {e}")
                 # Execute function without caching if cache fails
                 return await func(*args, **kwargs)
 
