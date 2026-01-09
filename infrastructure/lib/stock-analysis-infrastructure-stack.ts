@@ -133,11 +133,12 @@ export class StockAnalysisInfrastructureStack extends cdk.Stack {
     this.apiFunction = new lambda.Function(this, 'ApiFunction', {
       functionName: `stock-analysis-api-${environment}`,
       runtime: lambda.Runtime.PYTHON_3_11,
-      handler: 'simple_lambda_handler.lambda_handler',
+      handler: 'lambda_handler.lambda_handler',
       code: lambda.Code.fromAsset('../backend/dist'), // Assumes packaged code
       role: lambdaRole,
       timeout: cdk.Duration.seconds(900), // 15 minutes for complex analysis
       memorySize: environment === 'production' ? 3008 : 1024, // Max memory for production
+      description: 'Stock Analysis API with enhanced search and watchlist management',
       
       // Environment variables
       environment: {
@@ -145,7 +146,9 @@ export class StockAnalysisInfrastructureStack extends cdk.Stack {
         TABLE_NAME: this.table.tableName,
         SECRETS_ARN: apiSecrets.secretArn,
         LOG_LEVEL: environment === 'production' ? 'INFO' : 'DEBUG',
-        STRUCTURED_LOGGING: 'true'
+        STRUCTURED_LOGGING: 'true',
+        // Add version to force update
+        CODE_VERSION: '1.2.0'
       },
       
       // Enable X-Ray tracing
@@ -192,60 +195,25 @@ export class StockAnalysisInfrastructureStack extends cdk.Stack {
       }
     });
 
-    // Lambda integration with CORS
+    // Lambda integration - simplified without explicit CORS mapping
     const lambdaIntegration = new apigateway.LambdaIntegration(this.apiFunction, {
-      requestTemplates: { 'application/json': '{ "statusCode": "200" }' },
-      integrationResponses: [{
-        statusCode: '200',
-        responseParameters: {
-          'method.response.header.Access-Control-Allow-Origin': "'*'",
-          'method.response.header.Access-Control-Allow-Headers': "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Requested-With'",
-          'method.response.header.Access-Control-Allow-Methods': "'GET,POST,PUT,DELETE,OPTIONS'"
-        }
-      }]
+      requestTemplates: { 'application/json': '{ "statusCode": "200" }' }
     });
 
     // API Gateway routes
     const apiResource = this.api.root.addResource('api');
     
-    // Health check endpoint with explicit CORS
+    // Health check endpoint
     const healthResource = this.api.root.addResource('health');
-    healthResource.addMethod('GET', lambdaIntegration, {
-      methodResponses: [{
-        statusCode: '200',
-        responseParameters: {
-          'method.response.header.Access-Control-Allow-Origin': true,
-          'method.response.header.Access-Control-Allow-Headers': true,
-          'method.response.header.Access-Control-Allow-Methods': true
-        }
-      }]
-    });
+    healthResource.addMethod('GET', lambdaIntegration);
     
     // Documentation endpoint
     const docsResource = this.api.root.addResource('docs');
-    docsResource.addMethod('GET', lambdaIntegration, {
-      methodResponses: [{
-        statusCode: '200',
-        responseParameters: {
-          'method.response.header.Access-Control-Allow-Origin': true,
-          'method.response.header.Access-Control-Allow-Headers': true,
-          'method.response.header.Access-Control-Allow-Methods': true
-        }
-      }]
-    });
+    docsResource.addMethod('GET', lambdaIntegration);
     
     // OpenAPI specification endpoint
     const openapiResource = this.api.root.addResource('openapi.json');
-    openapiResource.addMethod('GET', lambdaIntegration, {
-      methodResponses: [{
-        statusCode: '200',
-        responseParameters: {
-          'method.response.header.Access-Control-Allow-Origin': true,
-          'method.response.header.Access-Control-Allow-Headers': true,
-          'method.response.header.Access-Control-Allow-Methods': true
-        }
-      }]
-    });
+    openapiResource.addMethod('GET', lambdaIntegration);
     
     // Main API routes (proxy all to Lambda)
     apiResource.addProxy({
