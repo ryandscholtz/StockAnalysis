@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { stockApi, SearchResult } from '@/lib/api'
+import { searchTickers } from '@/lib/enhanced-search'
 
 export default function AddToWatchlistPage() {
   const router = useRouter()
@@ -25,13 +26,55 @@ export default function AddToWatchlistPage() {
       setSearchLoading(true)
       searchTimeoutRef.current = setTimeout(async () => {
         try {
-          const results = await stockApi.searchTickers(searchQuery.trim())
-          // Ensure results is always an array
-          const safeResults = Array.isArray(results) ? results : []
-          setSuggestions(safeResults)
-          setShowSuggestions(safeResults.length > 0)
+          console.log('=== WATCHLIST ADD SEARCH DEBUG ===')
+          console.log('Query:', searchQuery.trim())
+          
+          // Start with local search for immediate results
+          console.log('Calling enhanced searchTickers function...')
+          const localResults = searchTickers(searchQuery.trim(), 10)
+          console.log('Enhanced search results:', localResults)
+          
+          // Convert TickerInfo to SearchResult
+          const localSearchResults: SearchResult[] = localResults.map(local => ({
+            ticker: local.ticker,
+            companyName: local.companyName,
+            exchange: local.exchange
+          }))
+          console.log('Converted results:', localSearchResults)
+          
+          // Try API search to potentially enhance results
+          let finalResults = localSearchResults
+          try {
+            console.log('Trying API search...')
+            const apiResults = await stockApi.searchTickers(searchQuery.trim())
+            console.log('API search results:', apiResults)
+            
+            // Ensure results is always an array
+            const safeApiResults = Array.isArray(apiResults) ? apiResults : []
+            
+            // Merge API results with local results, prioritizing API results
+            if (safeApiResults.length > 0) {
+              // Add API results that aren't already in local results
+              const additionalApiResults = safeApiResults.filter(api => 
+                !localSearchResults.some(local => local.ticker === api.ticker)
+              )
+              finalResults = [...safeApiResults, ...localSearchResults, ...additionalApiResults].slice(0, 10)
+              console.log('Merged results with API:', finalResults)
+            } else {
+              console.log('No API results, using enhanced search only')
+            }
+          } catch (apiError) {
+            console.log('API search failed, using enhanced search only:', apiError)
+            // Local results are already set as finalResults
+          }
+          
+          console.log('Final results to display:', finalResults)
+          setSuggestions(finalResults)
+          setShowSuggestions(finalResults.length > 0)
           setSelectedIndex(-1)
+          console.log('=== END WATCHLIST ADD SEARCH DEBUG ===')
         } catch (error: any) {
+          console.error('Enhanced search error:', error)
           // Show error if it's a connection issue
           if (error.code === 'ERR_NETWORK' || error.code === 'ECONNREFUSED' || error.message?.includes('Cannot connect')) {
             setError(error.message || 'Cannot connect to backend server')
@@ -61,6 +104,9 @@ export default function AddToWatchlistPage() {
   }, [searchQuery])
 
   const handleSelect = async (suggestion: SearchResult) => {
+    console.log('=== WATCHLIST ADD DEBUG ===')
+    console.log('Selected suggestion:', suggestion)
+    
     setSearchQuery(suggestion.ticker || '')
     setShowSuggestions(false)
     setSelectedIndex(-1)
@@ -69,13 +115,29 @@ export default function AddToWatchlistPage() {
     setAdding(true)
     setError('')
     try {
-      await stockApi.addToWatchlist(suggestion.ticker, suggestion.companyName, suggestion.exchange)
-      router.push('/watchlist')
+      console.log('Calling addToWatchlist with:', {
+        ticker: suggestion.ticker,
+        companyName: suggestion.companyName,
+        exchange: suggestion.exchange
+      })
+      
+      const result = await stockApi.addToWatchlist(suggestion.ticker, suggestion.companyName, suggestion.exchange)
+      console.log('addToWatchlist result:', result)
+      
+      if (result.success) {
+        console.log('Successfully added to watchlist, redirecting...')
+        router.push('/watchlist')
+      } else {
+        console.error('Add to watchlist failed:', result.message)
+        setError(result.message || 'Failed to add to watchlist')
+      }
     } catch (err: any) {
+      console.error('Add to watchlist error:', err)
       // Use formatted error message (from api.ts interceptor)
       setError(err.message || 'Failed to add to watchlist')
     } finally {
       setAdding(false)
+      console.log('=== END WATCHLIST ADD DEBUG ===')
     }
   }
 

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { stockApi, SearchResult } from '@/lib/api'
+import { searchTickers, TickerInfo, testEnhancedSearch } from '@/lib/enhanced-search'
 
 interface StockSearchProps {
   onSearch: (ticker: string) => void
@@ -17,6 +18,17 @@ export default function StockSearch({ onSearch }: StockSearchProps) {
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const suggestionsRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  // Test enhanced search module on component mount
+  useEffect(() => {
+    console.log('StockSearch component mounted')
+    try {
+      const testResult = testEnhancedSearch()
+      console.log('Enhanced search test:', testResult)
+    } catch (error) {
+      console.error('Enhanced search module error:', error)
+    }
+  }, [])
 
   useEffect(() => {
     // Load recent searches from localStorage
@@ -40,20 +52,44 @@ export default function StockSearch({ onSearch }: StockSearchProps) {
       setLoading(true)
       searchTimeoutRef.current = setTimeout(async () => {
         try {
-          const results = await stockApi.searchTickers(ticker.trim())
-          console.log('Search results:', results) // Debug: verify data structure
-          // Ensure results is always an array
-          const safeResults = Array.isArray(results) ? results : []
-          setSuggestions(safeResults)
-          setShowSuggestions(safeResults.length > 0)
+          // Start with local search for immediate results
+          const localResults = searchTickers(ticker.trim(), 10)
+          console.log('Local search results:', localResults)
+          
+          // Convert TickerInfo to SearchResult
+          const localSearchResults: SearchResult[] = localResults.map(local => ({
+            ticker: local.ticker,
+            companyName: local.companyName,
+            exchange: local.exchange
+          }))
+          
+          // Try API search to potentially enhance results
+          let finalResults = localSearchResults
+          try {
+            const apiResults = await stockApi.searchTickers(ticker.trim())
+            console.log('API search results:', apiResults)
+            
+            // Ensure results is always an array
+            const safeApiResults = Array.isArray(apiResults) ? apiResults : []
+            
+            // Merge API results with local results, prioritizing API results
+            if (safeApiResults.length > 0) {
+              // Add API results that aren't already in local results
+              const additionalApiResults = safeApiResults.filter(api => 
+                !localSearchResults.some(local => local.ticker === api.ticker)
+              )
+              finalResults = [...safeApiResults, ...localSearchResults, ...additionalApiResults].slice(0, 10)
+            }
+          } catch (apiError) {
+            console.log('API search failed, using local results only:', apiError)
+            // Local results are already set as finalResults
+          }
+          
+          setSuggestions(finalResults)
+          setShowSuggestions(finalResults.length > 0)
           setSelectedIndex(-1)
         } catch (error: any) {
           console.error('Search error:', error)
-          // Show error message to user if it's a connection error
-          if (error.code === 'ERR_NETWORK' || error.code === 'ECONNREFUSED' || error.message?.includes('Cannot connect')) {
-            // Error will be shown via error state if needed
-            console.warn('Backend connection error:', error.message)
-          }
           setSuggestions([])
           setShowSuggestions(false)
         } finally {

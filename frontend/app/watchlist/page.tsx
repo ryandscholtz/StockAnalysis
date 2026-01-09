@@ -350,9 +350,10 @@ export default function WatchlistPage() {
                   }}>
                     {/* Show live price if available, otherwise cached price */}
                     {(() => {
-                      const livePrice = livePrices[item.ticker]?.price
+                      const tickerPriceData = livePrices[item.ticker]
+                      const livePrice = tickerPriceData?.price
                       const cachedPrice = item.current_price
-                      const priceError = livePrices[item.ticker]?.error
+                      const priceError = tickerPriceData?.error
                       
                       // Show live price if available and valid
                       if (livePrice && Math.abs(livePrice - 1.0) > 0.01) {
@@ -366,14 +367,14 @@ export default function WatchlistPage() {
                               {formatPrice(livePrice)}
                             </div>
                             {/* Show success comment if available */}
-                            {livePrices[item.ticker]?.comment && livePrices[item.ticker]?.success && (
+                            {tickerPriceData?.comment && tickerPriceData?.success && (
                               <div style={{ 
                                 fontSize: '10px', 
                                 color: '#059669', 
                                 marginTop: '2px',
                                 fontStyle: 'italic'
                               }}>
-                                ✓ {livePrices[item.ticker].comment}
+                                ✓ {tickerPriceData.comment}
                               </div>
                             )}
                           </div>
@@ -406,7 +407,7 @@ export default function WatchlistPage() {
                               ⚠️ {priceError}
                             </div>
                             {/* Show detailed error comment if available */}
-                            {livePrices[item.ticker]?.comment && (
+                            {tickerPriceData?.comment && (
                               <div style={{ 
                                 fontSize: '11px', 
                                 color: '#6b7280', 
@@ -414,7 +415,7 @@ export default function WatchlistPage() {
                                 fontStyle: 'italic',
                                 lineHeight: '1.3'
                               }}>
-                                {livePrices[item.ticker].comment}
+                                {tickerPriceData.comment}
                               </div>
                             )}
                           </div>

@@ -13,13 +13,18 @@ export default function ValuationChart({ analysis }: ValuationChartProps) {
     ? analysis.currentPrice 
     : 0
   
+  // Safely extract valuation data with fallbacks
+  const dcfValue = analysis.valuation?.dcf ?? null
+  const earningsPowerValue = analysis.valuation?.earningsPower ?? null
+  const assetBasedValue = analysis.valuation?.assetBased ?? null
+  
   // Filter out null/undefined/NaN values for max calculation (include currentPrice even if 0 for scaling)
   const validValues = [
     currentPrice > 0 ? currentPrice : null,
     analysis.fairValue,
-    analysis.valuation.dcf,
-    analysis.valuation.earningsPower,
-    analysis.valuation.assetBased
+    dcfValue,
+    earningsPowerValue,
+    assetBasedValue
   ].filter((v): v is number => v !== null && v !== undefined && !isNaN(v) && isFinite(v) && v > 0)
   
   const maxValue = validValues.length > 0 ? Math.max(...validValues) : 1
@@ -68,9 +73,9 @@ export default function ValuationChart({ analysis }: ValuationChartProps) {
       {/* Always show current price above Fair Value - show 0 if not available */}
       <Bar label="Current Price" value={currentPrice > 0 ? currentPrice : 0} color="#dc2626" />
       <Bar label="Fair Value (Weighted)" value={analysis.fairValue ?? null} color="#059669" />
-      <Bar label="DCF Model" value={analysis.valuation?.dcf ?? null} color="#0d9488" />
-      <Bar label="Earnings Power Value" value={analysis.valuation?.earningsPower ?? null} color="#0891b2" />
-      <Bar label="Asset-Based" value={analysis.valuation?.assetBased ?? null} color="#0284c7" />
+      <Bar label="DCF Model" value={dcfValue} color="#0d9488" />
+      <Bar label="Earnings Power Value" value={earningsPowerValue} color="#0891b2" />
+      <Bar label="Asset-Based" value={assetBasedValue} color="#0284c7" />
 
       <div style={{ marginTop: '24px', padding: '16px', background: '#f9fafb', borderRadius: '6px' }}>
         <p style={{ fontSize: '14px', color: '#6b7280', lineHeight: '1.6' }}>
