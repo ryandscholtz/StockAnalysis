@@ -619,12 +619,17 @@ export const stockApi = {
 
   // Watchlist methods
   async getWatchlist(): Promise<{ items: WatchlistItem[]; total: number }> {
+    console.log('=== getWatchlist DEBUG ===')
     try {
       const response = await api.get<{ items: WatchlistItem[]; total: number }>('/api/watchlist')
+      console.log('API watchlist response:', response.data)
       
       // Merge with client-side watchlist
       const clientWatchlist = WatchlistSimulation.getWatchlist()
+      console.log('Client-side watchlist:', clientWatchlist)
+      
       const apiItems = response.data.items || []
+      console.log('API items:', apiItems)
       
       // Convert client-side items to API format
       const clientItems: WatchlistItem[] = clientWatchlist.map(item => ({
@@ -639,21 +644,29 @@ export const stockApi = {
         margin_of_safety_pct: 16.67,
         recommendation: 'BUY'
       }))
+      console.log('Converted client items:', clientItems)
       
       // Merge and deduplicate
       const allItems = [...apiItems, ...clientItems]
+      console.log('All items before deduplication:', allItems)
+      
       const uniqueItems = allItems.filter((item, index, self) => 
         index === self.findIndex(i => i.ticker === item.ticker)
       )
+      console.log('Unique items after deduplication:', uniqueItems)
       
-      return {
+      const result = {
         items: uniqueItems,
         total: uniqueItems.length
       }
+      console.log('Final getWatchlist result:', result)
+      console.log('=== END getWatchlist DEBUG ===')
+      return result
     } catch (error) {
       // Fallback to client-side only
       console.log('API watchlist not available, using client-side only')
       const clientWatchlist = WatchlistSimulation.getWatchlist()
+      console.log('Client-side watchlist (fallback):', clientWatchlist)
       
       const items: WatchlistItem[] = clientWatchlist.map(item => ({
         ticker: item.ticker,
@@ -668,10 +681,13 @@ export const stockApi = {
         recommendation: 'BUY'
       }))
       
-      return {
+      const result = {
         items,
         total: items.length
       }
+      console.log('Fallback result:', result)
+      console.log('=== END getWatchlist DEBUG ===')
+      return result
     }
   },
 
@@ -701,10 +717,18 @@ export const stockApi = {
       } else if (response.data.watchlist_item) {
         // Old format: { watchlist_item: {...}, latest_analysis: {...} }
         // This means the API processed the request but returned the wrong format
-        // Treat it as success since the item was processed
+        // Since the API is mock and doesn't actually save, also save to client-side
+        console.log('API returned old format, also saving to client-side as backup')
+        WatchlistSimulation.addToWatchlist(
+          ticker, 
+          companyName || `${ticker} Corporation`, 
+          exchange || 'NASDAQ', 
+          notes
+        )
+        
         return {
           success: true,
-          message: `Successfully added ${ticker} to watchlist (API processed)`
+          message: `Successfully added ${ticker} to watchlist (API processed + client-side backup)`
         }
       } else {
         // Unknown format

@@ -70,7 +70,7 @@ export default function WatchlistPage() {
       
       // Try the new async endpoint first
       try {
-        const asyncResponse = await fetch('https://127.0.0.1:8000/api/watchlist/live-prices-async')
+        const asyncResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'}/api/watchlist/live-prices-async`)
         if (asyncResponse.ok) {
           const asyncData = await asyncResponse.json()
           
@@ -87,7 +87,7 @@ export default function WatchlistPage() {
             // Poll for results every 2 seconds
             const pollInterval = setInterval(async () => {
               try {
-                const statusResponse = await fetch(`https://127.0.0.1:8000/api/tasks/${taskId}`)
+                const statusResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'}/api/tasks/${taskId}`)
                 if (statusResponse.ok) {
                   const statusData = await statusResponse.json()
                   
@@ -125,6 +125,8 @@ export default function WatchlistPage() {
       setLivePrices(result.live_prices)
     } catch (err: any) {
       console.error('Error refreshing live prices:', err)
+      // Set empty object to prevent undefined errors
+      setLivePrices({})
       // Don't show error for live prices - it's optional
     } finally {
       setRefreshingPrices(false)
@@ -350,7 +352,7 @@ export default function WatchlistPage() {
                   }}>
                     {/* Show live price if available, otherwise cached price */}
                     {(() => {
-                      const tickerPriceData = livePrices[item.ticker]
+                      const tickerPriceData = livePrices?.[item.ticker]
                       const livePrice = tickerPriceData?.price
                       const cachedPrice = item.current_price
                       const priceError = tickerPriceData?.error
