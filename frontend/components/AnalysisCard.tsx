@@ -25,11 +25,13 @@ export default function AnalysisCard({ analysis }: AnalysisCardProps) {
       <div className="metric">
         <span className="metric-label">Fair Value Per Share</span>
         <span className="metric-value" style={{ color: analysis.fairValue && analysis.fairValue > 0 ? '#059669' : '#6b7280', fontSize: '28px' }}>
-          {formatPrice(analysis.fairValue, analysis.currency)}
+          {analysis.fairValue && analysis.fairValue > 0 
+            ? formatPrice(analysis.fairValue, analysis.currency)
+            : 'Not available'}
         </span>
         {(!analysis.fairValue || analysis.fairValue === 0) && (
           <div style={{ marginTop: '8px', fontSize: '12px', color: '#6b7280', fontStyle: 'italic' }}>
-            Insufficient data to calculate fair value
+            Requires financial statement data for DCF/EPV/Asset valuation
           </div>
         )}
       </div>
@@ -47,29 +49,29 @@ export default function AnalysisCard({ analysis }: AnalysisCardProps) {
       <div className="metric">
         <span className="metric-label">Valuation Status</span>
         <span className="metric-value" style={{ color: analysis.marginOfSafety && analysis.marginOfSafety > 0 ? '#059669' : analysis.marginOfSafety && analysis.marginOfSafety < 0 ? '#dc2626' : '#6b7280' }}>
-          {analysis.marginOfSafety !== null && analysis.marginOfSafety !== undefined && !isNaN(analysis.marginOfSafety)
+          {analysis.fairValue && analysis.marginOfSafety !== null && analysis.marginOfSafety !== undefined && !isNaN(analysis.marginOfSafety)
             ? analysis.marginOfSafety > 0 
               ? `${Math.abs(analysis.marginOfSafety).toFixed(1)}% Undervalued`
               : `${Math.abs(analysis.marginOfSafety).toFixed(1)}% Overvalued`
-            : 'Fair Value'}
+            : 'Fair value not available'}
         </span>
       </div>
 
       <div className="metric">
         <span className="metric-label">Upside Potential</span>
         <span className="metric-value" style={{ color: analysis.upsidePotential && analysis.upsidePotential > 0 ? '#059669' : analysis.upsidePotential && analysis.upsidePotential < 0 ? '#dc2626' : '#6b7280' }}>
-          {analysis.upsidePotential !== null && analysis.upsidePotential !== undefined && !isNaN(analysis.upsidePotential)
+          {analysis.fairValue && analysis.upsidePotential !== null && analysis.upsidePotential !== undefined && !isNaN(analysis.upsidePotential)
             ? `${analysis.upsidePotential > 0 ? '+' : ''}${analysis.upsidePotential.toFixed(1)}%`
-            : '-'}
+            : 'N/A'}
         </span>
       </div>
 
       <div className="metric">
         <span className="metric-label">Price to Intrinsic Value</span>
         <span className="metric-value">
-          {analysis.priceToIntrinsicValue !== null && analysis.priceToIntrinsicValue !== undefined && !isNaN(analysis.priceToIntrinsicValue)
+          {analysis.fairValue && analysis.priceToIntrinsicValue !== null && analysis.priceToIntrinsicValue !== undefined && !isNaN(analysis.priceToIntrinsicValue)
             ? `${analysis.priceToIntrinsicValue.toFixed(2)}x`
-            : '-'}
+            : 'N/A'}
         </span>
       </div>
 

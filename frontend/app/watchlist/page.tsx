@@ -3,8 +3,18 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { stockApi, WatchlistItem } from '@/lib/api'
+import { RequireAuth } from '@/components/AuthProvider'
+import { POPULAR_TICKERS } from '@/lib/enhanced-search'
 
 export default function WatchlistPage() {
+  return (
+    <RequireAuth>
+      <WatchlistContent />
+    </RequireAuth>
+  )
+}
+
+function WatchlistContent() {
   const router = useRouter()
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -253,7 +263,7 @@ export default function WatchlistPage() {
                 <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
                     <h2 style={{ fontSize: '20px', fontWeight: '700', color: '#111827', margin: 0 }}>
-                      {item.ticker}
+                      {item.company_name || item.ticker}
                     </h2>
                     {item.recommendation && (
                       <span style={{
@@ -286,11 +296,9 @@ export default function WatchlistPage() {
                     )}
                   </div>
                   
-                  {item.company_name && (
-                    <p style={{ fontSize: '14px', color: '#6b7280', margin: '0 0 12px 0' }}>
-                      {item.company_name}
-                    </p>
-                  )}
+                  <p style={{ fontSize: '14px', color: '#6b7280', margin: '0 0 12px 0', fontWeight: '600' }}>
+                    {item.ticker}
+                  </p>
 
                   <div style={{
                     display: 'grid',
@@ -387,7 +395,7 @@ export default function WatchlistPage() {
                     <div>
                       <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>Fair Value</div>
                       <div style={{ fontSize: '16px', fontWeight: '600', color: '#111827' }}>
-                        {formatPrice(item.fair_value)}
+                        {item.fair_value && item.fair_value > 0 ? formatPrice(item.fair_value) : 'Not available'}
                       </div>
                     </div>
                     <div>
@@ -397,11 +405,11 @@ export default function WatchlistPage() {
                         fontWeight: '600',
                         color: item.margin_of_safety_pct && item.margin_of_safety_pct > 0 ? '#10b981' : '#ef4444'
                       }}>
-                        {item.margin_of_safety_pct && item.margin_of_safety_pct !== 0 
+                        {item.fair_value && item.margin_of_safety_pct && item.margin_of_safety_pct !== 0 
                           ? item.margin_of_safety_pct > 0 
                             ? `${Math.abs(item.margin_of_safety_pct).toFixed(1)}% Under`
                             : `${Math.abs(item.margin_of_safety_pct).toFixed(1)}% Over`
-                          : 'Fair Value'}
+                          : 'Not available'}
                       </div>
                     </div>
                     {item.last_analyzed_at && (

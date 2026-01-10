@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Frontend Fair Value Display</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-result { margin: 10px 0; padding: 10px; border-radius: 5px; }
+        .success { background-color: #d4edda; border: 1px solid #c3e6cb; color: #155724; }
+        .error { background-color: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; }
+        .info { background-color: #d1ecf1; border: 1px solid #bee5eb; color: #0c5460; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+        #results { margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Test Frontend Fair Value Display</h1>
+    <p>This test verifies that the frontend correctly displays "Fair value not available" when the API returns null fair values.</p>
+    
+    <button onclick="testAnalysisPage()">Test Analysis Page (AAPL with force refresh)</button>
+    <button onclick="testWatchlistPage()">Test Watchlist Page</button>
+    
+    <div id="results"></div>
+
+    <script>
+        const API_URL = 'https://dx0w31lbc1.execute-api.eu-west-1.amazonaws.com/production';
+        const FRONTEND_URL = 'http://localhost:3000';
+        
+        function addResult(message, type = 'info') {
+            const results = document.getElementById('results');
+            const div = document.createElement('div');
+            div.className = `test-result ${type}`;
+            div.innerHTML = message;
+            results.appendChild(div);
+        }
+        
+        async function testAnalysisPage() {
+            addResult('🔄 Testing Analysis Page...', 'info');
+            
+            try {
+                // First, test the API directly
+                addResult('📡 Testing API response with force_refresh=true...', 'info');
+                const apiResponse = await fetch(`${API_URL}/api/analyze/AAPL?force_refresh=true`);
+                const apiData = await apiResponse.json();
+                
+                if (apiData.fairValue === null) {
+                    addResult('✅ API correctly returns null fair value', 'success');
+                    addResult(`📊 API Response: fairValue=${apiData.fairValue}, marginOfSafety=${apiData.marginOfSafety}`, 'info');
+                    addResult(`💬 Reasoning: ${apiData.recommendationReasoning}`, 'info');
+                } else {
+                    addResult(`❌ API still returns calculated fair value: ${apiData.fairValue}`, 'error');
+                    return;
+                }
+                
+                // Now test the frontend
+                addResult('🌐 Opening frontend analysis page...', 'info');
+                const frontendUrl = `${FRONTEND_URL}/analysis/AAPL`;
+                addResult(`<a href="${frontendUrl}" target="_blank">Click here to open AAPL analysis page</a>`, 'info');
+                addResult('👀 Check that the page shows:', 'info');
+                addResult('• Fair Value Per Share: "Not available"', 'info');
+                addResult('• Valuation Status: "Fair value not available"', 'info');
+                addResult('• Upside Potential: "N/A"', 'info');
+                addResult('• Price to Intrinsic Value: "N/A"', 'info');
+                addResult('• Use the "Refresh Data" button to force refresh and see null values', 'info');
+                
+            } catch (error) {
+                addResult(`❌ Error testing analysis page: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testWatchlistPage() {
+            addResult('🔄 Testing Watchlist Page...', 'info');
+            
+            try {
+                // Test the watchlist API
+                addResult('📡 Testing watchlist API...', 'info');
+                const watchlistResponse = await fetch(`${API_URL}/api/watchlist`);
+                const watchlistData = await watchlistResponse.json();
+                
+                addResult(`📊 Watchlist has ${watchlistData.items?.length || 0} items`, 'info');
+                
+                // Check if any items have null fair values
+                const itemsWithNullFairValue = watchlistData.items?.filter(item => item.fair_value === null || item.fair_value === undefined) || [];
+                
+                if (itemsWithNullFairValue.length > 0) {
+                    addResult(`✅ Found ${itemsWithNullFairValue.length} items with null fair values`, 'success');
+                } else {
+                    addResult('ℹ️ No items with null fair values in watchlist (may be using cached data)', 'info');
+                }
+                
+                // Open frontend watchlist page
+                addResult('🌐 Opening frontend watchlist page...', 'info');
+                const frontendUrl = `${FRONTEND_URL}/watchlist`;
+                addResult(`<a href="${frontendUrl}" target="_blank">Click here to open watchlist page</a>`, 'info');
+                addResult('👀 Check that items without fair values show:', 'info');
+                addResult('• Fair Value: "Not available"', 'info');
+                addResult('• Valuation: "Not available"', 'info');
+                addResult('• Use the "Refresh Prices" button to get fresh data', 'info');
+                
+            } catch (error) {
+                addResult(`❌ Error testing watchlist page: ${error.message}`, 'error');
+            }
+        }
+        
+        // Auto-run API test on page load
+        window.onload = function() {
+            addResult('🚀 Frontend Fair Value Display Test Ready', 'success');
+            addResult('Click the buttons above to test different pages', 'info');
+        };
+    </script>
+</body>
+</html>

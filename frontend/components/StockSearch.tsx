@@ -242,7 +242,10 @@ export default function StockSearch({ onSearch }: StockSearchProps) {
                   suggestions.map((suggestion, index) => (
                     <div
                       key={`${suggestion.ticker}-${index}`}
-                      onClick={() => handleSelectSuggestion(suggestion)}
+                      onMouseDown={(e) => {
+                        e.preventDefault() // Prevent input blur
+                        handleSelectSuggestion(suggestion)
+                      }}
                       onMouseEnter={() => setSelectedIndex(index)}
                       style={{
                         padding: '12px 16px',

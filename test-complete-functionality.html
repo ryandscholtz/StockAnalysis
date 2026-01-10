@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Complete Functionality</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-result { margin: 10px 0; padding: 10px; border-radius: 5px; }
+        .success { background-color: #d4edda; border: 1px solid #c3e6cb; color: #155724; }
+        .error { background-color: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; }
+        .info { background-color: #d1ecf1; border: 1px solid #bee5eb; color: #0c5460; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+        #results { margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Test Complete Manual Data & Fair Value Functionality</h1>
+    <p>This test verifies the complete workflow: manual data entry → fair value calculation → frontend display</p>
+    
+    <button onclick="testCompleteWorkflow()">Test Complete Workflow</button>
+    <button onclick="openFrontend()">Open Frontend Analysis Page</button>
+    
+    <div id="results"></div>
+
+    <script>
+        const API_URL = 'https://dx0w31lbc1.execute-api.eu-west-1.amazonaws.com/production';
+        const FRONTEND_URL = 'http://localhost:3000';
+        
+        function addResult(message, type = 'info') {
+            const results = document.getElementById('results');
+            const div = document.createElement('div');
+            div.className = `test-result ${type}`;
+            div.innerHTML = message;
+            results.appendChild(div);
+        }
+        
+        async function testCompleteWorkflow() {
+            addResult('🔄 Testing Complete Workflow...', 'info');
+            
+            try {
+                // Step 1: Add comprehensive financial data for AAPL
+                addResult('📊 Step 1: Adding comprehensive financial data for AAPL...', 'info');
+                
+                const financialDataSets = [
+                    {
+                        data_type: 'income_statement',
+                        period: '2023-12-31',
+                        data: {
+                            revenue: 383285000000,
+                            net_income: 97000000000,
+                            operating_income: 114301000000,
+                            gross_profit: 169148000000,
+                            earnings_before_tax: 113000000000
+                        }
+                    },
+                    {
+                        data_type: 'balance_sheet',
+                        period: '2023-12-31',
+                        data: {
+                            total_assets: 352755000000,
+                            total_liabilities: 290437000000,
+                            shareholders_equity: 62318000000,
+                            cash_and_equivalents: 29965000000
+                        }
+                    },
+                    {
+                        data_type: 'cashflow',
+                        period: '2023-12-31',
+                        data: {
+                            operating_cash_flow: 110543000000,
+                            free_cash_flow: 99584000000,
+                            capital_expenditures: 10959000000
+                        }
+                    },
+                    {
+                        data_type: 'key_metrics',
+                        period: 'latest',
+                        data: {
+                            shares_outstanding: 15728700000,
+                            market_cap: 3000000000000,
+                            pe_ratio: 30.9,
+                            book_value_per_share: 3.96
+                        }
+                    }
+                ];
+                
+                for (const dataset of financialDataSets) {
+                    const response = await fetch(`${API_URL}/api/manual-data`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            ticker: 'AAPL',
+                            ...dataset
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    if (result.success) {
+                        addResult(`✅ Added ${dataset.data_type} data successfully`, 'success');
+                    } else {
+                        addResult(`❌ Failed to add ${dataset.data_type} data: ${result.message}`, 'error');
+                    }
+                }
+                
+                // Step 2: Wait for data to be saved
+                addResult('⏳ Step 2: Waiting for data to be saved...', 'info');
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                
+                // Step 3: Test data retrieval
+                addResult('📊 Step 3: Testing data retrieval...', 'info');
+                const retrieveResponse = await fetch(`${API_URL}/api/manual-data/AAPL`);
+                const retrieveResult = await retrieveResponse.json();
+                
+                if (retrieveResult.has_data) {
+                    addResult('✅ Financial data retrieved successfully', 'success');
+                    addResult(`📈 Income Statement periods: ${Object.keys(retrieveResult.financial_data.income_statement || {}).join(', ')}`, 'info');
+                    addResult(`⚖️ Balance Sheet periods: ${Object.keys(retrieveResult.financial_data.balance_sheet || {}).join(', ')}`, 'info');
+                    addResult(`💰 Cash Flow periods: ${Object.keys(retrieveResult.financial_data.cashflow || {}).join(', ')}`, 'info');
+                    addResult(`🔑 Key Metrics periods: ${Object.keys(retrieveResult.financial_data.key_metrics || {}).join(', ')}`, 'info');
+                } else {
+                    addResult('❌ No financial data found', 'error');
+                    return;
+                }
+                
+                // Step 4: Test fair value calculation
+                addResult('🧮 Step 4: Testing fair value calculation with manual data...', 'info');
+                const analysisResponse = await fetch(`${API_URL}/api/analyze/AAPL?force_refresh=true`);
+                const analysisResult = await analysisResponse.json();
+                
+                if (analysisResult.fairValue !== null && analysisResult.fairValue > 0) {
+                    addResult('✅ Fair value calculated successfully using manual data!', 'success');
+                    addResult(`💰 Fair Value: $${analysisResult.fairValue.toFixed(2)}`, 'success');
+                    addResult(`📊 Current Price: $${analysisResult.currentPrice}`, 'info');
+                    
+                    const status = analysisResult.marginOfSafety > 0 ? 'Undervalued' : 'Overvalued';
+                    addResult(`📈 Status: ${Math.abs(analysisResult.marginOfSafety).toFixed(1)}% ${status}`, 'info');
+                    
+                    addResult('🔍 Valuation Breakdown:', 'info');
+                    addResult(`• DCF Value: $${analysisResult.valuation.dcf?.toFixed(2) || 'N/A'}`, 'info');
+                    addResult(`• EPV Value: $${analysisResult.valuation.earningsPower?.toFixed(2) || 'N/A'}`, 'info');
+                    addResult(`• Asset Value: $${analysisResult.valuation.assetBased?.toFixed(2) || 'N/A'}`, 'info');
+                    
+                    addResult(`📋 Missing Data: ${analysisResult.missingData.has_missing_data ? 'Yes' : 'No'}`, 'info');
+                } else {
+                    addResult('❌ Fair value calculation failed', 'error');
+                    addResult(`Response: ${JSON.stringify(analysisResult, null, 2)}`, 'error');
+                }
+                
+                // Step 5: Instructions for frontend testing
+                addResult('🌐 Step 5: Frontend Testing Instructions', 'info');
+                addResult('Click "Open Frontend Analysis Page" to test the complete UI', 'info');
+                addResult('Expected frontend features:', 'info');
+                addResult('• Fair value should show calculated value (not "Not available")', 'info');
+                addResult('• Financial Data Overview section should show all entered data', 'info');
+                addResult('• Collapsible sections for Income Statement, Balance Sheet, Cash Flow, Key Metrics', 'info');
+                addResult('• Edit functionality for individual fields', 'info');
+                addResult('• Green checkmarks for sections with data', 'info');
+                
+            } catch (error) {
+                addResult(`❌ Error in workflow: ${error.message}`, 'error');
+            }
+        }
+        
+        function openFrontend() {
+            const url = `${FRONTEND_URL}/analysis/AAPL`;
+            window.open(url, '_blank');
+            addResult(`🌐 Opened frontend analysis page: <a href="${url}" target="_blank">${url}</a>`, 'info');
+        }
+        
+        // Auto-run test on page load
+        window.onload = function() {
+            addResult('🚀 Complete Functionality Test Ready', 'success');
+            addResult('Click "Test Complete Workflow" to run the full test', 'info');
+        };
+    </script>
+</body>
+</html>

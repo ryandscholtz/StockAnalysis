@@ -82,7 +82,6 @@ if ($LASTEXITCODE -eq 0) {
     if (Test-Path "outputs.json") {
         Write-Host "`n📋 Deployment outputs:" -ForegroundColor Cyan
         Get-Content outputs.json | ConvertFrom-Json | ConvertTo-Json -Depth 10
-        
         # Extract API endpoint for health check
         $outputs = Get-Content outputs.json | ConvertFrom-Json
         $apiEndpoint = $outputs.StockAnalysisStack.ApiEndpoint

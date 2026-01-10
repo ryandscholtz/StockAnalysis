@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manual Data Components Visibility Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 20px;
+            background-color: #f9fafb;
+        }
+        .test-card {
+            background: white;
+            border-radius: 8px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+        .success {
+            background-color: #f0fdf4;
+            border: 2px solid #10b981;
+            color: #065f46;
+        }
+        .warning {
+            background-color: #fef3c7;
+            border: 2px solid #f59e0b;
+            color: #92400e;
+        }
+        .info {
+            background-color: #eff6ff;
+            border: 2px solid #2563eb;
+            color: #1e40af;
+        }
+        .step {
+            margin: 16px 0;
+            padding: 12px;
+            background-color: #f8fafc;
+            border-left: 4px solid #2563eb;
+            border-radius: 4px;
+        }
+        .highlight {
+            background-color: #fef3c7;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-weight: 600;
+            display: inline-block;
+            margin: 4px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-card warning">
+        <h1>🔍 Manual Data Components Visibility Test</h1>
+        <p><strong>Issue:</strong> Manual Data Entry and Financial Data Display components may not be visible</p>
+        <p><strong>Status:</strong> Investigating visibility issue</p>
+    </div>
+
+    <div class="test-card info">
+        <h2>🧪 Debugging Steps</h2>
+        
+        <div class="step">
+            <h3>1. 🔍 Check Console Logs</h3>
+            <p>Open the analysis page and check browser console for these debug messages:</p>
+            <ul>
+                <li><span class="highlight">"🔧 ManualDataEntry component rendered for ticker: AAPL"</span></li>
+                <li><span class="highlight">"📊 FinancialDataDisplay component rendered for ticker: AAPL"</span></li>
+            </ul>
+            <p><strong>Test URL:</strong> <a href="http://localhost:3000/analysis/AAPL" target="_blank">http://localhost:3000/analysis/AAPL</a></p>
+        </div>
+
+        <div class="step">
+            <h3>2. 🎯 Look for Blue Section</h3>
+            <p>The components should appear in a prominent blue-bordered section titled:</p>
+            <p><span class="highlight">"🔧 Financial Data Management"</span></p>
+            <p>This section should be visible between the analysis configuration and the main analysis results.</p>
+        </div>
+
+        <div class="step">
+            <h3>3. 📱 Check Page Scroll</h3>
+            <p>The components might be rendered but require scrolling to see them. They should appear:</p>
+            <ul>
+                <li>After the company header and refresh button</li>
+                <li>After any analysis weights configuration</li>
+                <li>Before the main analysis card with valuation</li>
+            </ul>
+        </div>
+
+        <div class="step">
+            <h3>4. 🔧 Check Authentication Impact</h3>
+            <p>The manual data components should be visible to ALL users (authenticated or not).</p>
+            <p>Try both scenarios:</p>
+            <ul>
+                <li><strong>As Guest:</strong> Visit analysis page without signing in</li>
+                <li><strong>As User:</strong> Sign in with ryandscholtz@gmail.com and visit analysis page</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="test-card">
+        <h2>🔍 What to Look For</h2>
+        
+        <div class="step">
+            <h3>Expected Components:</h3>
+            <ol>
+                <li><strong>📝 Manual Data Entry</strong>
+                    <ul>
+                        <li>Card with "Add Data" button</li>
+                        <li>Description: "Add financial statement data to enable fair value calculations"</li>
+                    </ul>
+                </li>
+                <li><strong>📊 Financial Data Display</strong>
+                    <ul>
+                        <li>Card with title "Financial Data Overview"</li>
+                        <li>Collapsible sections for Income Statement, Balance Sheet, etc.</li>
+                        <li>Should show existing AAPL data if available</li>
+                    </ul>
+                </li>
+            </ol>
+        </div>
+
+        <div class="step">
+            <h3>Expected Location:</h3>
+            <p>The components should appear in this order on the analysis page:</p>
+            <ol>
+                <li>Company header (AAPL Inc.) with current price</li>
+                <li>Refresh Data button</li>
+                <li>Analysis weights configuration (if open)</li>
+                <li><strong>🔧 Financial Data Management section (BLUE BORDER)</strong></li>
+                <li>Analysis Card with valuation</li>
+                <li>Other analysis components...</li>
+            </ol>
+        </div>
+    </div>
+
+    <div class="test-card success">
+        <h2>✅ If Components Are Visible</h2>
+        <p>Great! The components are working correctly. You should be able to:</p>
+        <ul>
+            <li>Click "Add Data" to open the manual data entry form</li>
+            <li>Expand sections in Financial Data Display to see existing data</li>
+            <li>Add new financial data and see it appear in the display</li>
+            <li>Refresh analysis to see updated fair value calculations</li>
+        </ul>
+    </div>
+
+    <div class="test-card warning">
+        <h2>❌ If Components Are Not Visible</h2>
+        <p>Possible issues and solutions:</p>
+        
+        <div class="step">
+            <h3>Issue 1: Components Not Rendering</h3>
+            <ul>
+                <li>Check console for JavaScript errors</li>
+                <li>Verify imports are correct in analysis page</li>
+                <li>Check if authentication changes affected component rendering</li>
+            </ul>
+        </div>
+
+        <div class="step">
+            <h3>Issue 2: Components Hidden by CSS</h3>
+            <ul>
+                <li>Use browser dev tools to inspect the page</li>
+                <li>Look for elements with blue borders</li>
+                <li>Check if components have display: none or visibility: hidden</li>
+            </ul>
+        </div>
+
+        <div class="step">
+            <h3>Issue 3: API Issues</h3>
+            <ul>
+                <li>Check network tab for failed API calls</li>
+                <li>Verify authentication headers are not breaking non-auth endpoints</li>
+                <li>Check if mock auth service is affecting component data loading</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        console.log('🔍 Manual Data Components Visibility Test Page Loaded');
+        console.log('📍 Opening analysis page to check component visibility...');
+        
+        // Auto-open the analysis page after 3 seconds
+        setTimeout(() => {
+            window.open('http://localhost:3000/analysis/AAPL', '_blank');
+        }, 3000);
+        
+        // Instructions for debugging
+        console.log('🧪 Debugging Instructions:');
+        console.log('1. Look for console messages starting with "🔧 ManualDataEntry" and "📊 FinancialDataDisplay"');
+        console.log('2. Look for a blue-bordered section titled "🔧 Financial Data Management"');
+        console.log('3. Check if components are rendered but hidden by scrolling or CSS');
+        console.log('4. Test both as guest user and authenticated user');
+    </script>
+</body>
+</html>

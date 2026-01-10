@@ -130,24 +130,43 @@ def create_app() -> FastAPI:
         app.add_middleware(XRayMiddleware, service_name="stock-analysis-api")
 
     # Configure CORS
-    allowed_origins = [
-        "http://localhost:3000",
-        "http://localhost:3001",
-        "http://localhost:3003",
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:3001",
-        "http://127.0.0.1:3003",
-    ]
-
-    # Add production origins if configured
-    production_origins = os.getenv("ALLOWED_ORIGINS", "").split(",")
-    if production_origins and production_origins[0]:
-        allowed_origins.extend([origin.strip() for origin in production_origins])
+    # Allow all origins for testing, or use specific origins in production
+    environment = os.getenv("ENVIRONMENT", "development")
+    cors_allow_all = os.getenv("CORS_ALLOW_ALL", "false").lower() == "true"
+    
+    if cors_allow_all or environment != "production":
+        # Allow all origins for development/testing using regex
+        # FastAPI CORSMiddleware doesn't support ["*"] directly, so we use a regex
+        import re
+        cors_config = {
+            "allow_origin_regex": r".*",  # Match all origins
+            "allow_credentials": False,  # Cannot use credentials with wildcard
+        }
+    else:
+        # Production: use specific origins
+        allowed_origins = [
+            "http://localhost:3000",
+            "http://localhost:3001",
+            "http://localhost:3003",
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:3001",
+            "http://127.0.0.1:3003",
+            "https://stockanalysis.cerebrum.com",
+        ]
+        
+        # Add production origins if configured
+        production_origins = os.getenv("ALLOWED_ORIGINS", "").split(",")
+        if production_origins and production_origins[0]:
+            allowed_origins.extend([origin.strip() for origin in production_origins])
+        
+        cors_config = {
+            "allow_origins": allowed_origins,
+            "allow_credentials": True,
+        }
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=allowed_origins,
-        allow_credentials=True,
+        **cors_config,
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"],
         allow_headers=["*"],
         expose_headers=["*"],

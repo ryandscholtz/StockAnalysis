@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Manual Data Components</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 20px;
+            background-color: #f9fafb;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+        .test-section {
+            border: 2px solid #2563eb;
+            padding: 16px;
+            margin: 16px 0;
+            border-radius: 8px;
+            background-color: #eff6ff;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Manual Data Components Test</h1>
+        
+        <div class="test-section">
+            <h2>✅ Test 1: Check if components are visible on analysis page</h2>
+            <p>Navigate to: <a href="http://localhost:3000/analysis/AAPL" target="_blank">http://localhost:3000/analysis/AAPL</a></p>
+            <p><strong>Expected:</strong> You should see two new sections:</p>
+            <ul>
+                <li>📝 Manual Data Entry - with "Add Data" button</li>
+                <li>📊 Financial Data Overview - with collapsible sections</li>
+            </ul>
+        </div>
+
+        <div class="test-section">
+            <h2>🔍 Test 2: Check browser console for errors</h2>
+            <p>Open browser developer tools (F12) and check the Console tab for any errors</p>
+            <p><strong>Look for:</strong> Component rendering errors, API call failures, or TypeScript errors</p>
+        </div>
+
+        <div class="test-section">
+            <h2>📊 Test 3: Test Manual Data Entry</h2>
+            <ol>
+                <li>Click "Add Data" button in Manual Data Entry section</li>
+                <li>Select "Income Statement" from dropdown</li>
+                <li>Enter some test values (e.g., Revenue: 100000000)</li>
+                <li>Click "Save Data"</li>
+                <li>Check if data appears in Financial Data Overview section</li>
+            </ol>
+        </div>
+
+        <div class="test-section">
+            <h2>🔄 Test 4: Test Data Refresh</h2>
+            <ol>
+                <li>After adding data, click "Refresh Data" button</li>
+                <li>Check if fair value calculation updates</li>
+                <li>Verify that "Fair value not available" changes to actual calculated value</li>
+            </ol>
+        </div>
+
+        <div class="test-section">
+            <h2>📋 Test 5: Check API endpoints</h2>
+            <p>Test the backend endpoints directly:</p>
+            <ul>
+                <li>GET: <a href="https://dx0w31lbc1.execute-api.eu-west-1.amazonaws.com/production/api/manual-data/AAPL" target="_blank">Get AAPL financial data</a></li>
+                <li>POST: Use browser dev tools to test manual data submission</li>
+            </ul>
+        </div>
+
+        <div class="card">
+            <h3>🚨 Troubleshooting</h3>
+            <p>If components are not visible:</p>
+            <ol>
+                <li><strong>Check component imports:</strong> Verify ManualDataEntry and FinancialDataDisplay are imported in analysis page</li>
+                <li><strong>Check JSX rendering:</strong> Verify components are actually rendered in the return statement</li>
+                <li><strong>Check CSS:</strong> Components might be rendered but hidden by CSS</li>
+                <li><strong>Check API:</strong> Backend might not be responding to /api/manual-data endpoints</li>
+                <li><strong>Check console:</strong> Look for JavaScript errors preventing component rendering</li>
+            </ol>
+        </div>
+
+        <div class="card">
+            <h3>📝 Expected Component Locations</h3>
+            <p>The components should appear in this order on the analysis page:</p>
+            <ol>
+                <li>Company header with price and refresh button</li>
+                <li>Analysis weights configuration (if open)</li>
+                <li>Data quality warnings</li>
+                <li>Extracted data viewer (if available)</li>
+                <li>PDF upload (if fair value is 0)</li>
+                <li>Missing data prompt (if data missing)</li>
+                <li><strong>📝 Manual Data Entry</strong> ← Should be here</li>
+                <li><strong>📊 Financial Data Display</strong> ← Should be here</li>
+                <li>Analysis card with valuation</li>
+                <li>Other analysis components...</li>
+            </ol>
+        </div>
+    </div>
+
+    <script>
+        console.log('🧪 Manual Data Components Test Page Loaded');
+        console.log('📍 Navigate to http://localhost:3000/analysis/AAPL to test components');
+        
+        // Test API connectivity
+        fetch('https://dx0w31lbc1.execute-api.eu-west-1.amazonaws.com/production/api/manual-data/AAPL')
+            .then(response => {
+                console.log('✅ API connectivity test:', response.status);
+                return response.json();
+            })
+            .then(data => {
+                console.log('📊 API response:', data);
+            })
+            .catch(error => {
+                console.error('❌ API connectivity error:', error);
+            });
+    </script>
+</body>
+</html>

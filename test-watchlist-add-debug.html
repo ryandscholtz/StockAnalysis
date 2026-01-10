@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Watchlist Add Issues</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .success {
+            color: #10b981;
+            font-weight: bold;
+        }
+        .error {
+            color: #ef4444;
+            font-weight: bold;
+        }
+        .info {
+            color: #2563eb;
+            font-weight: bold;
+        }
+        .warning {
+            color: #f59e0b;
+            font-weight: bold;
+        }
+        .code {
+            background: #f3f4f6;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            margin: 10px 0;
+            white-space: pre-wrap;
+        }
+        .debug-box {
+            background: #fef3c7;
+            border: 1px solid #f59e0b;
+            border-radius: 6px;
+            padding: 16px;
+            margin: 16px 0;
+        }
+        .fix-box {
+            background: #f0fdf4;
+            border: 1px solid #10b981;
+            border-radius: 6px;
+            padding: 16px;
+            margin: 16px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>🐛 Debug: Watchlist Add Issues</h1>
+    
+    <div class="test-section">
+        <h2>🔍 Issues Identified</h2>
+        <ol>
+            <li class="error"><strong>Duplicate Items:</strong> Search shows 2 identical Amazon entries</li>
+            <li class="error"><strong>Click Not Working:</strong> Clicking dropdown items does nothing</li>
+            <li class="warning"><strong>No Error Messages:</strong> Silent failures with no feedback</li>
+        </ol>
+    </div>
+    
+    <div class="debug-box">
+        <h3>🔧 Fixes Applied</h3>
+        <ul>
+            <li>✅ <strong>Fixed Duplicate Logic:</strong> Corrected merge algorithm to prevent duplicates</li>
+            <li>✅ <strong>Added Debug Logging:</strong> More console logs to track click events</li>
+            <li>✅ <strong>Enhanced Error Handling:</strong> Better error visibility</li>
+        </ul>
+    </div>
+    
+    <div class="test-section">
+        <h2>🧪 Debugging Steps</h2>
+        <ol>
+            <li><strong>Open Browser Dev Tools</strong> → Console tab</li>
+            <li><strong>Navigate to:</strong> <code>/watchlist/add</code></li>
+            <li><strong>Check Authentication:</strong> Should see "🔐 AddToWatchlistContent rendered" in console</li>
+            <li><strong>Type "amazon"</strong> in search box</li>
+            <li><strong>Watch Console:</strong> Should see search debug logs</li>
+            <li><strong>Click on dropdown item</strong></li>
+            <li><strong>Check for:</strong> "🖱️ onMouseDown triggered for: AMZN"</li>
+            <li><strong>Then check for:</strong> "=== WATCHLIST ADD DEBUG ==="</li>
+        </ol>
+        
+        <h3>Expected Console Output:</h3>
+        <div class="code">🔐 AddToWatchlistContent rendered, adding state: false
+=== WATCHLIST ADD SEARCH DEBUG ===
+Query: amazon
+Enhanced search results: [...]
+API search results: [...]
+Merged results with API: [...]
+Final results to display: [...]
+=== END WATCHLIST ADD SEARCH DEBUG ===
+
+[User clicks dropdown item]
+🖱️ onMouseDown triggered for: AMZN
+=== WATCHLIST ADD DEBUG ===
+handleSelect called!
+Selected suggestion: {ticker: 'AMZN', ...}
+Current adding state: false
+Calling addToWatchlist with: {...}
+addToWatchlist result: {success: true, ...}
+Successfully added to watchlist, redirecting...
+=== END WATCHLIST ADD DEBUG ===</div>
+    </div>
+    
+    <div class="test-section">
+        <h2>🔍 Troubleshooting Guide</h2>
+        
+        <h3>If you don't see "🔐 AddToWatchlistContent rendered":</h3>
+        <ul>
+            <li>Authentication issue - check if signed in</li>
+            <li>Go to <code>/auth/signin</code> and sign in with test credentials</li>
+            <li>Username: <code>ryandscholtz@gmail.com</code>, Password: <code>TestPass123</code></li>
+        </ul>
+        
+        <h3>If you see duplicates in dropdown:</h3>
+        <ul>
+            <li>Check "Merged results with API" in console</li>
+            <li>Should now be deduplicated with the fix</li>
+        </ul>
+        
+        <h3>If you don't see "🖱️ onMouseDown triggered":</h3>
+        <ul>
+            <li>Click event not registering</li>
+            <li>Try clicking directly on the text, not the border</li>
+            <li>Check if dropdown is actually visible</li>
+        </ul>
+        
+        <h3>If you see onMouseDown but not "handleSelect called!":</h3>
+        <ul>
+            <li>Function call is failing</li>
+            <li>Check for JavaScript errors in console</li>
+        </ul>
+        
+        <h3>If you see handleSelect but no API call:</h3>
+        <ul>
+            <li>API function is failing</li>
+            <li>Check network tab for failed requests</li>
+            <li>Check authentication token</li>
+        </ul>
+    </div>
+    
+    <div class="fix-box">
+        <h3>✅ Duplicate Fix Details</h3>
+        <p>Changed the merge logic from:</p>
+        <div class="code">// Before (creates duplicates)
+finalResults = [...safeApiResults, ...localSearchResults, ...additionalApiResults]
+
+// After (properly deduplicated)
+const localNotInApi = localSearchResults.filter(local => 
+  !safeApiResults.some(api => api.ticker === local.ticker)
+)
+finalResults = [...safeApiResults, ...localNotInApi]</div>
+    </div>
+    
+    <div class="test-section">
+        <h2>🚀 Next Steps</h2>
+        <p>Follow the debugging steps above and report back what you see in the console. This will help identify exactly where the issue is occurring.</p>
+        
+        <p class="info">The enhanced logging should now show exactly what's happening at each step of the process.</p>
+    </div>
+</body>
+</html>

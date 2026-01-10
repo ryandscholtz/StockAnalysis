@@ -17,6 +17,8 @@ import PDFUpload from '@/components/PDFUpload'
 import DataQualityWarnings from '@/components/DataQualityWarnings'
 import ExtractedDataViewer from '@/components/ExtractedDataViewer'
 import AnalysisWeightsConfig from '@/components/AnalysisWeightsConfig'
+import FinancialDataDisplay from '@/components/FinancialDataDisplay'
+import ManualDataEntry from '@/components/ManualDataEntry'
 import { AnalysisWeights } from '@/types/analysis'
 import { WatchlistItemDetail } from '@/lib/api'
 
@@ -33,6 +35,13 @@ export default function AnalysisPage() {
   const [analysisWeights, setAnalysisWeights] = useState<AnalysisWeights | null>(null)
   const [businessType, setBusinessType] = useState<string | null>(null)
   const [showWeightsConfig, setShowWeightsConfig] = useState(false)
+  const [financialData, setFinancialData] = useState<any>({
+    ticker: '',
+    financial_data: {},
+    has_data: false
+  })
+  const [showManualEntry, setShowManualEntry] = useState(false)
+  const [showPDFUpload, setShowPDFUpload] = useState(false)
   const abortControllerRef = useRef<AbortController | null>(null)
   const isMountedRef = useRef(true)
 
@@ -41,6 +50,7 @@ export default function AnalysisPage() {
     if (ticker) {
       loadAnalysis()
       loadWatchlistData()
+      loadFinancialData()
     }
     
     return () => {
@@ -51,6 +61,31 @@ export default function AnalysisPage() {
       }
     }
   }, [ticker])
+
+  const loadFinancialData = async () => {
+    console.log('🔄 loadFinancialData called for ticker:', ticker);
+    try {
+      const normalizedTicker = normalizeTicker(ticker)
+      console.log('📡 Attempting to load financial data for:', normalizedTicker);
+      const result = await stockApi.getFinancialData(normalizedTicker)
+      console.log('✅ Financial data loaded successfully:', result);
+      if (isMountedRef.current) {
+        setFinancialData(result)
+      }
+    } catch (err: any) {
+      // Silently fail - financial data is optional for display
+      console.debug('Could not load financial data:', err)
+      console.log('🔄 Setting fallback financial data structure');
+      // Set empty financial data so components still render
+      if (isMountedRef.current) {
+        setFinancialData({ 
+          ticker: normalizeTicker(ticker), 
+          financial_data: {}, 
+          has_data: false 
+        })
+      }
+    }
+  }
 
   const loadWatchlistData = async () => {
     try {
@@ -302,19 +337,66 @@ export default function AnalysisPage() {
             </h1>
             {/* Show price if valid, or show message if not available */}
             {analysis.currentPrice && Math.abs(analysis.currentPrice - 1.0) > 0.01 ? (
-              <p style={{ fontSize: '20px', color: '#6b7280' }}>
-                Current Price: {formatPrice(analysis.currentPrice, analysis.currency)}
-                {analysis.currency && analysis.currency !== 'USD' && (
-                  <span style={{ fontSize: '14px', marginLeft: '8px', color: '#9ca3af' }}>
-                    ({analysis.currency})
-                  </span>
+              <div>
+                <p style={{ fontSize: '20px', color: '#6b7280' }}>
+                  Current Price: {formatPrice(analysis.currentPrice, analysis.currency)}
+                  {analysis.currency && analysis.currency !== 'USD' && (
+                    <span style={{ fontSize: '14px', marginLeft: '8px', color: '#9ca3af' }}>
+                      ({analysis.currency})
+                    </span>
+                  )}
+                  {analysis.dataSource?.price_source && (
+                    <span style={{ fontSize: '12px', marginLeft: '8px', color: '#10b981' }}>
+                      (Source: {analysis.dataSource.price_source})
+                    </span>
+                  )}
+                </p>
+                {/* Cache status indicator */}
+                {(analysis as any).cacheInfo && (
+                  <div style={{ marginTop: '8px' }}>
+                    {(analysis as any).cacheInfo.cached ? (
+                      <div style={{ 
+                        display: 'inline-flex', 
+                        alignItems: 'center', 
+                        gap: '8px',
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        fontSize: '12px',
+                        background: (analysis as any).cacheInfo.is_stale ? '#fef3c7' : '#f0fdf4',
+                        color: (analysis as any).cacheInfo.is_stale ? '#92400e' : '#166534',
+                        border: `1px solid ${(analysis as any).cacheInfo.is_stale ? '#fbbf24' : '#86efac'}`
+                      }}>
+                        <span>
+                          {(analysis as any).cacheInfo.is_stale ? '⚠️ Stale Data' : '✅ Cached Data'}
+                        </span>
+                        <span>
+                          (Age: {(analysis as any).cacheInfo.age_minutes} min)
+                        </span>
+                        {(analysis as any).cacheInfo.fallback_reason && (
+                          <span style={{ fontStyle: 'italic' }}>
+                            - Using cached data due to API limits
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <div style={{ 
+                        display: 'inline-flex', 
+                        alignItems: 'center', 
+                        gap: '8px',
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        fontSize: '12px',
+                        background: '#f0fdf4',
+                        color: '#166534',
+                        border: '1px solid #86efac'
+                      }}>
+                        <span>🔄 Fresh Data</span>
+                        <span>({(analysis as any).cacheInfo.fetched_at})</span>
+                      </div>
+                    )}
+                  </div>
                 )}
-                {analysis.dataSource?.price_source && (
-                  <span style={{ fontSize: '12px', marginLeft: '8px', color: '#10b981' }}>
-                    (Source: {analysis.dataSource.price_source})
-                  </span>
-                )}
-              </p>
+              </div>
             ) : (
               <div style={{ marginTop: '8px' }}>
                 <p style={{ fontSize: '16px', color: '#dc2626', marginBottom: '8px' }}>
@@ -401,7 +483,7 @@ export default function AnalysisPage() {
               disabled={loading}
               style={{
                 padding: '10px 20px',
-                background: loading ? '#9ca3af' : '#10b981',
+                background: loading ? '#9ca3af' : ((analysis as any).cacheInfo?.is_stale ? '#f59e0b' : '#10b981'),
                 color: 'white',
                 border: 'none',
                 borderRadius: '6px',
@@ -414,7 +496,11 @@ export default function AnalysisPage() {
                 gap: '8px'
               }}
             >
-              {loading ? '🔄 Refreshing...' : '🔄 Refresh Data'}
+              {loading 
+                ? '🔄 Refreshing...' 
+                : (analysis as any).cacheInfo?.is_stale 
+                  ? '⚠️ Refresh Stale Data' 
+                  : '🔄 Refresh Data'}
             </button>
           </div>
         </div>
@@ -513,6 +599,144 @@ export default function AnalysisPage() {
         </>
       )}
 
+      {/* Add Financial Data Section */}
+      <div style={{ 
+        marginBottom: '24px', 
+        border: '1px solid #e5e7eb', 
+        borderRadius: '8px', 
+        padding: '24px',
+        backgroundColor: 'white',
+        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+      }}>
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'flex-start',
+          marginBottom: '16px'
+        }}>
+          <div>
+            <h2 style={{ 
+              margin: '0 0 8px 0', 
+              fontSize: '20px', 
+              color: '#111827',
+              fontWeight: '600'
+            }}>
+              📊 Add Financial Data
+            </h2>
+            <p style={{ 
+              margin: '0', 
+              fontSize: '14px', 
+              color: '#6b7280' 
+            }}>
+              Add financial statement data to enable fair value calculations
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <button
+              onClick={() => setShowManualEntry(!showManualEntry)}
+              style={{
+                padding: '10px 20px',
+                backgroundColor: showManualEntry ? '#dc2626' : '#2563eb',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                fontSize: '14px',
+                fontWeight: '500',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}
+            >
+              {showManualEntry ? '✕ Close' : '✏️ Add data manually'}
+            </button>
+            <button
+              onClick={() => setShowPDFUpload(!showPDFUpload)}
+              style={{
+                padding: '10px 20px',
+                backgroundColor: showPDFUpload ? '#dc2626' : '#059669',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                fontSize: '14px',
+                fontWeight: '500',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}
+            >
+              {showPDFUpload ? '✕ Close' : '📄 Upload financial statements'}
+            </button>
+          </div>
+        </div>
+
+        {/* Manual Data Entry */}
+        {showManualEntry && (
+          <div style={{ 
+            padding: '20px', 
+            backgroundColor: '#f9fafb', 
+            borderRadius: '8px',
+            border: '1px solid #e5e7eb',
+            marginBottom: '16px'
+          }}>
+            <ManualDataEntry 
+              ticker={analysis.ticker}
+              onDataAdded={() => {
+                loadFinancialData()
+                loadAnalysis(true) // Refresh analysis when data is added
+                setShowManualEntry(false) // Close after adding data
+              }}
+            />
+          </div>
+        )}
+
+        {/* PDF Upload */}
+        {showPDFUpload && (
+          <div style={{ 
+            padding: '20px', 
+            backgroundColor: '#f9fafb', 
+            borderRadius: '8px',
+            border: '1px solid #e5e7eb',
+            marginBottom: '16px'
+          }}>
+            <PDFUpload
+              ticker={analysis.ticker}
+              onDataExtracted={() => {
+                loadAnalysis()
+                loadWatchlistData()
+                setShowPDFUpload(false) // Close after uploading
+              }}
+            />
+          </div>
+        )}
+
+        {/* Financial Data Display - Always Visible */}
+        <div style={{ 
+          padding: '20px', 
+          backgroundColor: '#f9fafb', 
+          borderRadius: '8px',
+          border: '1px solid #e5e7eb'
+        }}>
+          <h3 style={{ 
+            margin: '0 0 16px 0', 
+            fontSize: '16px', 
+            color: '#374151',
+            fontWeight: '600'
+          }}>
+            Current Financial Data
+          </h3>
+          <FinancialDataDisplay 
+            ticker={analysis.ticker}
+            financialData={financialData?.financial_data}
+            onDataUpdate={() => {
+              loadFinancialData()
+              loadAnalysis(true) // Refresh analysis when data is updated
+            }}
+          />
+        </div>
+      </div>
+      
       <AnalysisCard analysis={analysis} />
       <ValuationStatus analysis={analysis} />
       <ValuationChart analysis={analysis} />

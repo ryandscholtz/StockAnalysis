@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Upload Functionality Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { color: green; }
+        .error { color: red; }
+        .info { color: blue; }
+        .warning { color: orange; }
+        pre { background: #f5f5f5; padding: 10px; border-radius: 3px; overflow-x: auto; }
+        .progress { width: 100%; height: 20px; background: #f0f0f0; border-radius: 10px; margin: 10px 0; }
+        .progress-bar { height: 100%; background: #4CAF50; border-radius: 10px; transition: width 0.3s; }
+        .upload-area { border: 2px dashed #ccc; padding: 20px; text-align: center; margin: 10px 0; }
+        .upload-area.dragover { border-color: #4CAF50; background: #f0fff0; }
+    </style>
+</head>
+<body>
+    <h1>🧪 PDF Upload Functionality Test</h1>
+    
+    <div class="test-section">
+        <h2>📄 PDF Upload Test</h2>
+        <p>Test the PDF upload and financial data extraction functionality</p>
+        
+        <div>
+            <label for="ticker-input">Ticker Symbol:</label>
+            <input type="text" id="ticker-input" placeholder="e.g., AAPL" value="AAPL">
+        </div>
+        
+        <div class="upload-area" id="upload-area">
+            <p>📁 Drag and drop a PDF file here, or click to select</p>
+            <input type="file" id="file-input" accept=".pdf" style="display: none;">
+            <button onclick="document.getElementById('file-input').click()">Choose PDF File</button>
+        </div>
+        
+        <div>
+            <button id="upload-btn" onclick="uploadPDF()" disabled>Upload and Extract Data</button>
+            <button id="test-endpoints-btn" onclick="testEndpoints()">Test API Endpoints</button>
+        </div>
+        
+        <div id="progress-container" style="display: none;">
+            <p id="progress-text">Preparing upload...</p>
+            <div class="progress">
+                <div class="progress-bar" id="progress-bar" style="width: 0%;"></div>
+            </div>
+        </div>
+        
+        <div id="results"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>🔧 System Information</h2>
+        <div id="system-info">
+            <p><strong>Frontend URL:</strong> <span id="frontend-url">Loading...</span></p>
+            <p><strong>API Base URL:</strong> <span id="api-url">Loading...</span></p>
+            <p><strong>Browser:</strong> <span id="browser-info">Loading...</span></p>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const API_BASE_URL = 'https://dx0w31lbc1.execute-api.eu-west-1.amazonaws.com/production';
+        const FRONTEND_URL = 'http://localhost:3000';
+        
+        let selectedFile = null;
+        
+        // Initialize page
+        window.onload = function() {
+            updateSystemInfo();
+            setupDragAndDrop();
+        };
+        
+        function updateSystemInfo() {
+            document.getElementById('frontend-url').textContent = FRONTEND_URL;
+            document.getElementById('api-url').textContent = API_BASE_URL;
+            document.getElementById('browser-info').textContent = navigator.userAgent.split(' ').slice(-2).join(' ');
+        }
+        
+        function setupDragAndDrop() {
+            const uploadArea = document.getElementById('upload-area');
+            const fileInput = document.getElementById('file-input');
+            
+            // Drag and drop handlers
+            uploadArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadArea.classList.add('dragover');
+            });
+            
+            uploadArea.addEventListener('dragleave', () => {
+                uploadArea.classList.remove('dragover');
+            });
+            
+            uploadArea.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadArea.classList.remove('dragover');
+                
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    handleFileSelection(files[0]);
+                }
+            });
+            
+            // File input handler
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    handleFileSelection(e.target.files[0]);
+                }
+            });
+            
+            // Click handler for upload area
+            uploadArea.addEventListener('click', () => {
+                fileInput.click();
+            });
+        }
+        
+        function handleFileSelection(file) {
+            if (!file.type.includes('pdf')) {
+                showResult('❌ Please select a PDF file', 'error');
+                return;
+            }
+            
+            selectedFile = file;
+            const uploadArea = document.getElementById('upload-area');
+            uploadArea.innerHTML = `
+                <p>✅ Selected: ${file.name}</p>
+                <p>📊 Size: ${(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                <button onclick="document.getElementById('file-input').click()">Choose Different File</button>
+            `;
+            
+            document.getElementById('upload-btn').disabled = false;
+            showResult(`📄 PDF selected: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`, 'info');
+        }
+        
+        async function uploadPDF() {
+            if (!selectedFile) {
+                showResult('❌ Please select a PDF file first', 'error');
+                return;
+            }
+            
+            const ticker = document.getElementById('ticker-input').value.trim().toUpperCase();
+            if (!ticker) {
+                showResult('❌ Please enter a ticker symbol', 'error');
+                return;
+            }
+            
+            const progressContainer = document.getElementById('progress-container');
+            const progressText = document.getElementById('progress-text');
+            const progressBar = document.getElementById('progress-bar');
+            const uploadBtn = document.getElementById('upload-btn');
+            
+            // Show progress
+            progressContainer.style.display = 'block';
+            uploadBtn.disabled = true;
+            
+            try {
+                // Prepare form data
+                const formData = new FormData();
+                formData.append('file', selectedFile);
+                
+                progressText.textContent = 'Uploading PDF...';
+                progressBar.style.width = '10%';
+                
+                // Upload PDF
+                const uploadUrl = `${API_BASE_URL}/api/upload-pdf?ticker=${ticker}`;
+                console.log('Uploading to:', uploadUrl);
+                
+                const response = await fetch(uploadUrl, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                progressText.textContent = 'Processing PDF...';
+                progressBar.style.width = '50%';
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                }
+                
+                const result = await response.json();
+                
+                progressText.textContent = 'Extraction complete!';
+                progressBar.style.width = '100%';
+                
+                // Display results
+                displayUploadResults(result, ticker);
+                
+            } catch (error) {
+                console.error('Upload error:', error);
+                showResult(`❌ Upload failed: ${error.message}`, 'error');
+                
+                progressText.textContent = 'Upload failed';
+                progressBar.style.width = '0%';
+            } finally {
+                uploadBtn.disabled = false;
+                setTimeout(() => {
+                    progressContainer.style.display = 'none';
+                }, 3000);
+            }
+        }
+        
+        function displayUploadResults(result, ticker) {
+            let html = `<h3>✅ PDF Upload Results for ${ticker}</h3>`;
+            
+            // Basic info
+            html += `<div class="info">`;
+            html += `<p><strong>Success:</strong> ${result.success ? '✅ Yes' : '❌ No'}</p>`;
+            html += `<p><strong>Message:</strong> ${result.message}</p>`;
+            html += `<p><strong>Updated Periods:</strong> ${result.updated_periods || 0}</p>`;
+            html += `</div>`;
+            
+            // Extracted data summary
+            if (result.extracted_data) {
+                html += `<h4>📊 Extracted Data Summary:</h4>`;
+                const data = result.extracted_data;
+                
+                html += `<ul>`;
+                html += `<li><strong>Income Statement:</strong> ${Object.keys(data.income_statement || {}).length} periods</li>`;
+                html += `<li><strong>Balance Sheet:</strong> ${Object.keys(data.balance_sheet || {}).length} periods</li>`;
+                html += `<li><strong>Cash Flow:</strong> ${Object.keys(data.cashflow || {}).length} periods</li>`;
+                html += `<li><strong>Key Metrics:</strong> ${Object.keys(data.key_metrics || {}).length} metrics</li>`;
+                html += `</ul>`;
+                
+                // Show sample data
+                if (Object.keys(data.income_statement || {}).length > 0) {
+                    const firstPeriod = Object.keys(data.income_statement)[0];
+                    const firstPeriodData = data.income_statement[firstPeriod];
+                    html += `<h5>📈 Sample Income Statement (${firstPeriod}):</h5>`;
+                    html += `<pre>${JSON.stringify(firstPeriodData, null, 2)}</pre>`;
+                }
+            }
+            
+            // Extraction details
+            if (result.extraction_details) {
+                html += `<h4>🔧 Extraction Details:</h4>`;
+                const details = result.extraction_details;
+                
+                html += `<ul>`;
+                html += `<li><strong>PDF Text Length:</strong> ${details.pdf_text_length || 'N/A'} characters</li>`;
+                html += `<li><strong>LLM Provider:</strong> ${details.llm_provider || 'N/A'}</li>`;
+                html += `<li><strong>Extraction Method:</strong> ${details.extraction_method || 'N/A'}</li>`;
+                html += `<li><strong>Textract Enabled:</strong> ${details.textract_enabled ? '✅ Yes' : '❌ No'}</li>`;
+                html += `</ul>`;
+                
+                if (details.error_message) {
+                    html += `<p class="error"><strong>Error:</strong> ${details.error_message}</p>`;
+                }
+            }
+            
+            // Raw response (collapsed)
+            html += `<details style="margin-top: 20px;">`;
+            html += `<summary><strong>📋 Full Response (Click to expand)</strong></summary>`;
+            html += `<pre>${JSON.stringify(result, null, 2)}</pre>`;
+            html += `</details>`;
+            
+            showResult(html, 'success');
+        }
+        
+        async function testEndpoints() {
+            showResult('🔍 Testing API endpoints...', 'info');
+            
+            const tests = [
+                {
+                    name: 'Health Check',
+                    url: `${API_BASE_URL}/health`,
+                    method: 'GET'
+                },
+                {
+                    name: 'API Version',
+                    url: `${API_BASE_URL}/api/version`,
+                    method: 'GET'
+                },
+                {
+                    name: 'Analysis Presets',
+                    url: `${API_BASE_URL}/api/analysis-presets`,
+                    method: 'GET'
+                }
+            ];
+            
+            let results = '<h3>🧪 API Endpoint Tests</h3>';
+            
+            for (const test of tests) {
+                try {
+                    const response = await fetch(test.url, { method: test.method });
+                    const data = await response.json();
+                    
+                    results += `<div class="success">`;
+                    results += `<h4>✅ ${test.name}</h4>`;
+                    results += `<p><strong>Status:</strong> ${response.status} ${response.statusText}</p>`;
+                    results += `<details><summary>Response</summary><pre>${JSON.stringify(data, null, 2)}</pre></details>`;
+                    results += `</div>`;
+                    
+                } catch (error) {
+                    results += `<div class="error">`;
+                    results += `<h4>❌ ${test.name}</h4>`;
+                    results += `<p><strong>Error:</strong> ${error.message}</p>`;
+                    results += `</div>`;
+                }
+            }
+            
+            showResult(results, 'info');
+        }
+        
+        function showResult(message, type) {
+            const resultsDiv = document.getElementById('results');
+            const timestamp = new Date().toLocaleTimeString();
+            
+            resultsDiv.innerHTML = `
+                <div class="${type}">
+                    <p><strong>[${timestamp}]</strong></p>
+                    ${message}
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>

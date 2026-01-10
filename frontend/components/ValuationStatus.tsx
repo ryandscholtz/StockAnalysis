@@ -8,10 +8,13 @@ interface ValuationStatusProps {
 
 export default function ValuationStatus({ analysis }: ValuationStatusProps) {
   const margin = analysis.marginOfSafety
-  const isValid = margin !== null && margin !== undefined && !isNaN(margin) && isFinite(margin)
+  const fairValue = analysis.fairValue
+  const isValid = margin !== null && margin !== undefined && !isNaN(margin) && isFinite(margin) && fairValue !== null && fairValue !== undefined
   
   const getValuationStatus = () => {
-    if (!isValid) return { text: 'Unknown', color: '#6b7280' }
+    if (!isValid || fairValue === null || fairValue === undefined) {
+      return { text: 'Fair value not available', color: '#6b7280' }
+    }
     
     const absMargin = Math.abs(margin)
     
@@ -98,7 +101,7 @@ export default function ValuationStatus({ analysis }: ValuationStatusProps) {
         )}
         {!isValid && (
           <p style={{ marginTop: '12px', color: '#6b7280' }}>
-            Valuation status cannot be determined due to missing data.
+            💡 Fair value cannot be calculated without proper financial statement data. Consider uploading financial statements or using manual data entry for more accurate valuation.
           </p>
         )}
       </div>

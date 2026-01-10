@@ -4,8 +4,9 @@ import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { stockApi, SearchResult } from '@/lib/api'
 import { searchTickers } from '@/lib/enhanced-search'
+import { RequireAuth } from '@/components/AuthProvider'
 
-export default function AddToWatchlistPage() {
+function AddToWatchlistContent() {
   const router = useRouter()
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [suggestions, setSuggestions] = useState<SearchResult[]>([])
@@ -16,6 +17,8 @@ export default function AddToWatchlistPage() {
   const [error, setError] = useState<string>('')
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  console.log('🔐 AddToWatchlistContent rendered, adding state:', adding)
 
   useEffect(() => {
     if (searchTimeoutRef.current) {
@@ -54,11 +57,11 @@ export default function AddToWatchlistPage() {
             
             // Merge API results with local results, prioritizing API results
             if (safeApiResults.length > 0) {
-              // Add API results that aren't already in local results
-              const additionalApiResults = safeApiResults.filter(api => 
-                !localSearchResults.some(local => local.ticker === api.ticker)
+              // Deduplicate: prioritize API results, then add local results that aren't in API
+              const localNotInApi = localSearchResults.filter(local => 
+                !safeApiResults.some(api => api.ticker === local.ticker)
               )
-              finalResults = [...safeApiResults, ...localSearchResults, ...additionalApiResults].slice(0, 10)
+              finalResults = [...safeApiResults, ...localNotInApi].slice(0, 10)
               console.log('Merged results with API:', finalResults)
             } else {
               console.log('No API results, using enhanced search only')
@@ -105,7 +108,9 @@ export default function AddToWatchlistPage() {
 
   const handleSelect = async (suggestion: SearchResult) => {
     console.log('=== WATCHLIST ADD DEBUG ===')
+    console.log('handleSelect called!')
     console.log('Selected suggestion:', suggestion)
+    console.log('Current adding state:', adding)
     
     setSearchQuery(suggestion.ticker || '')
     setShowSuggestions(false)
@@ -234,7 +239,11 @@ export default function AddToWatchlistPage() {
             {suggestions.map((suggestion, index) => (
               <div
                 key={`${suggestion.ticker}-${index}`}
-                onClick={() => handleSelect(suggestion)}
+                onMouseDown={(e) => {
+                  console.log('🖱️ onMouseDown triggered for:', suggestion.ticker)
+                  e.preventDefault() // Prevent input blur
+                  handleSelect(suggestion)
+                }}
                 style={{
                   padding: '12px 16px',
                   cursor: 'pointer',
@@ -304,6 +313,14 @@ export default function AddToWatchlistPage() {
         </div>
       )}
     </div>
+  )
+}
+
+export default function AddToWatchlistPage() {
+  return (
+    <RequireAuth>
+      <AddToWatchlistContent />
+    </RequireAuth>
   )
 }
 

@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Server Restart - Manual Data Components Verification</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 20px;
+            background-color: #f9fafb;
+        }
+        .test-card {
+            background: white;
+            border-radius: 8px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+        .success {
+            background-color: #f0fdf4;
+            border: 2px solid #10b981;
+            color: #065f46;
+        }
+        .info {
+            background-color: #eff6ff;
+            border: 2px solid #2563eb;
+            color: #1e40af;
+        }
+        .warning {
+            background-color: #fef3c7;
+            border: 2px solid #f59e0b;
+            color: #92400e;
+        }
+        .step {
+            margin: 16px 0;
+            padding: 12px;
+            background-color: #f8fafc;
+            border-left: 4px solid #2563eb;
+            border-radius: 4px;
+        }
+        .highlight {
+            background-color: #fef3c7;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-weight: 600;
+            display: inline-block;
+            margin: 4px 0;
+        }
+        .checklist {
+            background-color: #f8fafc;
+            padding: 16px;
+            border-radius: 6px;
+            margin: 16px 0;
+        }
+        .checklist ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+        .checklist li {
+            margin: 8px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-card success">
+        <h1>🔄 Server Restarted - Manual Data Components Verification</h1>
+        <p><strong>Status:</strong> Frontend server restarted successfully ✅</p>
+        <p><strong>Next.js:</strong> Ready in 3.6s ✅</p>
+        <p><strong>Components:</strong> Should now be visible with all fixes applied ✅</p>
+    </div>
+
+    <div class="test-card info">
+        <h2>🔧 What Should Now Be Working</h2>
+        
+        <div class="step">
+            <h3>1. ✅ Authentication System</h3>
+            <ul>
+                <li>Mock authentication with ryandscholtz@gmail.com</li>
+                <li>User navigation with sign in/out functionality</li>
+                <li>Protected routes working correctly</li>
+            </ul>
+        </div>
+
+        <div class="step">
+            <h3>2. ✅ Manual Data Components</h3>
+            <ul>
+                <li>Blue-bordered "🔧 Financial Data Management" section</li>
+                <li>📝 Manual Data Entry with "Add Data" button</li>
+                <li>📊 Financial Data Display with collapsible sections</li>
+                <li>Mock data fallbacks for development</li>
+            </ul>
+        </div>
+
+        <div class="step">
+            <h3>3. ✅ API Integration</h3>
+            <ul>
+                <li>Mock financial data API responses</li>
+                <li>Authentication headers in API calls</li>
+                <li>Graceful fallbacks when APIs fail</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="test-card">
+        <h2>🧪 Complete Verification Test</h2>
+        
+        <div class="step">
+            <h3>Test 1: Analysis Page Components</h3>
+            <p><strong>URL:</strong> <a href="http://localhost:3000/analysis/AAPL" target="_blank">http://localhost:3000/analysis/AAPL</a></p>
+            
+            <div class="checklist">
+                <h4>✅ What You Should See:</h4>
+                <ul>
+                    <li>Company header: "AAPL Inc. (AAPL)"</li>
+                    <li>Current price and refresh button</li>
+                    <li><strong>Blue-bordered section</strong> titled "🔧 Financial Data Management"</li>
+                    <li>Inside blue section: Two white cards with components</li>
+                    <li>Card 1: "📝 Manual Data Entry" with "Add Data" button</li>
+                    <li>Card 2: "📊 Financial Data Overview" with collapsible sections</li>
+                    <li>Below: Analysis results (fair value, valuation status, etc.)</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="step">
+            <h3>Test 2: Console Debug Messages</h3>
+            <p>Open browser console (F12) and look for these messages:</p>
+            
+            <div class="checklist">
+                <h4>✅ Expected Console Logs:</h4>
+                <ul>
+                    <li><span class="highlight">"🔧 ManualDataEntry component rendered for ticker: AAPL"</span></li>
+                    <li><span class="highlight">"📊 FinancialDataDisplay component rendered for ticker: AAPL"</span></li>
+                    <li><span class="highlight">"Using mock financial data for development"</span></li>
+                    <li>No authentication or API errors</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="step">
+            <h3>Test 3: Manual Data Entry Functionality</h3>
+            <ol>
+                <li>Click the <strong>"Add Data"</strong> button</li>
+                <li>Form should open with dropdown for data type</li>
+                <li>Select "Income Statement"</li>
+                <li>Enter test values (Revenue: 100000000, Net Income: 15000000)</li>
+                <li>Click "Save Data"</li>
+                <li>Should show success message</li>
+                <li>Form should close</li>
+            </ol>
+        </div>
+
+        <div class="step">
+            <h3>Test 4: Financial Data Display</h3>
+            <ol>
+                <li>Look for "📊 Financial Data Overview" section</li>
+                <li>Should show 4 collapsible sections with icons:</li>
+                <ul>
+                    <li>📈 Income Statement</li>
+                    <li>⚖️ Balance Sheet</li>
+                    <li>💰 Cash Flow Statement</li>
+                    <li>🔑 Key Metrics</li>
+                </ul>
+                <li>Click to expand "Income Statement" section</li>
+                <li>Should show mock data or data you added</li>
+                <li>Each field should have an "Edit" button</li>
+            </ol>
+        </div>
+
+        <div class="step">
+            <h3>Test 5: Authentication Integration</h3>
+            <ol>
+                <li><strong>As Guest:</strong> Components should be visible and functional</li>
+                <li><strong>Sign In:</strong> Go to <a href="http://localhost:3000/auth/signin" target="_blank">Sign In</a></li>
+                <li>Use: ryandscholtz@gmail.com / TestPass123</li>
+                <li><strong>As User:</strong> Components should still be visible and functional</li>
+                <li>User menu should appear in navigation</li>
+            </ol>
+        </div>
+    </div>
+
+    <div class="test-card warning">
+        <h2>🚨 If Components Are Still Not Visible</h2>
+        
+        <div class="step">
+            <h3>Troubleshooting Steps:</h3>
+            <ol>
+                <li><strong>Hard Refresh:</strong> Press Ctrl+Shift+R to clear cache</li>
+                <li><strong>Check Console:</strong> Look for JavaScript errors in F12 console</li>
+                <li><strong>Check Network:</strong> Verify API calls in Network tab</li>
+                <li><strong>Check Elements:</strong> Use Inspector to look for blue-bordered div</li>
+                <li><strong>Try Different Browser:</strong> Test in incognito/private mode</li>
+            </ol>
+        </div>
+
+        <div class="step">
+            <h3>Common Issues:</h3>
+            <ul>
+                <li><strong>Cache:</strong> Browser cache might be showing old version</li>
+                <li><strong>JavaScript Errors:</strong> Check console for component rendering errors</li>
+                <li><strong>CSS Issues:</strong> Components might be rendered but hidden</li>
+                <li><strong>Import Errors:</strong> Check if component imports are working</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="test-card success">
+        <h2>🎉 Success Criteria</h2>
+        
+        <div class="checklist">
+            <h4>✅ All Systems Working:</h4>
+            <ul>
+                <li>Blue-bordered Financial Data Management section visible</li>
+                <li>Manual Data Entry form opens and accepts input</li>
+                <li>Financial Data Display shows collapsible sections</li>
+                <li>Mock data appears in Income Statement section</li>
+                <li>Authentication system works (sign in/out)</li>
+                <li>Components work for both guest and authenticated users</li>
+                <li>No console errors or API failures</li>
+                <li>Fair value calculations integrate with manual data</li>
+            </ul>
+        </div>
+
+        <div class="step">
+            <h3>🚀 Ready for Production</h3>
+            <p>Once all tests pass, the system is ready for:</p>
+            <ul>
+                <li>Real AWS Cognito deployment</li>
+                <li>Per-user data storage in DynamoDB</li>
+                <li>Production authentication and authorization</li>
+                <li>Real financial data integration</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        console.log('🔄 Server Restart Verification Test Page Loaded');
+        console.log('📍 Frontend server restarted - testing components now');
+        
+        // Auto-open the analysis page after 3 seconds
+        setTimeout(() => {
+            console.log('🚀 Opening analysis page to verify components...');
+            window.open('http://localhost:3000/analysis/AAPL', '_blank');
+        }, 3000);
+        
+        // Test checklist
+        console.log('🧪 Verification Checklist:');
+        console.log('1. Look for blue-bordered "🔧 Financial Data Management" section');
+        console.log('2. Verify Manual Data Entry "Add Data" button works');
+        console.log('3. Check Financial Data Display collapsible sections');
+        console.log('4. Test authentication with ryandscholtz@gmail.com');
+        console.log('5. Confirm no console errors or API failures');
+    </script>
+</body>
+</html>

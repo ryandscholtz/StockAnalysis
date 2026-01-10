@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Components - Console Log Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 20px;
+            background-color: #f9fafb;
+        }
+        .test-card {
+            background: white;
+            border-radius: 8px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+        .success {
+            background-color: #f0fdf4;
+            border: 2px solid #10b981;
+            color: #065f46;
+        }
+        .info {
+            background-color: #eff6ff;
+            border: 2px solid #2563eb;
+            color: #1e40af;
+        }
+        .warning {
+            background-color: #fef3c7;
+            border: 2px solid #f59e0b;
+            color: #92400e;
+        }
+        .step {
+            margin: 16px 0;
+            padding: 12px;
+            background-color: #f8fafc;
+            border-left: 4px solid #2563eb;
+            border-radius: 4px;
+        }
+        .highlight {
+            background-color: #fef3c7;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-weight: 600;
+            display: inline-block;
+            margin: 4px 0;
+        }
+        .console-log {
+            background-color: #1f2937;
+            color: #f9fafb;
+            padding: 12px;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 12px;
+            margin: 8px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-card success">
+        <h1>🔍 Debug Components - Console Log Test</h1>
+        <p><strong>Status:</strong> Added extensive debug logging ✅</p>
+        <p><strong>Purpose:</strong> Identify exactly where component rendering fails ✅</p>
+        <p><strong>Method:</strong> Console logs at every step ✅</p>
+    </div>
+
+    <div class="test-card info">
+        <h2>🔧 Debug Logging Added</h2>
+        
+        <div class="step">
+            <h3>✅ Financial Data Loading</h3>
+            <p>Added logs to track the financial data loading process:</p>
+            <div class="console-log">
+🔄 loadFinancialData called for ticker: AAPL<br>
+📡 Attempting to load financial data for: AAPL<br>
+✅ Financial data loaded successfully: {...}<br>
+🔄 Setting fallback financial data structure
+            </div>
+        </div>
+
+        <div class="step">
+            <h3>✅ Component Rendering</h3>
+            <p>Added logs to track component rendering:</p>
+            <div class="console-log">
+🔧 Rendering Financial Data Management section for ticker: AAPL<br>
+🔧 Rendering ManualDataEntry component<br>
+📊 Rendering FinancialDataDisplay component with data: {...}
+            </div>
+        </div>
+
+        <div class="step">
+            <h3>✅ State Initialization</h3>
+            <p>Fixed financialData state to always have a valid structure:</p>
+            <ul>
+                <li>Initialized with empty but valid structure</li>
+                <li>Components should render even with empty data</li>
+                <li>No more null/undefined issues</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="test-card warning">
+        <h2>🧪 Debug Test Instructions</h2>
+        
+        <div class="step">
+            <h3>Step 1: Open Analysis Page</h3>
+            <p><strong>URL:</strong> <a href="http://localhost:3000/analysis/AAPL" target="_blank">http://localhost:3000/analysis/AAPL</a></p>
+            <p><strong>Action:</strong> Open browser console (F12) BEFORE clicking the link</p>
+        </div>
+
+        <div class="step">
+            <h3>Step 2: Watch Console Output</h3>
+            <p>Look for these specific debug messages in order:</p>
+            <ol>
+                <li><span class="highlight">"🔄 loadFinancialData called for ticker: AAPL"</span></li>
+                <li><span class="highlight">"📡 Attempting to load financial data for: AAPL"</span></li>
+                <li><span class="highlight">"🔧 Rendering Financial Data Management section"</span></li>
+                <li><span class="highlight">"🔧 Rendering ManualDataEntry component"</span></li>
+                <li><span class="highlight">"📊 Rendering FinancialDataDisplay component"</span></li>
+                <li><span class="highlight">"🔧 ManualDataEntry component rendered for ticker: AAPL"</span></li>
+                <li><span class="highlight">"📊 FinancialDataDisplay component rendered for ticker: AAPL"</span></li>
+            </ol>
+        </div>
+
+        <div class="step">
+            <h3>Step 3: Identify the Failure Point</h3>
+            <p>Based on which messages appear, we can identify where the issue is:</p>
+            <ul>
+                <li><strong>No logs at all:</strong> Page not loading/compiling</li>
+                <li><strong>loadFinancialData logs only:</strong> Component section not rendering</li>
+                <li><strong>Rendering logs but no component logs:</strong> Components failing to mount</li>
+                <li><strong>All logs present:</strong> Components rendering but not visible (CSS issue)</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="test-card">
+        <h2>🔍 Diagnostic Scenarios</h2>
+        
+        <div class="step">
+            <h3>Scenario A: No Debug Logs</h3>
+            <p><strong>Issue:</strong> Page not loading or JavaScript error</p>
+            <p><strong>Solution:</strong> Check for compilation errors or JavaScript exceptions</p>
+        </div>
+
+        <div class="step">
+            <h3>Scenario B: API Logs Only</h3>
+            <p><strong>Issue:</strong> Component section not being rendered</p>
+            <p><strong>Solution:</strong> Check if analysis object is null or component section is conditionally hidden</p>
+        </div>
+
+        <div class="step">
+            <h3>Scenario C: Rendering Logs But No Component Logs</h3>
+            <p><strong>Issue:</strong> Components failing to mount/render</p>
+            <p><strong>Solution:</strong> Check component imports, props, or internal component errors</p>
+        </div>
+
+        <div class="step">
+            <h3>Scenario D: All Logs Present</h3>
+            <p><strong>Issue:</strong> Components rendering but not visible</p>
+            <p><strong>Solution:</strong> CSS issue, components hidden or positioned off-screen</p>
+        </div>
+    </div>
+
+    <div class="test-card success">
+        <h2>🎯 Expected Debug Output</h2>
+        <p>If everything is working correctly, you should see this sequence in the console:</p>
+        
+        <div class="console-log">
+🔄 loadFinancialData called for ticker: AAPL<br>
+📡 Attempting to load financial data for: AAPL<br>
+Using mock financial data for development<br>
+✅ Financial data loaded successfully: {ticker: "AAPL", financial_data: {...}, has_data: true}<br>
+🔧 Rendering Financial Data Management section for ticker: AAPL<br>
+🔧 Rendering ManualDataEntry component<br>
+📊 Rendering FinancialDataDisplay component with data: {...}<br>
+🔧 ManualDataEntry component rendered for ticker: AAPL<br>
+📊 FinancialDataDisplay component rendered for ticker: AAPL
+        </div>
+        
+        <p><strong>And visually:</strong> Blue-bordered section with two white cards containing the components</p>
+    </div>
+
+    <script>
+        console.log('🔍 Debug Components Test Page Loaded');
+        console.log('📍 Added extensive debug logging to identify component rendering issues');
+        console.log('🧪 Open console BEFORE clicking the analysis page link');
+        
+        // Auto-open the analysis page after 5 seconds to give time to open console
+        setTimeout(() => {
+            console.log('🚀 Opening analysis page with debug logging...');
+            window.open('http://localhost:3000/analysis/AAPL', '_blank');
+        }, 5000);
+        
+        // Instructions
+        console.log('📋 Debug Instructions:');
+        console.log('1. Open browser console (F12) NOW');
+        console.log('2. Wait for analysis page to open automatically');
+        console.log('3. Watch for debug messages in console');
+        console.log('4. Report which messages appear and which are missing');
+    </script>
+</body>
+</html>

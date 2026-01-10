@@ -11,11 +11,230 @@ import urllib.parse
 import urllib.error
 import logging
 import boto3
+import time
 from typing import Dict, Any, Optional
+from decimal import Decimal
 
 # Set up logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
+
+# DynamoDB table name from environment
+TABLE_NAME = os.getenv('TABLE_NAME', 'stock-analyses-production')
+CACHE_DURATION_MINUTES = 30
+
+# Comprehensive ticker database with correct company names
+TICKER_DATABASE = {
+    # Technology
+    'AAPL': {'companyName': 'Apple Inc.', 'exchange': 'NASDAQ'},
+    'MSFT': {'companyName': 'Microsoft Corporation', 'exchange': 'NASDAQ'},
+    'GOOGL': {'companyName': 'Alphabet Inc. Class A', 'exchange': 'NASDAQ'},
+    'GOOG': {'companyName': 'Alphabet Inc. Class C', 'exchange': 'NASDAQ'},
+    'AMZN': {'companyName': 'Amazon.com Inc.', 'exchange': 'NASDAQ'},
+    'TSLA': {'companyName': 'Tesla Inc.', 'exchange': 'NASDAQ'},
+    'META': {'companyName': 'Meta Platforms Inc.', 'exchange': 'NASDAQ'},
+    'NVDA': {'companyName': 'NVIDIA Corporation', 'exchange': 'NASDAQ'},
+    'NFLX': {'companyName': 'Netflix Inc.', 'exchange': 'NASDAQ'},
+    'CRM': {'companyName': 'Salesforce Inc.', 'exchange': 'NYSE'},
+    'ORCL': {'companyName': 'Oracle Corporation', 'exchange': 'NYSE'},
+    'ADBE': {'companyName': 'Adobe Inc.', 'exchange': 'NASDAQ'},
+    'INTC': {'companyName': 'Intel Corporation', 'exchange': 'NASDAQ'},
+    'AMD': {'companyName': 'Advanced Micro Devices Inc.', 'exchange': 'NASDAQ'},
+    'PYPL': {'companyName': 'PayPal Holdings Inc.', 'exchange': 'NASDAQ'},
+    
+    # Financial
+    'JPM': {'companyName': 'JPMorgan Chase & Co.', 'exchange': 'NYSE'},
+    'BAC': {'companyName': 'Bank of America Corporation', 'exchange': 'NYSE'},
+    'WFC': {'companyName': 'Wells Fargo & Company', 'exchange': 'NYSE'},
+    'GS': {'companyName': 'The Goldman Sachs Group Inc.', 'exchange': 'NYSE'},
+    'MS': {'companyName': 'Morgan Stanley', 'exchange': 'NYSE'},
+    'V': {'companyName': 'Visa Inc.', 'exchange': 'NYSE'},
+    'MA': {'companyName': 'Mastercard Incorporated', 'exchange': 'NYSE'},
+    'BRK.B': {'companyName': 'Berkshire Hathaway Inc. Class B', 'exchange': 'NYSE'},
+    
+    # Healthcare
+    'JNJ': {'companyName': 'Johnson & Johnson', 'exchange': 'NYSE'},
+    'PFE': {'companyName': 'Pfizer Inc.', 'exchange': 'NYSE'},
+    'UNH': {'companyName': 'UnitedHealth Group Incorporated', 'exchange': 'NYSE'},
+    'ABBV': {'companyName': 'AbbVie Inc.', 'exchange': 'NYSE'},
+    'MRK': {'companyName': 'Merck & Co. Inc.', 'exchange': 'NYSE'},
+    'TMO': {'companyName': 'Thermo Fisher Scientific Inc.', 'exchange': 'NYSE'},
+    
+    # Consumer
+    'KO': {'companyName': 'The Coca-Cola Company', 'exchange': 'NYSE'},
+    'PEP': {'companyName': 'PepsiCo Inc.', 'exchange': 'NASDAQ'},
+    'WMT': {'companyName': 'Walmart Inc.', 'exchange': 'NYSE'},
+    'HD': {'companyName': 'The Home Depot Inc.', 'exchange': 'NYSE'},
+    'MCD': {'companyName': 'McDonald\'s Corporation', 'exchange': 'NYSE'},
+    'NKE': {'companyName': 'NIKE Inc.', 'exchange': 'NYSE'},
+    'SBUX': {'companyName': 'Starbucks Corporation', 'exchange': 'NASDAQ'},
+    
+    # Industrial
+    'BA': {'companyName': 'The Boeing Company', 'exchange': 'NYSE'},
+    'CAT': {'companyName': 'Caterpillar Inc.', 'exchange': 'NYSE'},
+    'GE': {'companyName': 'General Electric Company', 'exchange': 'NYSE'},
+    'MMM': {'companyName': '3M Company', 'exchange': 'NYSE'},
+    
+    # Energy
+    'XOM': {'companyName': 'Exxon Mobil Corporation', 'exchange': 'NYSE'},
+    'CVX': {'companyName': 'Chevron Corporation', 'exchange': 'NYSE'},
+    
+    # Telecom
+    'VZ': {'companyName': 'Verizon Communications Inc.', 'exchange': 'NYSE'},
+    'T': {'companyName': 'AT&T Inc.', 'exchange': 'NYSE'},
+}
+
+def get_company_info(ticker: str) -> dict:
+    """Get company name and exchange for a ticker, with fallback"""
+    ticker_upper = ticker.upper()
+    if ticker_upper in TICKER_DATABASE:
+        return TICKER_DATABASE[ticker_upper]
+    else:
+        # Fallback for unknown tickers - but log it
+        logger.warning(f"Unknown ticker {ticker_upper}, using fallback company name")
+        return {
+            'companyName': f'{ticker_upper} Corporation',
+            'exchange': 'NASDAQ'
+        }
+
+def convert_floats_to_decimal(obj):
+    """Convert float values to Decimal for DynamoDB compatibility"""
+    if isinstance(obj, float):
+        return Decimal(str(obj))
+    elif isinstance(obj, dict):
+        return {k: convert_floats_to_decimal(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_floats_to_decimal(v) for v in obj]
+    else:
+        return obj
+
+def convert_decimals_to_float(obj):
+    """Convert Decimal values back to float for JSON serialization"""
+    if isinstance(obj, Decimal):
+        return float(obj)
+    elif isinstance(obj, dict):
+        return {k: convert_decimals_to_float(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_decimals_to_float(v) for v in obj]
+    else:
+        return obj
+
+def is_cache_stale(timestamp_str: str) -> bool:
+    """Check if cached data is older than 30 minutes"""
+    try:
+        # Parse ISO timestamp
+        cached_time = time.mktime(time.strptime(timestamp_str, '%Y-%m-%dT%H:%M:%SZ'))
+        return (time.time() - cached_time) > (CACHE_DURATION_MINUTES * 60)
+    except:
+        return True  # If we can't parse the timestamp, consider it stale
+
+def get_cached_analysis(ticker: str) -> Optional[Dict]:
+    """Get cached analysis from DynamoDB if available"""
+    try:
+        dynamodb = boto3.resource('dynamodb')
+        table = dynamodb.Table(TABLE_NAME)
+        
+        response = table.get_item(
+            Key={
+                'PK': f'ANALYSIS#{ticker.upper()}',
+                'SK': 'LATEST'
+            }
+        )
+        
+        if 'Item' in response:
+            item = response['Item']
+            # Convert Decimals back to floats for JSON serialization
+            converted_item = convert_decimals_to_float(item)
+            return {
+                'data': converted_item,
+                'timestamp': converted_item.get('timestamp', ''),
+                'cached_at': converted_item.get('cached_at', '')
+            }
+        return None
+    except Exception as e:
+        logger.error(f"Error getting cached analysis for {ticker}: {e}")
+        return None
+
+def cache_analysis(ticker: str, analysis_data: Dict) -> None:
+    """Cache analysis data in DynamoDB with timestamp"""
+    try:
+        dynamodb = boto3.resource('dynamodb')
+        table = dynamodb.Table(TABLE_NAME)
+        
+        # Convert floats to Decimals for DynamoDB
+        item = convert_floats_to_decimal(analysis_data.copy())
+        
+        # Add DynamoDB keys and metadata
+        item.update({
+            'PK': f'ANALYSIS#{ticker.upper()}',
+            'SK': 'LATEST',
+            'cached_at': time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime()),
+            'ttl': int(time.time()) + (24 * 60 * 60)  # 24 hour TTL
+        })
+        
+        # Add GSI keys for querying
+        item.update({
+            'GSI1PK': f'EXCHANGE#{item.get("exchange", "UNKNOWN")}',
+            'GSI1SK': item['timestamp'],
+            'GSI2PK': f'RECOMMENDATION#{item.get("recommendation", "UNKNOWN")}',
+            'GSI2SK': item['timestamp'],
+            'GSI3PK': f'SECTOR#{item.get("sector", "UNKNOWN")}',
+            'GSI3SK': str(item.get("businessQuality", {}).get("score", 0)).zfill(3)
+        })
+        
+        table.put_item(Item=item)
+        logger.info(f"Cached analysis for {ticker} in DynamoDB")
+    except Exception as e:
+        logger.error(f"Error caching analysis for {ticker}: {e}")
+
+# Simple in-memory cache for price data (30 minutes TTL)
+PRICE_CACHE = {}
+CACHE_TTL_SECONDS = 30 * 60  # 30 minutes
+
+def is_cache_stale(timestamp: float) -> bool:
+    """Check if cached data is older than 30 minutes"""
+    return time.time() - timestamp > CACHE_TTL_SECONDS
+
+def get_cached_price(ticker: str) -> Optional[Dict]:
+    """Get cached price data if not stale"""
+    if ticker in PRICE_CACHE:
+        cached_data = PRICE_CACHE[ticker]
+        if not is_cache_stale(cached_data['timestamp']):
+            logger.info(f"Using cached price for {ticker}")
+            return cached_data['data']
+        else:
+            logger.info(f"Cache stale for {ticker}, will fetch fresh data")
+            # Remove stale data
+            del PRICE_CACHE[ticker]
+    return None
+
+def cache_price(ticker: str, price_data: Dict) -> None:
+    """Cache price data with timestamp"""
+    PRICE_CACHE[ticker] = {
+        'data': price_data,
+        'timestamp': time.time()
+    }
+    logger.info(f"Cached price for {ticker}")
+
+def get_cache_info(ticker: str) -> Dict:
+    """Get cache status information"""
+    if ticker in PRICE_CACHE:
+        cached_data = PRICE_CACHE[ticker]
+        age_minutes = (time.time() - cached_data['timestamp']) / 60
+        is_stale = is_cache_stale(cached_data['timestamp'])
+        return {
+            'status': 'stale' if is_stale else 'fresh',
+            'age_minutes': round(age_minutes, 1),
+            'needs_refresh': is_stale,
+            'last_updated': time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime(cached_data['timestamp']))
+        }
+    else:
+        return {
+            'status': 'missing',
+            'age_minutes': None,
+            'needs_refresh': True,
+            'last_updated': None
+        }
 
 def get_secrets():
     """Get secrets from AWS Secrets Manager"""
@@ -221,401 +440,42 @@ def get_business_type_and_weights(ticker: str) -> tuple[str, float, float, float
     # Get business type and weights, default to balanced approach
     return business_type_mapping.get(ticker, ('Default', 0.50, 0.35, 0.15))
 
-def calculate_dcf_value(ticker: str, current_price: float) -> float:
+def calculate_dcf_value(ticker: str, current_price: float) -> Optional[float]:
     """
     Calculate Discounted Cash Flow (DCF) value
+    Returns None if insufficient data for proper DCF calculation
     In a real implementation, this would:
     1. Fetch historical free cash flows from financial statements
     2. Project future cash flows based on growth rates
     3. Apply discount rate (WACC or risk-free rate + risk premium)
     4. Calculate present value of projected cash flows
     """
-    # Company-specific DCF estimates based on fundamental analysis principles
-    # These are educated estimates that would be replaced with real DCF calculations
-    
-    dcf_estimates = {
-        # Technology companies - high cash flow generation
-        'AAPL': current_price * 1.15,  # Strong cash flows, premium valuation justified
-        'MSFT': current_price * 1.12,  # Consistent cash flows, cloud growth
-        'GOOGL': current_price * 1.10,  # Ad revenue growth, strong margins
-        'GOOG': current_price * 1.10,   # Same as GOOGL
-        'AMZN': current_price * 1.20,   # High growth, reinvestment phase
-        'META': current_price * 1.08,   # Mature platform, steady cash flows
-        'NVDA': current_price * 1.25,   # AI boom, high growth potential
-        'NFLX': current_price * 1.05,   # Mature streaming, slower growth
-        'TSLA': current_price * 1.30,   # High growth potential, volatile
-        
-        # Banks - steady cash flows, regulated
-        'JPM': current_price * 1.05,    # Stable banking, good management
-        'BAC': current_price * 1.03,    # Large scale, steady operations
-        'WFC': current_price * 0.98,    # Regulatory issues, conservative
-        
-        # Healthcare - defensive, steady cash flows
-        'JNJ': current_price * 1.08,    # Diversified healthcare, steady
-        'PFE': current_price * 1.02,    # Pharma cycles, patent cliffs
-        'UNH': current_price * 1.12,    # Healthcare services growth
-        
-        # Consumer staples - predictable cash flows
-        'KO': current_price * 1.05,     # Mature brand, steady dividends
-        'PEP': current_price * 1.06,    # Diversified portfolio, growth
-        'WMT': current_price * 1.04,    # Retail scale, e-commerce growth
-        'MCD': current_price * 1.07,    # Franchise model, steady cash
-        
-        # Industrial/Cyclical - variable cash flows
-        'BA': current_price * 0.95,     # Cyclical aerospace, challenges
-        'CAT': current_price * 1.02,    # Infrastructure demand
-        'GE': current_price * 0.98,     # Turnaround story
-        
-        # Energy - commodity dependent
-        'XOM': current_price * 1.00,    # Oil price dependent
-        'CVX': current_price * 1.02,    # Better capital discipline
-        
-        # Utilities - regulated, steady
-        'VZ': current_price * 1.03,     # Telecom utility, 5G investment
-        'T': current_price * 0.98,      # High debt, dividend pressure
-    }
-    
-    return dcf_estimates.get(ticker, current_price * 1.05)  # Default 5% premium
+    # Without real financial statement data, we cannot calculate proper DCF
+    # Return None to indicate insufficient data
+    logger.warning(f"DCF calculation for {ticker} requires real financial statement data - returning None")
+    return None
 
-def calculate_epv_value(ticker: str, current_price: float) -> float:
+def calculate_epv_value(ticker: str, current_price: float) -> Optional[float]:
     """
     Calculate Earnings Power Value (EPV)
     EPV = Normalized Earnings / Discount Rate
-    Assumes no growth, values current earning power in perpetuity
+    Returns None if insufficient earnings data
     """
-    # EPV estimates based on current earnings power and sustainability
-    # More conservative than DCF, focuses on current profitability
-    
-    epv_estimates = {
-        # Technology - high margins but growth expectations
-        'AAPL': current_price * 0.95,   # High margins, but growth priced in
-        'MSFT': current_price * 0.98,   # Consistent earnings power
-        'GOOGL': current_price * 0.92,  # Ad revenue cyclical
-        'GOOG': current_price * 0.92,   # Same as GOOGL
-        'AMZN': current_price * 0.85,   # Lower margins, reinvestment
-        'META': current_price * 0.90,   # Platform maturity concerns
-        'NVDA': current_price * 0.80,   # Cyclical semiconductor earnings
-        'NFLX': current_price * 0.88,   # Content costs pressure margins
-        'TSLA': current_price * 0.75,   # Volatile earnings, capital intensive
-        
-        # Banks - steady earnings power
-        'JPM': current_price * 1.10,    # Strong earnings consistency
-        'BAC': current_price * 1.08,    # Large scale advantages
-        'WFC': current_price * 1.05,    # Solid underlying business
-        
-        # Healthcare - defensive earnings
-        'JNJ': current_price * 1.05,    # Diversified, stable earnings
-        'PFE': current_price * 0.95,    # Patent cliff risks
-        'UNH': current_price * 1.08,    # Healthcare services growth
-        
-        # Consumer staples - very stable earnings
-        'KO': current_price * 1.08,     # Brand power, pricing power
-        'PEP': current_price * 1.06,    # Diversified snacks/beverages
-        'WMT': current_price * 1.02,    # Scale advantages, steady margins
-        'MCD': current_price * 1.10,    # Franchise model, asset-light
-        
-        # Industrial - cyclical earnings
-        'BA': current_price * 0.85,     # Cyclical, execution risks
-        'CAT': current_price * 0.90,    # Commodity cycle dependent
-        'GE': current_price * 0.88,     # Turnaround, inconsistent
-        
-        # Energy - commodity earnings
-        'XOM': current_price * 0.95,    # Commodity price dependent
-        'CVX': current_price * 0.98,    # Better through-cycle performance
-        
-        # Utilities - regulated earnings
-        'VZ': current_price * 1.05,     # Regulated utility-like earnings
-        'T': current_price * 1.00,      # High debt impacts earnings quality
-    }
-    
-    return epv_estimates.get(ticker, current_price * 0.95)  # Default 5% discount
+    # Without real earnings data, we cannot calculate proper EPV
+    # Return None to indicate insufficient data
+    logger.warning(f"EPV calculation for {ticker} requires real earnings data - returning None")
+    return None
 
-def calculate_asset_value(ticker: str, current_price: float) -> float:
+def calculate_asset_value(ticker: str, current_price: float) -> Optional[float]:
     """
     Calculate Asset-Based Valuation
+    Returns None if insufficient balance sheet data
     Based on book value, tangible assets, and liquidation value
-    Most relevant for asset-heavy businesses
     """
-    # Asset value estimates based on balance sheet strength and asset intensity
-    # Generally more conservative, focuses on tangible value
-    
-    asset_estimates = {
-        # Technology - asset-light businesses
-        'AAPL': current_price * 0.75,   # High cash, but asset-light
-        'MSFT': current_price * 0.70,   # Software, minimal tangible assets
-        'GOOGL': current_price * 0.80,  # Some real estate, mostly intangible
-        'GOOG': current_price * 0.80,   # Same as GOOGL
-        'AMZN': current_price * 0.85,   # Warehouses, infrastructure
-        'META': current_price * 0.65,   # Mostly intangible assets
-        'NVDA': current_price * 0.70,   # Some manufacturing assets
-        'NFLX': current_price * 0.60,   # Content library, limited tangible
-        'TSLA': current_price * 0.90,   # Manufacturing facilities, inventory
-        
-        # Banks - asset values important
-        'JPM': current_price * 1.00,    # Book value relevant for banks
-        'BAC': current_price * 0.98,    # Large loan portfolio
-        'WFC': current_price * 0.95,    # Real estate, loan portfolio
-        
-        # Healthcare - mixed asset base
-        'JNJ': current_price * 0.85,    # Manufacturing, R&D assets
-        'PFE': current_price * 0.80,    # Pharma manufacturing
-        'UNH': current_price * 0.75,    # Service business, limited assets
-        
-        # Consumer staples - manufacturing assets
-        'KO': current_price * 0.90,     # Bottling plants, brand value
-        'PEP': current_price * 0.88,    # Manufacturing, distribution
-        'WMT': current_price * 0.95,    # Real estate, inventory
-        'MCD': current_price * 1.05,    # Real estate portfolio valuable
-        
-        # Industrial - asset-heavy
-        'BA': current_price * 1.10,     # Manufacturing facilities
-        'CAT': current_price * 1.05,    # Heavy machinery, facilities
-        'GE': current_price * 0.95,     # Industrial assets, some impaired
-        
-        # Energy - asset-heavy
-        'XOM': current_price * 1.15,    # Oil reserves, refineries
-        'CVX': current_price * 1.12,    # Integrated oil assets
-        
-        # Utilities - infrastructure assets
-        'VZ': current_price * 1.00,     # Network infrastructure
-        'T': current_price * 0.95,      # Network, but high debt
-    }
-    
-    return asset_estimates.get(ticker, current_price * 0.85)  # Default 15% discount
-    """
-    # Business type classification based on ticker and industry knowledge
-    # In a real implementation, this would analyze financial ratios and industry data
-    
-    business_type_mapping = {
-        # Technology companies - DCF 50% | EPV 35% | Asset 15%
-        'AAPL': ('Technology', 0.50, 0.35, 0.15),
-        'MSFT': ('Technology', 0.50, 0.35, 0.15),
-        'GOOGL': ('Technology', 0.50, 0.35, 0.15),
-        'GOOG': ('Technology', 0.50, 0.35, 0.15),
-        'AMZN': ('Technology', 0.50, 0.35, 0.15),
-        'META': ('Technology', 0.50, 0.35, 0.15),
-        'NVDA': ('Technology', 0.50, 0.35, 0.15),
-        'NFLX': ('Technology', 0.50, 0.35, 0.15),
-        'CRM': ('Technology', 0.50, 0.35, 0.15),
-        'ORCL': ('Technology', 0.50, 0.35, 0.15),
-        'ADBE': ('Technology', 0.50, 0.35, 0.15),
-        'INTC': ('Technology', 0.50, 0.35, 0.15),
-        'AMD': ('Technology', 0.50, 0.35, 0.15),
-        'PYPL': ('Technology', 0.50, 0.35, 0.15),
-        
-        # High Growth Technology - DCF 55% | EPV 25% | Asset 20%
-        'TSLA': ('High Growth', 0.55, 0.25, 0.20),
-        
-        # Banks - DCF 25% | EPV 50% | Asset 25%
-        'JPM': ('Bank', 0.25, 0.50, 0.25),
-        'BAC': ('Bank', 0.25, 0.50, 0.25),
-        'WFC': ('Bank', 0.25, 0.50, 0.25),
-        'GS': ('Bank', 0.25, 0.50, 0.25),
-        'MS': ('Bank', 0.25, 0.50, 0.25),
-        
-        # Healthcare - DCF 50% | EPV 35% | Asset 15%
-        'JNJ': ('Healthcare', 0.50, 0.35, 0.15),
-        'PFE': ('Healthcare', 0.50, 0.35, 0.15),
-        'UNH': ('Healthcare', 0.50, 0.35, 0.15),
-        'ABBV': ('Healthcare', 0.50, 0.35, 0.15),
-        'MRK': ('Healthcare', 0.50, 0.35, 0.15),
-        'TMO': ('Healthcare', 0.50, 0.35, 0.15),
-        
-        # Mature Consumer Staples - DCF 50% | EPV 35% | Asset 15%
-        'KO': ('Mature', 0.50, 0.35, 0.15),
-        'PEP': ('Mature', 0.50, 0.35, 0.15),
-        'WMT': ('Mature', 0.50, 0.35, 0.15),
-        'MCD': ('Mature', 0.50, 0.35, 0.15),
-        
-        # Retail - DCF 50% | EPV 35% | Asset 15%
-        'HD': ('Retail', 0.50, 0.35, 0.15),
-        'NKE': ('Retail', 0.50, 0.35, 0.15),
-        'SBUX': ('Retail', 0.50, 0.35, 0.15),
-        
-        # Cyclical/Industrial - DCF 25% | EPV 50% | Asset 25%
-        'BA': ('Cyclical', 0.25, 0.50, 0.25),
-        'CAT': ('Cyclical', 0.25, 0.50, 0.25),
-        'GE': ('Cyclical', 0.25, 0.50, 0.25),
-        'MMM': ('Cyclical', 0.25, 0.50, 0.25),
-        
-        # Energy - DCF 25% | EPV 40% | Asset 35%
-        'XOM': ('Energy', 0.25, 0.40, 0.35),
-        'CVX': ('Energy', 0.25, 0.40, 0.35),
-        
-        # Utility - DCF 45% | EPV 35% | Asset 20%
-        'VZ': ('Utility', 0.45, 0.35, 0.20),
-        'T': ('Utility', 0.45, 0.35, 0.20),
-        
-        # Financial Services - DCF 50% | EPV 35% | Asset 15%
-        'V': ('Technology', 0.50, 0.35, 0.15),  # Payment processor, more like tech
-        'MA': ('Technology', 0.50, 0.35, 0.15),  # Payment processor, more like tech
-        'BRK.B': ('Mature', 0.50, 0.35, 0.15),  # Berkshire Hathaway - mature conglomerate
-    }
-    
-    # Get business type and weights, default to balanced approach
-    return business_type_mapping.get(ticker, ('Default', 0.50, 0.35, 0.15))
-
-def calculate_dcf_value(ticker: str, current_price: float) -> float:
-    """
-    Calculate Discounted Cash Flow (DCF) value
-    In a real implementation, this would:
-    1. Fetch historical free cash flows from financial statements
-    2. Project future cash flows based on growth rates
-    3. Apply discount rate (WACC or risk-free rate + risk premium)
-    4. Calculate present value of projected cash flows
-    """
-    # Company-specific DCF estimates based on fundamental analysis principles
-    # These are educated estimates that would be replaced with real DCF calculations
-    
-    dcf_estimates = {
-        # Technology companies - high cash flow generation
-        'AAPL': current_price * 1.15,  # Strong cash flows, premium valuation justified
-        'MSFT': current_price * 1.12,  # Consistent cash flows, cloud growth
-        'GOOGL': current_price * 1.10,  # Ad revenue growth, strong margins
-        'GOOG': current_price * 1.10,   # Same as GOOGL
-        'AMZN': current_price * 1.20,   # High growth, reinvestment phase
-        'META': current_price * 1.08,   # Mature platform, steady cash flows
-        'NVDA': current_price * 1.25,   # AI boom, high growth potential
-        'NFLX': current_price * 1.05,   # Mature streaming, slower growth
-        'TSLA': current_price * 1.30,   # High growth potential, volatile
-        
-        # Banks - steady cash flows, regulated
-        'JPM': current_price * 1.05,    # Stable banking, good management
-        'BAC': current_price * 1.03,    # Large scale, steady operations
-        'WFC': current_price * 0.98,    # Regulatory issues, conservative
-        
-        # Healthcare - defensive, steady cash flows
-        'JNJ': current_price * 1.08,    # Diversified healthcare, steady
-        'PFE': current_price * 1.02,    # Pharma cycles, patent cliffs
-        'UNH': current_price * 1.12,    # Healthcare services growth
-        
-        # Consumer staples - predictable cash flows
-        'KO': current_price * 1.05,     # Mature brand, steady dividends
-        'PEP': current_price * 1.06,    # Diversified portfolio, growth
-        'WMT': current_price * 1.04,    # Retail scale, e-commerce growth
-        'MCD': current_price * 1.07,    # Franchise model, steady cash
-        
-        # Industrial/Cyclical - variable cash flows
-        'BA': current_price * 0.95,     # Cyclical aerospace, challenges
-        'CAT': current_price * 1.02,    # Infrastructure demand
-        'GE': current_price * 0.98,     # Turnaround story
-        
-        # Energy - commodity dependent
-        'XOM': current_price * 1.00,    # Oil price dependent
-        'CVX': current_price * 1.02,    # Better capital discipline
-        
-        # Utilities - regulated, steady
-        'VZ': current_price * 1.03,     # Telecom utility, 5G investment
-        'T': current_price * 0.98,      # High debt, dividend pressure
-    }
-    
-    return dcf_estimates.get(ticker, current_price * 1.05)  # Default 5% premium
-
-def calculate_epv_value(ticker: str, current_price: float) -> float:
-    """
-    Calculate Earnings Power Value (EPV)
-    EPV = Normalized Earnings / Discount Rate
-    Assumes no growth, values current earning power in perpetuity
-    """
-    # EPV estimates based on current earnings power and sustainability
-    # More conservative than DCF, focuses on current profitability
-    
-    epv_estimates = {
-        # Technology - high margins but growth expectations
-        'AAPL': current_price * 0.95,   # High margins, but growth priced in
-        'MSFT': current_price * 0.98,   # Consistent earnings power
-        'GOOGL': current_price * 0.92,  # Ad revenue cyclical
-        'GOOG': current_price * 0.92,   # Same as GOOGL
-        'AMZN': current_price * 0.85,   # Lower margins, reinvestment
-        'META': current_price * 0.90,   # Platform maturity concerns
-        'NVDA': current_price * 0.80,   # Cyclical semiconductor earnings
-        'NFLX': current_price * 0.88,   # Content costs pressure margins
-        'TSLA': current_price * 0.75,   # Volatile earnings, capital intensive
-        
-        # Banks - steady earnings power
-        'JPM': current_price * 1.10,    # Strong earnings consistency
-        'BAC': current_price * 1.08,    # Large scale advantages
-        'WFC': current_price * 1.05,    # Solid underlying business
-        
-        # Healthcare - defensive earnings
-        'JNJ': current_price * 1.05,    # Diversified, stable earnings
-        'PFE': current_price * 0.95,    # Patent cliff risks
-        'UNH': current_price * 1.08,    # Healthcare services growth
-        
-        # Consumer staples - very stable earnings
-        'KO': current_price * 1.08,     # Brand power, pricing power
-        'PEP': current_price * 1.06,    # Diversified snacks/beverages
-        'WMT': current_price * 1.02,    # Scale advantages, steady margins
-        'MCD': current_price * 1.10,    # Franchise model, asset-light
-        
-        # Industrial - cyclical earnings
-        'BA': current_price * 0.85,     # Cyclical, execution risks
-        'CAT': current_price * 0.90,    # Commodity cycle dependent
-        'GE': current_price * 0.88,     # Turnaround, inconsistent
-        
-        # Energy - commodity earnings
-        'XOM': current_price * 0.95,    # Commodity price dependent
-        'CVX': current_price * 0.98,    # Better through-cycle performance
-        
-        # Utilities - regulated earnings
-        'VZ': current_price * 1.05,     # Regulated utility-like earnings
-        'T': current_price * 1.00,      # High debt impacts earnings quality
-    }
-    
-    return epv_estimates.get(ticker, current_price * 0.95)  # Default 5% discount
-
-def calculate_asset_value(ticker: str, current_price: float) -> float:
-    """
-    Calculate Asset-Based Valuation
-    Based on book value, tangible assets, and liquidation value
-    Most relevant for asset-heavy businesses
-    """
-    # Asset value estimates based on balance sheet strength and asset intensity
-    # Generally more conservative, focuses on tangible value
-    
-    asset_estimates = {
-        # Technology - asset-light businesses
-        'AAPL': current_price * 0.75,   # High cash, but asset-light
-        'MSFT': current_price * 0.70,   # Software, minimal tangible assets
-        'GOOGL': current_price * 0.80,  # Some real estate, mostly intangible
-        'GOOG': current_price * 0.80,   # Same as GOOGL
-        'AMZN': current_price * 0.85,   # Warehouses, infrastructure
-        'META': current_price * 0.65,   # Mostly intangible assets
-        'NVDA': current_price * 0.70,   # Some manufacturing assets
-        'NFLX': current_price * 0.60,   # Content library, limited tangible
-        'TSLA': current_price * 0.90,   # Manufacturing facilities, inventory
-        
-        # Banks - asset values important
-        'JPM': current_price * 1.00,    # Book value relevant for banks
-        'BAC': current_price * 0.98,    # Large loan portfolio
-        'WFC': current_price * 0.95,    # Real estate, loan portfolio
-        
-        # Healthcare - mixed asset base
-        'JNJ': current_price * 0.85,    # Manufacturing, R&D assets
-        'PFE': current_price * 0.80,    # Pharma manufacturing
-        'UNH': current_price * 0.75,    # Service business, limited assets
-        
-        # Consumer staples - manufacturing assets
-        'KO': current_price * 0.90,     # Bottling plants, brand value
-        'PEP': current_price * 0.88,    # Manufacturing, distribution
-        'WMT': current_price * 0.95,    # Real estate, inventory
-        'MCD': current_price * 1.05,    # Real estate portfolio valuable
-        
-        # Industrial - asset-heavy
-        'BA': current_price * 1.10,     # Manufacturing facilities
-        'CAT': current_price * 1.05,    # Heavy machinery, facilities
-        'GE': current_price * 0.95,     # Industrial assets, some impaired
-        
-        # Energy - asset-heavy
-        'XOM': current_price * 1.15,    # Oil reserves, refineries
-        'CVX': current_price * 1.12,    # Integrated oil assets
-        
-        # Utilities - infrastructure assets
-        'VZ': current_price * 1.00,     # Network infrastructure
-        'T': current_price * 0.95,      # Network, but high debt
-    }
-    
-    return asset_estimates.get(ticker, current_price * 0.85)  # Default 15% discount
+    # Without real balance sheet data, we cannot calculate proper asset value
+    # Return None to indicate insufficient data
+    logger.warning(f"Asset valuation for {ticker} requires real balance sheet data - returning None")
+    return None
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
@@ -680,66 +540,14 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     'body': json.dumps({'error': 'Query parameter q is required'})
                 }
             
-            # Comprehensive list of popular tickers for search
-            all_tickers = [
-                # Technology
-                {'ticker': 'AAPL', 'companyName': 'Apple Inc.', 'exchange': 'NASDAQ'},
-                {'ticker': 'MSFT', 'companyName': 'Microsoft Corporation', 'exchange': 'NASDAQ'},
-                {'ticker': 'GOOGL', 'companyName': 'Alphabet Inc. Class A', 'exchange': 'NASDAQ'},
-                {'ticker': 'GOOG', 'companyName': 'Alphabet Inc. Class C', 'exchange': 'NASDAQ'},
-                {'ticker': 'AMZN', 'companyName': 'Amazon.com Inc.', 'exchange': 'NASDAQ'},
-                {'ticker': 'TSLA', 'companyName': 'Tesla Inc.', 'exchange': 'NASDAQ'},
-                {'ticker': 'META', 'companyName': 'Meta Platforms Inc.', 'exchange': 'NASDAQ'},
-                {'ticker': 'NVDA', 'companyName': 'NVIDIA Corporation', 'exchange': 'NASDAQ'},
-                {'ticker': 'NFLX', 'companyName': 'Netflix Inc.', 'exchange': 'NASDAQ'},
-                {'ticker': 'CRM', 'companyName': 'Salesforce Inc.', 'exchange': 'NYSE'},
-                {'ticker': 'ORCL', 'companyName': 'Oracle Corporation', 'exchange': 'NYSE'},
-                {'ticker': 'ADBE', 'companyName': 'Adobe Inc.', 'exchange': 'NASDAQ'},
-                {'ticker': 'INTC', 'companyName': 'Intel Corporation', 'exchange': 'NASDAQ'},
-                {'ticker': 'AMD', 'companyName': 'Advanced Micro Devices Inc.', 'exchange': 'NASDAQ'},
-                {'ticker': 'PYPL', 'companyName': 'PayPal Holdings Inc.', 'exchange': 'NASDAQ'},
-                
-                # Financial
-                {'ticker': 'JPM', 'companyName': 'JPMorgan Chase & Co.', 'exchange': 'NYSE'},
-                {'ticker': 'BAC', 'companyName': 'Bank of America Corporation', 'exchange': 'NYSE'},
-                {'ticker': 'WFC', 'companyName': 'Wells Fargo & Company', 'exchange': 'NYSE'},
-                {'ticker': 'GS', 'companyName': 'The Goldman Sachs Group Inc.', 'exchange': 'NYSE'},
-                {'ticker': 'MS', 'companyName': 'Morgan Stanley', 'exchange': 'NYSE'},
-                {'ticker': 'V', 'companyName': 'Visa Inc.', 'exchange': 'NYSE'},
-                {'ticker': 'MA', 'companyName': 'Mastercard Incorporated', 'exchange': 'NYSE'},
-                {'ticker': 'BRK.B', 'companyName': 'Berkshire Hathaway Inc. Class B', 'exchange': 'NYSE'},
-                
-                # Healthcare
-                {'ticker': 'JNJ', 'companyName': 'Johnson & Johnson', 'exchange': 'NYSE'},
-                {'ticker': 'PFE', 'companyName': 'Pfizer Inc.', 'exchange': 'NYSE'},
-                {'ticker': 'UNH', 'companyName': 'UnitedHealth Group Incorporated', 'exchange': 'NYSE'},
-                {'ticker': 'ABBV', 'companyName': 'AbbVie Inc.', 'exchange': 'NYSE'},
-                {'ticker': 'MRK', 'companyName': 'Merck & Co. Inc.', 'exchange': 'NYSE'},
-                {'ticker': 'TMO', 'companyName': 'Thermo Fisher Scientific Inc.', 'exchange': 'NYSE'},
-                
-                # Consumer
-                {'ticker': 'KO', 'companyName': 'The Coca-Cola Company', 'exchange': 'NYSE'},
-                {'ticker': 'PEP', 'companyName': 'PepsiCo Inc.', 'exchange': 'NASDAQ'},
-                {'ticker': 'WMT', 'companyName': 'Walmart Inc.', 'exchange': 'NYSE'},
-                {'ticker': 'HD', 'companyName': 'The Home Depot Inc.', 'exchange': 'NYSE'},
-                {'ticker': 'MCD', 'companyName': 'McDonald\'s Corporation', 'exchange': 'NYSE'},
-                {'ticker': 'NKE', 'companyName': 'NIKE Inc.', 'exchange': 'NYSE'},
-                {'ticker': 'SBUX', 'companyName': 'Starbucks Corporation', 'exchange': 'NASDAQ'},
-                
-                # Industrial
-                {'ticker': 'BA', 'companyName': 'The Boeing Company', 'exchange': 'NYSE'},
-                {'ticker': 'CAT', 'companyName': 'Caterpillar Inc.', 'exchange': 'NYSE'},
-                {'ticker': 'GE', 'companyName': 'General Electric Company', 'exchange': 'NYSE'},
-                {'ticker': 'MMM', 'companyName': '3M Company', 'exchange': 'NYSE'},
-                
-                # Energy
-                {'ticker': 'XOM', 'companyName': 'Exxon Mobil Corporation', 'exchange': 'NYSE'},
-                {'ticker': 'CVX', 'companyName': 'Chevron Corporation', 'exchange': 'NYSE'},
-                
-                # Telecom
-                {'ticker': 'VZ', 'companyName': 'Verizon Communications Inc.', 'exchange': 'NYSE'},
-                {'ticker': 'T', 'companyName': 'AT&T Inc.', 'exchange': 'NYSE'},
-            ]
+            # Convert ticker database to search format
+            all_tickers = []
+            for ticker, info in TICKER_DATABASE.items():
+                all_tickers.append({
+                    'ticker': ticker,
+                    'companyName': info['companyName'],
+                    'exchange': info['exchange']
+                })
             
             # Filter tickers based on query (case-insensitive)
             query_upper = query.upper()
@@ -762,26 +570,87 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 })
             }
         
-        # Watchlist endpoint - return minimal data without fake prices
+        # Watchlist endpoint - return data from DynamoDB cache with correct company names
         if path == '/api/watchlist':
+            # Get list of tickers from watchlist (for now, use common tickers)
+            # In a real implementation, this would come from a user's actual watchlist
+            watchlist_tickers = ['AAPL', 'KO', 'MSFT', 'GOOGL', 'TSLA']
+            
+            items = []
+            for ticker in watchlist_tickers:
+                # Get company info from ticker database
+                ticker_info = get_company_info(ticker)
+                
+                # Get cached analysis data for each ticker
+                cached_result = get_cached_analysis(ticker)
+                
+                if cached_result:
+                    cached_data = cached_result['data']
+                    
+                    # Parse timestamp for age calculation and staleness check
+                    try:
+                        cached_timestamp = time.mktime(time.strptime(cached_result['timestamp'], '%Y-%m-%dT%H:%M:%SZ'))
+                        age_minutes = int((time.time() - cached_timestamp) / 60)
+                        is_stale = age_minutes > CACHE_DURATION_MINUTES
+                    except:
+                        age_minutes = 999
+                        is_stale = True
+                    
+                    # Only use cached data if it's not stale, otherwise return null values
+                    if not is_stale:
+                        items.append({
+                            'ticker': ticker,
+                            'company_name': ticker_info['companyName'],
+                            'exchange': ticker_info['exchange'],
+                            'added_at': '2024-01-01T00:00:00Z',
+                            'current_price': cached_data.get('currentPrice'),
+                            'fair_value': cached_data.get('fairValue'),
+                            'margin_of_safety_pct': cached_data.get('marginOfSafety'),
+                            'recommendation': cached_data.get('recommendation'),
+                            'cache_info': {
+                                'cached_at': cached_result['cached_at'],
+                                'age_minutes': age_minutes,
+                                'status': 'fresh'
+                            }
+                        })
+                    else:
+                        # Stale cached data - return null values instead of fake data
+                        items.append({
+                            'ticker': ticker,
+                            'company_name': ticker_info['companyName'],
+                            'exchange': ticker_info['exchange'],
+                            'added_at': '2024-01-01T00:00:00Z',
+                            'current_price': None,  # Don't show stale prices
+                            'fair_value': None,     # Don't show stale fake fair values
+                            'margin_of_safety_pct': None,
+                            'recommendation': None,
+                            'cache_info': {
+                                'cached_at': cached_result['cached_at'],
+                                'age_minutes': age_minutes,
+                                'status': 'stale'
+                            },
+                            'note': 'Data is stale - click Refresh Prices to fetch fresh data'
+                        })
+                else:
+                    # No cached data available
+                    items.append({
+                        'ticker': ticker,
+                        'company_name': ticker_info['companyName'],  # Use correct company name from database
+                        'exchange': ticker_info['exchange'],
+                        'added_at': '2024-01-01T00:00:00Z',
+                        'current_price': None,
+                        'fair_value': None,
+                        'margin_of_safety_pct': None,
+                        'recommendation': None,
+                        'note': 'No cached data available - click Refresh Prices to fetch'
+                    })
+            
             return {
                 'statusCode': 200,
                 'headers': headers,
                 'body': json.dumps({
-                    'items': [
-                        {
-                            'ticker': 'AAPL',
-                            'company_name': 'Apple Inc.',
-                            'exchange': 'NASDAQ',
-                            'added_at': '2024-01-01T00:00:00Z',
-                            'current_price': None,  # No fake prices
-                            'fair_value': None,     # No fake values
-                            'margin_of_safety_pct': None,
-                            'recommendation': None,
-                            'note': 'Use /api/watchlist/live-prices for real price data'
-                        }
-                    ],
-                    'total': 1
+                    'items': items,
+                    'total': len(items)
                 })
             }
         
@@ -802,9 +671,10 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     price_data = marketstack.get_latest_price(ticker)
                     
                     if price_data and price_data.get('price'):
+                        ticker_info = get_company_info(ticker)
                         live_prices[ticker] = {
                             'price': float(price_data['price']),
-                            'company_name': f'{ticker} Inc.' if ticker == 'AAPL' else f'{ticker} Corporation',
+                            'company_name': ticker_info['companyName'],
                             'success': True,
                             'timestamp': price_data.get('timestamp'),
                             'volume': price_data.get('volume'),
@@ -815,9 +685,10 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         # Fallback to end-of-day data if intraday fails
                         eod_data = marketstack.get_end_of_day(ticker)
                         if eod_data and eod_data.get('price'):
+                            ticker_info = get_company_info(ticker)
                             live_prices[ticker] = {
                                 'price': float(eod_data['price']),
-                                'company_name': f'{ticker} Inc.' if ticker == 'AAPL' else f'{ticker} Corporation',
+                                'company_name': ticker_info['companyName'],
                                 'success': True,
                                 'timestamp': eod_data.get('timestamp'),
                                 'volume': eod_data.get('volume'),
@@ -827,9 +698,10 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                             logger.info(f"Got EOD price for {ticker}: ${eod_data['price']}")
                         else:
                             # NO FAKE PRICES - return error instead
+                            ticker_info = get_company_info(ticker)
                             live_prices[ticker] = {
                                 'price': None,
-                                'company_name': f'{ticker} Inc.' if ticker == 'AAPL' else f'{ticker} Corporation',
+                                'company_name': ticker_info['companyName'],
                                 'success': False,
                                 'error': 'MarketStack API rate limited or unavailable',
                                 'comment': 'Price data temporarily unavailable - likely rate limited',
@@ -839,9 +711,10 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                             
                 except Exception as e:
                     logger.error(f"Error fetching price for {ticker}: {e}")
+                    ticker_info = get_company_info(ticker)
                     live_prices[ticker] = {
                         'price': None,
-                        'company_name': f'{ticker} Inc.' if ticker == 'AAPL' else f'{ticker} Corporation',
+                        'company_name': ticker_info['companyName'],
                         'success': False,
                         'error': f'Error: {str(e)}',
                         'source': 'None (error)'
@@ -868,26 +741,34 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             # Handle different HTTP methods
             if http_method == 'POST':
                 # Add ticker to watchlist
+                # Extract company_name from query parameters
+                query_params = event.get('queryStringParameters') or {}
+                company_name = query_params.get('company_name', f'{ticker} Corporation')
+                exchange = query_params.get('exchange', 'NASDAQ')
+                
                 return {
                     'statusCode': 200,
                     'headers': headers,
                     'body': json.dumps({
                         'success': True,
                         'message': f'Successfully added {ticker} to watchlist',
-                        'ticker': ticker
+                        'ticker': ticker,
+                        'company_name': company_name,
+                        'exchange': exchange
                     })
                 }
             
             elif http_method == 'GET':
                 # Get individual watchlist item - return minimal data without fake prices
+                ticker_info = get_company_info(ticker)
                 return {
                     'statusCode': 200,
                     'headers': headers,
                     'body': json.dumps({
                         'watchlist_item': {
                             'ticker': ticker,
-                            'company_name': f'{ticker} Inc.' if ticker == 'AAPL' else f'{ticker} Corporation',
-                            'exchange': 'NASDAQ',
+                            'company_name': ticker_info['companyName'],
+                            'exchange': ticker_info['exchange'],
                             'added_at': '2024-01-01T00:00:00Z',
                             'current_price': None,  # No fake prices
                             'fair_value': None,     # No fake values
@@ -896,7 +777,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         },
                         'latest_analysis': {
                             'ticker': ticker,
-                            'companyName': f'{ticker} Inc.' if ticker == 'AAPL' else f'{ticker} Corporation',
+                            'companyName': ticker_info['companyName'],
                             'currentPrice': None,   # No fake prices
                             'fairValue': None,      # No fake values
                             'recommendation': None,
@@ -949,9 +830,48 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     })
                 }
         
-        # Analysis endpoint - Enhanced with real MarketStack data (NO FAKE PRICES)
+        # Analysis endpoint - Enhanced with caching and staleness detection
         if path.startswith('/api/analyze/'):
             ticker = path.split('/')[-1].upper()
+            
+            # Check for force_refresh parameter
+            force_refresh = query_params.get('force_refresh', '').lower() == 'true'
+            
+            # Try to get cached analysis first (unless force refresh)
+            if not force_refresh:
+                cached_result = get_cached_analysis(ticker)
+                if cached_result:
+                    cached_data = cached_result['data']
+                    
+                    # Parse timestamp for staleness check
+                    try:
+                        cached_timestamp = time.mktime(time.strptime(cached_result['timestamp'], '%Y-%m-%dT%H:%M:%SZ'))
+                        is_stale = is_cache_stale(cached_timestamp)
+                        age_minutes = int((time.time() - cached_timestamp) / 60)
+                    except Exception as e:
+                        logger.error(f"Error parsing cached timestamp: {e}")
+                        is_stale = True
+                        age_minutes = 999
+                    
+                    # Add cache metadata to response
+                    cached_data['cacheInfo'] = {
+                        'cached': True,
+                        'cached_at': cached_result['cached_at'],
+                        'is_stale': is_stale,
+                        'age_minutes': age_minutes,
+                        'stale_threshold_minutes': CACHE_DURATION_MINUTES
+                    }
+                    
+                    logger.info(f"Returning cached analysis for {ticker} from DynamoDB (age: {cached_data['cacheInfo']['age_minutes']} min, stale: {is_stale})")
+                    
+                    return {
+                        'statusCode': 200,
+                        'headers': headers,
+                        'body': json.dumps(cached_data)
+                    }
+            
+            # No cache or force refresh - fetch fresh data
+            logger.info(f"Fetching fresh analysis for {ticker} (force_refresh: {force_refresh})")
             
             # Initialize MarketStack client
             marketstack = MarketStackClient()
@@ -988,137 +908,160 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 epv_value = calculate_epv_value(ticker, current_price)
                 asset_value = calculate_asset_value(ticker, current_price)
                 
-                # Calculate the three valuation methods
-                dcf_value = calculate_dcf_value(ticker, current_price)
-                epv_value = calculate_epv_value(ticker, current_price)
-                asset_value = calculate_asset_value(ticker, current_price)
+                # Calculate weighted average only if we have valid values
+                valid_values = []
+                valid_weights = []
                 
-                # Apply business-type-specific weights to get weighted average
-                fair_value = (dcf_value * dcf_weight) + (epv_value * epv_weight) + (asset_value * asset_weight)
+                if dcf_value is not None and dcf_value > 0:
+                    valid_values.append(dcf_value)
+                    valid_weights.append(dcf_weight)
+                
+                if epv_value is not None and epv_value > 0:
+                    valid_values.append(epv_value)
+                    valid_weights.append(epv_weight)
+                
+                if asset_value is not None and asset_value > 0:
+                    valid_values.append(asset_value)
+                    valid_weights.append(asset_weight)
+                
+                # Calculate fair value only if we have at least one valid valuation method
+                if valid_values:
+                    # Normalize weights for valid values only
+                    total_weight = sum(valid_weights)
+                    if total_weight > 0:
+                        normalized_weights = [w / total_weight for w in valid_weights]
+                        fair_value = sum(v * w for v, w in zip(valid_values, normalized_weights))
+                    else:
+                        fair_value = None
+                else:
+                    # No valid valuation methods available
+                    fair_value = None
                 
                 # Store individual estimates for transparency
                 dcf_estimate = dcf_value
                 epv_estimate = epv_value
                 asset_estimate = asset_value
                 
+                # Create analysis response
+                ticker_info = get_company_info(ticker)
+                analysis_data = {
+                    'ticker': ticker,
+                    'companyName': ticker_info['companyName'],
+                    'exchange': ticker_info['exchange'],
+                    'currentPrice': current_price,
+                    'fairValue': fair_value,
+                    'marginOfSafety': ((fair_value - current_price) / current_price * 100) if fair_value and current_price > 0 else None,
+                    'upsidePotential': ((fair_value - current_price) / current_price * 100) if fair_value and current_price > 0 else None,
+                    'priceToIntrinsicValue': (current_price / fair_value) if fair_value and fair_value > 0 else None,
+                    'recommendation': 'Buy' if fair_value and fair_value > current_price * 1.3 else 'Hold' if fair_value and fair_value > current_price else 'Hold' if not fair_value else 'Sell',
+                    'recommendationReasoning': f'Analysis based on real market data from {price_source}. {"Fair value calculated using " + business_type + " business type weighting: DCF " + str(int(dcf_weight*100)) + "% | EPV " + str(int(epv_weight*100)) + "% | Asset " + str(int(asset_weight*100)) + "%." if fair_value else "Fair value could not be calculated due to insufficient financial statement data. Recommendation based on current price only."}',
+                    'valuation': {
+                        'dcf': dcf_estimate,
+                        'earningsPower': epv_estimate,
+                        'assetBased': asset_estimate,
+                        'weightedAverage': fair_value
+                    },
+                    'financialHealth': {
+                        'score': None,
+                        'metrics': {}
+                    },
+                    'businessQuality': {
+                        'score': None,
+                        'moatIndicators': [],
+                        'competitivePosition': None
+                    },
+                    'growthMetrics': {
+                        'revenueGrowth1Y': None,
+                        'revenueGrowth3Y': None,
+                        'revenueGrowth5Y': None,
+                        'earningsGrowth1Y': None,
+                        'earningsGrowth3Y': None,
+                        'earningsGrowth5Y': None
+                    },
+                    'priceRatios': {
+                        'priceToEarnings': None,
+                        'priceToBook': None,
+                        'priceToSales': None,
+                        'priceToFCF': None,
+                        'enterpriseValueToEBITDA': None
+                    },
+                    'currency': 'USD',
+                    'financialCurrency': 'USD',
+                    'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+                    'sector': None,  # Should come from real financial data
+                    'industry': None,  # Should come from real financial data
+                    'marketCap': None,  # Should be calculated from real shares outstanding data
+                    'analysisWeights': {
+                        'dcf_weight': dcf_weight,
+                        'epv_weight': epv_weight,
+                        'asset_weight': asset_weight
+                    },
+                    'businessType': business_type,
+                    'missingData': {
+                        'has_missing_data': True,  # We don't have real financial statement data
+                        'missing_fields': ['financial_statements', 'income_statement', 'balance_sheet', 'cash_flow', 'key_metrics']
+                    },
+                    'dataSource': {
+                        'price_source': price_source,
+                        'has_real_price': True,
+                        'api_available': bool(marketstack.api_key)
+                    },
+                    'cacheInfo': {
+                        'cached': False,
+                        'fresh_data': True,
+                        'fetched_at': time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())
+                    }
+                }
+                
+                # Cache the analysis data
+                cache_analysis(ticker, analysis_data)
+                
                 return {
                     'statusCode': 200,
                     'headers': headers,
-                    'body': json.dumps({
-                        'ticker': ticker,
-                        'companyName': f'{ticker} Inc.' if ticker == 'AAPL' else f'{ticker} Corporation',
-                        'currentPrice': current_price,
-                        'fairValue': fair_value,
-                        'marginOfSafety': ((fair_value - current_price) / current_price * 100) if current_price > 0 else 0,
-                        'upsidePotential': ((fair_value - current_price) / current_price * 100) if current_price > 0 else 0,
-                        'priceToIntrinsicValue': (current_price / fair_value) if fair_value > 0 else 1.0,
-                        'recommendation': 'Buy' if fair_value > current_price * 1.3 else 'Hold' if fair_value > current_price else 'Sell',
-                        'recommendationReasoning': f'Analysis based on real market data from {price_source}. Fair value calculated using {business_type} business type weighting: DCF {dcf_weight*100:.0f}% | EPV {epv_weight*100:.0f}% | Asset {asset_weight*100:.0f}%.',
-                        'valuation': {
-                            'dcf': dcf_estimate,
-                            'earningsPower': epv_estimate,
-                            'assetBased': asset_estimate,
-                            'weightedAverage': fair_value
-                        },
-                        'financialHealth': {
-                            'score': 85,
-                            'metrics': {
-                                'debtToEquity': 1.73,
-                                'currentRatio': 1.2,
-                                'quickRatio': 1.0,
-                                'interestCoverage': 15.5,
-                                'roe': 0.26,
-                                'roic': 0.29,
-                                'roa': 0.15,
-                                'fcfMargin': 0.22
-                            }
-                        },
-                        'businessQuality': {
-                            'score': 90,
-                            'moatIndicators': ['Brand Power', 'Network Effects', 'Switching Costs'],
-                            'competitivePosition': 'Strong market leader with sustainable competitive advantages'
-                        },
-                        'growthMetrics': {
-                            'revenueGrowth1Y': 0.08,
-                            'revenueGrowth3Y': 0.12,
-                            'revenueGrowth5Y': 0.15,
-                            'earningsGrowth1Y': 0.12,
-                            'earningsGrowth3Y': 0.18,
-                            'earningsGrowth5Y': 0.20
-                        },
-                        'priceRatios': {
-                            'priceToEarnings': 25.5,
-                            'priceToBook': 8.2,
-                            'priceToSales': 6.8,
-                            'priceToFCF': 22.1,
-                            'enterpriseValueToEBITDA': 18.5
-                        },
-                        'currency': 'USD',
-                        'financialCurrency': 'USD',
-                        'timestamp': '2024-01-10T00:00:00Z',
-                        'sector': 'Technology',
-                        'industry': 'Consumer Electronics',
-                        'marketCap': current_price * 15800000000 if current_price else None,
-                        'analysisWeights': {
-                            'dcf_weight': dcf_weight,
-                            'epv_weight': epv_weight,
-                            'asset_weight': asset_weight
-                        },
-                        'businessType': business_type,
-                        'missingData': {
-                            'has_missing_data': False,
-                            'missing_fields': []
-                        },
-                        'dataSource': {
-                            'price_source': price_source,
-                            'has_real_price': True,
-                            'api_available': bool(marketstack.api_key),
-                            'valuation_method': f'{business_type} preset: DCF {dcf_weight*100:.0f}% | EPV {epv_weight*100:.0f}% | Asset {asset_weight*100:.0f}%'
-                        }
-                    })
-                }Indicators': ['Brand strength', 'Network effects', 'Switching costs'],
-                            'competitivePosition': 'Strong market leader with sustainable competitive advantages'
-                        },
-                        'growthMetrics': {
-                            'revenueGrowth1Y': 0.08,
-                            'revenueGrowth3Y': 0.12,
-                            'revenueGrowth5Y': 0.15,
-                            'earningsGrowth1Y': 0.12,
-                            'earningsGrowth3Y': 0.18,
-                            'earningsGrowth5Y': 0.20
-                        },
-                        'priceRatios': {
-                            'priceToEarnings': 25.5,
-                            'priceToBook': 8.2,
-                            'priceToSales': 6.8,
-                            'priceToFCF': 22.1,
-                            'enterpriseValueToEBITDA': 18.5
-                        },
-                        'currency': 'USD',
-                        'financialCurrency': 'USD',
-                        'timestamp': '2024-01-10T00:00:00Z',
-                        'sector': 'Technology',
-                        'industry': 'Consumer Electronics',
-                        'marketCap': current_price * 15800000000 if current_price else None,
-                        'analysisWeights': {
-                            'dcf_weight': dcf_weight,
-                            'epv_weight': epv_weight,
-                            'asset_weight': asset_weight
-                        },
-                        'businessType': business_type,
-                        'missingData': {
-                            'has_missing_data': False,
-                            'missing_fields': []
-                        },
-                        'dataSource': {
-                            'price_source': price_source,
-                            'has_real_price': True,
-                            'api_available': bool(marketstack.api_key)
-                        }
-                    })
+                    'body': json.dumps(analysis_data)
                 }
             else:
-                # No real price available - return error with better messaging (NO FAKE PRICES)
+                # No real price available - check if we have cached data to fall back to
+                cached_result = get_cached_analysis(ticker)
+                if cached_result:
+                    cached_data = cached_result['data']
+                    
+                    # Parse timestamp for staleness check
+                    try:
+                        cached_timestamp = time.mktime(time.strptime(cached_result['timestamp'], '%Y-%m-%dT%H:%M:%SZ'))
+                        is_stale = is_cache_stale(cached_timestamp)
+                        age_minutes = int((time.time() - cached_timestamp) / 60)
+                    except Exception as e:
+                        logger.error(f"Error parsing cached timestamp: {e}")
+                        is_stale = True
+                        age_minutes = 999
+                    
+                    # Add cache metadata to response indicating we're using stale data due to API issues
+                    cached_data['cacheInfo'] = {
+                        'cached': True,
+                        'cached_at': cached_result['cached_at'],
+                        'is_stale': is_stale,
+                        'age_minutes': age_minutes,
+                        'stale_threshold_minutes': CACHE_DURATION_MINUTES,
+                        'fallback_reason': 'Fresh price data unavailable due to API rate limits'
+                    }
+                    
+                    # Update data source to indicate we're using cached data
+                    if 'dataSource' in cached_data:
+                        cached_data['dataSource']['fallback_to_cache'] = True
+                        cached_data['dataSource']['api_error'] = marketstack.last_error.get('message') if marketstack.last_error else 'MarketStack API rate limited'
+                    
+                    logger.info(f"Returning cached analysis for {ticker} as fallback from DynamoDB (age: {cached_data['cacheInfo']['age_minutes']} min)")
+                    
+                    return {
+                        'statusCode': 200,
+                        'headers': headers,
+                        'body': json.dumps(cached_data)
+                    }
+                
+                # No cached data available either - return error with better messaging (NO FAKE PRICES)
+                ticker_info = get_company_info(ticker)
                 error_message = f'Unable to fetch current price for {ticker}.'
                 suggestions = []
                 rate_limit_info = {}
@@ -1173,7 +1116,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         'error': 'Price data temporarily unavailable',
                         'message': error_message,
                         'ticker': ticker,
-                        'companyName': f'{ticker} Inc.' if ticker == 'AAPL' else f'{ticker} Corporation',
+                        'companyName': ticker_info['companyName'],
                         'currentPrice': None,
                         'fairValue': None,
                         'recommendation': None,

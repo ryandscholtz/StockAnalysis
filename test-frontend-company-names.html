@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Frontend Company Names</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { color: green; }
+        .error { color: red; }
+        .info { color: blue; }
+        pre { background: #f5f5f5; padding: 10px; border-radius: 3px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Frontend Company Names Test</h1>
+    
+    <div class="test-section">
+        <h2>📊 Watchlist API Test</h2>
+        <button onclick="testWatchlistAPI()">Test Watchlist API</button>
+        <div id="watchlist-results"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>🔍 Search API Test</h2>
+        <input type="text" id="search-query" placeholder="Enter search query (e.g., amazon)" value="amazon">
+        <button onclick="testSearchAPI()">Test Search API</button>
+        <div id="search-results"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>🔄 Add to Watchlist Test</h2>
+        <input type="text" id="add-ticker" placeholder="Ticker (e.g., AMZN)" value="AMZN">
+        <input type="text" id="add-company" placeholder="Company Name" value="Amazon.com Inc.">
+        <button onclick="testAddToWatchlist()">Add to Watchlist</button>
+        <div id="add-results"></div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'https://dx0w31lbc1.execute-api.eu-west-1.amazonaws.com/production';
+        
+        async function testWatchlistAPI() {
+            const resultsDiv = document.getElementById('watchlist-results');
+            resultsDiv.innerHTML = '<p class="info">🔄 Testing watchlist API...</p>';
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/watchlist`);
+                const data = await response.json();
+                
+                let html = `<h3>✅ Watchlist API Response</h3>`;
+                html += `<p><strong>Total items:</strong> ${data.total || 0}</p>`;
+                
+                if (data.items && data.items.length > 0) {
+                    html += `<h4>🏢 Company Names:</h4><ul>`;
+                    data.items.forEach(item => {
+                        const isCorrect = item.company_name && 
+                                        !item.company_name.includes('Corporation') && 
+                                        item.company_name !== `${item.ticker} Corporation`;
+                        const status = isCorrect ? '✅' : '❌';
+                        html += `<li>${item.ticker}: "${item.company_name}" ${status}</li>`;
+                        
+                        // Special checks
+                        if (item.ticker === 'KO') {
+                            const isKOCorrect = item.company_name === 'The Coca-Cola Company';
+                            html += `<li style="margin-left: 20px;">🥤 KO Check: ${isKOCorrect ? '✅ Correct!' : '❌ Still wrong!'}</li>`;
+                        }
+                        if (item.ticker === 'AMZN') {
+                            const isAMZNCorrect = item.company_name === 'Amazon.com Inc.';
+                            html += `<li style="margin-left: 20px;">📦 AMZN Check: ${isAMZNCorrect ? '✅ Correct!' : '❌ Still wrong!'}</li>`;
+                        }
+                    });
+                    html += `</ul>`;
+                } else {
+                    html += `<p class="error">❌ No items found</p>`;
+                }
+                
+                html += `<h4>📋 Raw Response:</h4><pre>${JSON.stringify(data, null, 2)}</pre>`;
+                resultsDiv.innerHTML = html;
+                
+            } catch (error) {
+                resultsDiv.innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+            }
+        }
+        
+        async function testSearchAPI() {
+            const query = document.getElementById('search-query').value;
+            const resultsDiv = document.getElementById('search-results');
+            resultsDiv.innerHTML = '<p class="info">🔄 Testing search API...</p>';
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/search?q=${encodeURIComponent(query)}`);
+                const data = await response.json();
+                
+                let html = `<h3>✅ Search API Response</h3>`;
+                html += `<p><strong>Query:</strong> "${query}"</p>`;
+                html += `<p><strong>Total results:</strong> ${data.results?.length || 0}</p>`;
+                
+                if (data.results && data.results.length > 0) {
+                    html += `<h4>🏢 Search Results:</h4><ul>`;
+                    data.results.forEach(item => {
+                        const isCorrect = item.companyName && 
+                                        !item.companyName.includes('Corporation') && 
+                                        item.companyName !== `${item.ticker} Corporation`;
+                        const status = isCorrect ? '✅' : '❌';
+                        html += `<li>${item.ticker}: "${item.companyName}" ${status}</li>`;
+                    });
+                    html += `</ul>`;
+                } else {
+                    html += `<p class="error">❌ No results found</p>`;
+                }
+                
+                html += `<h4>📋 Raw Response:</h4><pre>${JSON.stringify(data, null, 2)}</pre>`;
+                resultsDiv.innerHTML = html;
+                
+            } catch (error) {
+                resultsDiv.innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+            }
+        }
+        
+        async function testAddToWatchlist() {
+            const ticker = document.getElementById('add-ticker').value;
+            const companyName = document.getElementById('add-company').value;
+            const resultsDiv = document.getElementById('add-results');
+            resultsDiv.innerHTML = '<p class="info">🔄 Testing add to watchlist...</p>';
+            
+            try {
+                const params = new URLSearchParams();
+                if (companyName) params.append('company_name', companyName);
+                params.append('exchange', 'NASDAQ');
+                
+                const response = await fetch(`${API_BASE_URL}/api/watchlist/${ticker}?${params.toString()}`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                let html = `<h3>✅ Add to Watchlist Response</h3>`;
+                html += `<p><strong>Ticker:</strong> ${ticker}</p>`;
+                html += `<p><strong>Company Name:</strong> ${companyName}</p>`;
+                html += `<p><strong>Success:</strong> ${data.success ? '✅' : '❌'}</p>`;
+                html += `<p><strong>Message:</strong> ${data.message}</p>`;
+                
+                html += `<h4>📋 Raw Response:</h4><pre>${JSON.stringify(data, null, 2)}</pre>`;
+                resultsDiv.innerHTML = html;
+                
+            } catch (error) {
+                resultsDiv.innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+            }
+        }
+        
+        // Auto-run watchlist test on page load
+        window.onload = function() {
+            testWatchlistAPI();
+        };
+    </script>
+</body>
+</html>

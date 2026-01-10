@@ -17,6 +17,8 @@ import PDFUpload from '@/components/PDFUpload'
 import DataQualityWarnings from '@/components/DataQualityWarnings'
 import ExtractedDataViewer from '@/components/ExtractedDataViewer'
 import AnalysisWeightsConfig from '@/components/AnalysisWeightsConfig'
+import FinancialDataDisplay from '@/components/FinancialDataDisplay'
+import ManualDataEntry from '@/components/ManualDataEntry'
 import { AnalysisWeights } from '@/types/analysis'
 
 export default function WatchlistDetailPage() {
@@ -36,10 +38,18 @@ export default function WatchlistDetailPage() {
   const [analysisWeights, setAnalysisWeights] = useState<AnalysisWeights | null>(null)
   const [businessType, setBusinessType] = useState<string | null>(null)
   const [showWeightsConfig, setShowWeightsConfig] = useState(false)
+  const [financialData, setFinancialData] = useState<any>({
+    ticker: '',
+    financial_data: {},
+    has_data: false
+  })
+  const [showManualEntry, setShowManualEntry] = useState(false)
+  const [showPDFUpload, setShowPDFUpload] = useState(false)
 
   useEffect(() => {
     if (ticker) {
       loadWatchlistData()
+      loadFinancialData()
     }
   }, [ticker])
 
@@ -64,6 +74,27 @@ export default function WatchlistDetailPage() {
     }
     
     return normalized.toUpperCase()
+  }
+
+  const loadFinancialData = async () => {
+    console.log('🔄 loadFinancialData called for ticker:', ticker);
+    try {
+      const normalizedTicker = normalizeTicker(ticker)
+      console.log('📡 Attempting to load financial data for:', normalizedTicker);
+      const result = await stockApi.getFinancialData(normalizedTicker)
+      console.log('✅ Financial data loaded successfully:', result);
+      setFinancialData(result)
+    } catch (err: any) {
+      // Silently fail - financial data is optional for display
+      console.debug('Could not load financial data:', err)
+      console.log('🔄 Setting fallback financial data structure');
+      // Set empty financial data so components still render
+      setFinancialData({ 
+        ticker: normalizeTicker(ticker), 
+        financial_data: {}, 
+        has_data: false 
+      })
+    }
   }
 
   const loadWatchlistData = async (forceRefresh: boolean = false) => {
@@ -564,6 +595,144 @@ export default function WatchlistDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Add Financial Data Section */}
+      <div style={{ 
+        marginBottom: '24px', 
+        border: '1px solid #e5e7eb', 
+        borderRadius: '8px', 
+        padding: '24px',
+        backgroundColor: 'white',
+        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+      }}>
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'flex-start',
+          marginBottom: '16px'
+        }}>
+          <div>
+            <h2 style={{ 
+              margin: '0 0 8px 0', 
+              fontSize: '20px', 
+              color: '#111827',
+              fontWeight: '600'
+            }}>
+              📊 Add Financial Data
+            </h2>
+            <p style={{ 
+              margin: '0', 
+              fontSize: '14px', 
+              color: '#6b7280' 
+            }}>
+              Add financial statement data to enable fair value calculations
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <button
+              onClick={() => setShowManualEntry(!showManualEntry)}
+              style={{
+                padding: '10px 20px',
+                backgroundColor: showManualEntry ? '#dc2626' : '#2563eb',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                fontSize: '14px',
+                fontWeight: '500',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}
+            >
+              {showManualEntry ? '✕ Close' : '✏️ Add data manually'}
+            </button>
+            <button
+              onClick={() => setShowPDFUpload(!showPDFUpload)}
+              style={{
+                padding: '10px 20px',
+                backgroundColor: showPDFUpload ? '#dc2626' : '#059669',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                fontSize: '14px',
+                fontWeight: '500',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}
+            >
+              {showPDFUpload ? '✕ Close' : '📄 Upload financial statements'}
+            </button>
+          </div>
+        </div>
+
+        {/* Manual Data Entry */}
+        {showManualEntry && (
+          <div style={{ 
+            padding: '20px', 
+            backgroundColor: '#f9fafb', 
+            borderRadius: '8px',
+            border: '1px solid #e5e7eb',
+            marginBottom: '16px'
+          }}>
+            <ManualDataEntry 
+              ticker={ticker}
+              onDataAdded={() => {
+                loadFinancialData()
+                loadAnalysis(true) // Refresh analysis when data is added
+                setShowManualEntry(false) // Close after adding data
+              }}
+            />
+          </div>
+        )}
+
+        {/* PDF Upload */}
+        {showPDFUpload && (
+          <div style={{ 
+            padding: '20px', 
+            backgroundColor: '#f9fafb', 
+            borderRadius: '8px',
+            border: '1px solid #e5e7eb',
+            marginBottom: '16px'
+          }}>
+            <PDFUpload
+              ticker={ticker}
+              onDataExtracted={() => {
+                loadAnalysis()
+                loadWatchlistData()
+                setShowPDFUpload(false) // Close after uploading
+              }}
+            />
+          </div>
+        )}
+
+        {/* Financial Data Display - Always Visible */}
+        <div style={{ 
+          padding: '20px', 
+          backgroundColor: '#f9fafb', 
+          borderRadius: '8px',
+          border: '1px solid #e5e7eb'
+        }}>
+          <h3 style={{ 
+            margin: '0 0 16px 0', 
+            fontSize: '16px', 
+            color: '#374151',
+            fontWeight: '600'
+          }}>
+            Current Financial Data
+          </h3>
+          <FinancialDataDisplay 
+            ticker={ticker}
+            financialData={financialData?.financial_data}
+            onDataUpdate={() => {
+              loadFinancialData()
+              loadAnalysis(true) // Refresh analysis when data is updated
+            }}
+          />
+        </div>
+      </div>
 
       {/* Notes Section */}
       <div style={{

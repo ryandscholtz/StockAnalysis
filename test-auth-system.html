@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Authentication System Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 20px;
+            background-color: #f9fafb;
+        }
+        .test-card {
+            background: white;
+            border-radius: 8px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+        .success {
+            background-color: #f0fdf4;
+            border: 2px solid #10b981;
+            color: #065f46;
+        }
+        .info {
+            background-color: #eff6ff;
+            border: 2px solid #2563eb;
+            color: #1e40af;
+        }
+        .warning {
+            background-color: #fef3c7;
+            border: 2px solid #f59e0b;
+            color: #92400e;
+        }
+        .credentials {
+            background-color: #f3f4f6;
+            padding: 16px;
+            border-radius: 6px;
+            margin: 16px 0;
+            font-family: monospace;
+        }
+        .step {
+            margin: 16px 0;
+            padding: 12px;
+            background-color: #f8fafc;
+            border-left: 4px solid #2563eb;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-card success">
+        <h1>🔐 Authentication System Test</h1>
+        <p><strong>Status:</strong> Mock Authentication System Ready ✅</p>
+        <p><strong>Frontend:</strong> Updated with mock auth service ✅</p>
+        <p><strong>Test User Created:</strong> ryandscholtz@gmail.com ✅</p>
+    </div>
+
+    <div class="test-card info">
+        <h2>🧪 Test Instructions</h2>
+        <p>The authentication system is now ready for testing with a mock implementation that simulates AWS Cognito.</p>
+        
+        <div class="step">
+            <h3>1. 🚀 Start the Frontend Server</h3>
+            <p>Make sure your Next.js development server is running:</p>
+            <div class="credentials">
+cd frontend<br>
+npm run dev
+            </div>
+        </div>
+
+        <div class="step">
+            <h3>2. 🔍 Test Authentication Flow</h3>
+            <p>Visit the authentication pages to test the system:</p>
+            <ul>
+                <li><a href="http://localhost:3000/auth/signin" target="_blank">Sign In Page</a></li>
+                <li><a href="http://localhost:3000/auth/signup" target="_blank">Sign Up Page</a></li>
+                <li><a href="http://localhost:3000/watchlist" target="_blank">Protected Watchlist Page</a></li>
+            </ul>
+        </div>
+
+        <div class="step">
+            <h3>3. 👤 Test User Credentials</h3>
+            <p>Use these pre-configured test accounts:</p>
+            
+            <div class="credentials">
+<strong>Ryan Scholtz (Premium User):</strong><br>
+Username: ryandscholtz<br>
+Email: ryandscholtz@gmail.com<br>
+Password: TestPass123<br>
+Subscription: Premium
+            </div>
+
+            <div class="credentials">
+<strong>Test User (Free User):</strong><br>
+Username: testuser<br>
+Email: test@example.com<br>
+Password: TestPass123<br>
+Subscription: Free
+            </div>
+        </div>
+
+        <div class="step">
+            <h3>4. ✅ Expected Behavior</h3>
+            <ul>
+                <li><strong>Navigation:</strong> Should show Sign In/Sign Up buttons when not authenticated</li>
+                <li><strong>Sign In:</strong> Should work with the test credentials above</li>
+                <li><strong>User Menu:</strong> Should appear after sign in with user info and sign out option</li>
+                <li><strong>Protected Routes:</strong> Watchlist should require authentication</li>
+                <li><strong>API Calls:</strong> Should include Bearer token in headers when authenticated</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="test-card warning">
+        <h2>🔧 Development vs Production</h2>
+        <p><strong>Current Setup:</strong> Using mock authentication for development</p>
+        
+        <div style="margin: 16px 0;">
+            <h3>Mock Authentication Features:</h3>
+            <ul>
+                <li>✅ Pre-configured test users</li>
+                <li>✅ Simulated sign in/sign up flows</li>
+                <li>✅ Local storage session management</li>
+                <li>✅ Mock JWT tokens for API calls</li>
+                <li>✅ User profile information</li>
+            </ul>
+        </div>
+
+        <div style="margin: 16px 0;">
+            <h3>For Production Deployment:</h3>
+            <ol>
+                <li>Deploy the updated CDK infrastructure with Cognito</li>
+                <li>Update frontend/.env.local with real Cognito IDs</li>
+                <li>Switch from auth-mock.ts to auth.ts in imports</li>
+                <li>Deploy the updated Lambda with authentication</li>
+            </ol>
+        </div>
+    </div>
+
+    <div class="test-card">
+        <h2>🧪 Test Scenarios</h2>
+        
+        <div class="step">
+            <h3>Scenario 1: Guest User Experience</h3>
+            <ol>
+                <li>Visit the home page without signing in</li>
+                <li>Try to access the watchlist - should show authentication required</li>
+                <li>Stock analysis should still work (public feature)</li>
+            </ol>
+        </div>
+
+        <div class="step">
+            <h3>Scenario 2: User Registration</h3>
+            <ol>
+                <li>Go to Sign Up page</li>
+                <li>Fill out the registration form</li>
+                <li>Should show success message (mock implementation)</li>
+            </ol>
+        </div>
+
+        <div class="step">
+            <h3>Scenario 3: User Sign In</h3>
+            <ol>
+                <li>Go to Sign In page</li>
+                <li>Use ryandscholtz@gmail.com / TestPass123</li>
+                <li>Should redirect to home page with user menu visible</li>
+                <li>Watchlist should now be accessible</li>
+            </ol>
+        </div>
+
+        <div class="step">
+            <h3>Scenario 4: User Session</h3>
+            <ol>
+                <li>Sign in and refresh the page</li>
+                <li>Should remain signed in (localStorage persistence)</li>
+                <li>User menu should show correct user information</li>
+                <li>Sign out should clear session and redirect</li>
+            </ol>
+        </div>
+    </div>
+
+    <script>
+        console.log('🔐 Authentication System Test Page Loaded');
+        console.log('📍 Test the authentication system at http://localhost:3000');
+        
+        // Auto-open the sign in page after 3 seconds
+        setTimeout(() => {
+            console.log('🚀 Opening sign in page...');
+            window.open('http://localhost:3000/auth/signin', '_blank');
+        }, 3000);
+    </script>
+</body>
+</html>

@@ -25,6 +25,19 @@
     <p>Testing the frontend integration with the updated Lambda handler that implements proper DCF/EPV/Asset valuation.</p>
 
     <div class="test-section info">
+        <h3>⚠️ Important: Running This Test</h3>
+        <p><strong>If you're opening this file directly (file://), browsers may block CORS requests.</strong></p>
+        <p>To fix this, serve the file from a local web server:</p>
+        <pre># Using Python:
+python -m http.server 8000
+
+# Using Node.js:
+npx serve .
+
+# Then open: http://localhost:8000/test-frontend-with-proper-analysis.html</pre>
+    </div>
+
+    <div class="test-section info">
         <h3>Test Controls</h3>
         <button onclick="testWatchlistRefresh()">Test Watchlist Refresh</button>
         <button onclick="testIndividualAnalysis()">Test Individual Analysis</button>
@@ -63,13 +76,37 @@
                 console.log('Testing watchlist refresh...');
                 
                 // First get the watchlist
-                const watchlistResponse = await fetch(`${API_BASE_URL}/api/watchlist`);
+                const watchlistResponse = await fetch(`${API_BASE_URL}/api/watchlist`, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (!watchlistResponse.ok) {
+                    const errorText = await watchlistResponse.text();
+                    throw new Error(`HTTP ${watchlistResponse.status}: ${errorText}`);
+                }
+                
                 const watchlistData = await watchlistResponse.json();
                 
                 console.log('Watchlist data:', watchlistData);
                 
                 // Then get live prices
-                const pricesResponse = await fetch(`${API_BASE_URL}/api/watchlist/live-prices`);
+                const pricesResponse = await fetch(`${API_BASE_URL}/api/watchlist/live-prices`, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (!pricesResponse.ok) {
+                    const errorText = await pricesResponse.text();
+                    throw new Error(`HTTP ${pricesResponse.status}: ${errorText}`);
+                }
+                
                 const pricesData = await pricesResponse.json();
                 
                 console.log('Live prices data:', pricesData);
@@ -93,11 +130,20 @@
                         
                         // Get analysis for this ticker to get fair value
                         try {
-                            const analysisResponse = await fetch(`${API_BASE_URL}/api/analyze/${ticker}`);
+                            const analysisResponse = await fetch(`${API_BASE_URL}/api/analyze/${ticker}`, {
+                                method: 'GET',
+                                headers: {
+                                    'Accept': 'application/json',
+                                    'Content-Type': 'application/json'
+                                }
+                            });
                             let analysisData = null;
                             
                             if (analysisResponse.ok) {
                                 analysisData = await analysisResponse.json();
+                            } else {
+                                const errorText = await analysisResponse.text();
+                                throw new Error(`HTTP ${analysisResponse.status}: ${errorText}`);
                             }
                             
                             const currentPrice = livePrice?.price || analysisData?.currentPrice;
@@ -147,9 +193,24 @@
                 
                 const section = document.createElement('div');
                 section.className = 'test-section error';
+                let errorMessage = error.message;
+                
+                // Provide more helpful error messages
+                if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+                    errorMessage = `Network Error: Cannot connect to API. This could be due to:
+                        <ul>
+                            <li>CORS configuration issue (check browser console for CORS errors)</li>
+                            <li>API endpoint is down or unreachable</li>
+                            <li>Network connectivity issue</li>
+                        </ul>
+                        <p><strong>API Endpoint:</strong> ${API_BASE_URL}</p>
+                        <p><strong>Tip:</strong> Open browser developer tools (F12) and check the Console and Network tabs for more details.</p>`;
+                }
+                
                 section.innerHTML = `
                     <h3>❌ Watchlist Refresh Test Failed</h3>
-                    <p><strong>Error:</strong> ${error.message}</p>
+                    <p><strong>Error:</strong> ${errorMessage}</p>
+                    <p><strong>Full Error:</strong> <pre>${JSON.stringify(error, null, 2)}</pre></p>
                 `;
                 resultsDiv.appendChild(section);
             }
@@ -161,7 +222,19 @@
             try {
                 console.log('Testing individual analysis for KO...');
                 
-                const response = await fetch(`${API_BASE_URL}/api/analyze/KO`);
+                const response = await fetch(`${API_BASE_URL}/api/analyze/KO`, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                }
+                
                 const data = await response.json();
                 
                 console.log('KO analysis data:', data);
@@ -200,9 +273,16 @@
                 
                 const section = document.createElement('div');
                 section.className = 'test-section error';
+                let errorMessage = error.message;
+                
+                if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+                    errorMessage = `Network Error: Cannot connect to API. Check browser console for CORS errors.`;
+                }
+                
                 section.innerHTML = `
                     <h3>❌ Individual Analysis Test Failed</h3>
-                    <p><strong>Error:</strong> ${error.message}</p>
+                    <p><strong>Error:</strong> ${errorMessage}</p>
+                    <p><strong>Full Error:</strong> <pre>${JSON.stringify(error, null, 2)}</pre></p>
                 `;
                 resultsDiv.appendChild(section);
             }
@@ -221,7 +301,19 @@
                 
                 for (const ticker of tickers) {
                     try {
-                        const response = await fetch(`${API_BASE_URL}/api/analyze/${ticker}`);
+                        const response = await fetch(`${API_BASE_URL}/api/analyze/${ticker}`, {
+                            method: 'GET',
+                            headers: {
+                                'Accept': 'application/json',
+                                'Content-Type': 'application/json'
+                            }
+                        });
+                        
+                        if (!response.ok) {
+                            const errorText = await response.text();
+                            throw new Error(`HTTP ${response.status}: ${errorText}`);
+                        }
+                        
                         const data = await response.json();
                         
                         const valuationStatus = formatValuationStatus(data.currentPrice, data.fairValue);
@@ -240,11 +332,17 @@
                     } catch (error) {
                         console.error(`Error analyzing ${ticker}:`, error);
                         
+                        let errorMessage = error.message;
+                        if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+                            errorMessage = 'Network/CORS Error - Check browser console';
+                        }
+                        
                         const tickerDiv = document.createElement('div');
                         tickerDiv.className = 'stock-card';
                         tickerDiv.innerHTML = `
                             <h4>${ticker} - Analysis Failed</h4>
-                            <p style="color: red;"><strong>Error:</strong> ${error.message}</p>
+                            <p style="color: red;"><strong>Error:</strong> ${errorMessage}</p>
+                            ${error.stack ? `<p style="color: gray; font-size: 0.9em;"><pre>${error.stack}</pre></p>` : ''}
                         `;
                         section.appendChild(tickerDiv);
                     }

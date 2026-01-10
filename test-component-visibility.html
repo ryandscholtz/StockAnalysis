@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Component Visibility Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 20px;
+            background-color: #f9fafb;
+        }
+        .test-card {
+            background: white;
+            border-radius: 8px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            border: 2px solid #10b981;
+        }
+        .highlight {
+            background-color: #fef3c7;
+            padding: 12px;
+            border-radius: 6px;
+            border: 1px solid #f59e0b;
+            margin: 12px 0;
+        }
+        .success {
+            background-color: #f0fdf4;
+            padding: 12px;
+            border-radius: 6px;
+            border: 1px solid #10b981;
+            margin: 12px 0;
+        }
+        .error {
+            background-color: #fef2f2;
+            padding: 12px;
+            border-radius: 6px;
+            border: 1px solid #dc2626;
+            margin: 12px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-card">
+        <h1>🔍 Component Visibility Test</h1>
+        <p>This page will help you verify that the Manual Data Entry and Financial Data Display components are visible.</p>
+        
+        <div class="highlight">
+            <h3>📋 Step-by-Step Test Instructions</h3>
+            <ol>
+                <li><strong>Open the analysis page:</strong> <a href="http://localhost:3000/analysis/AAPL" target="_blank">http://localhost:3000/analysis/AAPL</a></li>
+                <li><strong>Look for the blue bordered section:</strong> You should see a section with a blue border titled "🔧 Financial Data Management"</li>
+                <li><strong>Check for components:</strong> Inside this section, you should see:
+                    <ul>
+                        <li>📝 Manual Data Entry - with "Add Data" button</li>
+                        <li>📊 Financial Data Overview - with collapsible sections</li>
+                    </ul>
+                </li>
+                <li><strong>Check browser console:</strong> Open F12 and look for these log messages:
+                    <ul>
+                        <li>"🔧 ManualDataEntry component rendered for ticker: AAPL"</li>
+                        <li>"📊 FinancialDataDisplay component rendered for ticker: AAPL"</li>
+                    </ul>
+                </li>
+            </ol>
+        </div>
+
+        <div class="success">
+            <h3>✅ What You Should See</h3>
+            <p>The components should appear prominently on the analysis page with:</p>
+            <ul>
+                <li><strong>Blue border:</strong> A distinctive blue-bordered section titled "Financial Data Management"</li>
+                <li><strong>Manual Data Entry:</strong> A card with "Add Data" button</li>
+                <li><strong>Financial Data Display:</strong> A card with collapsible sections for Income Statement, Balance Sheet, etc.</li>
+                <li><strong>Console logs:</strong> Debug messages showing the components are rendering</li>
+            </ul>
+        </div>
+
+        <div class="error">
+            <h3>❌ If Components Are Still Not Visible</h3>
+            <p>If you still don't see the components, try these troubleshooting steps:</p>
+            <ol>
+                <li><strong>Hard refresh:</strong> Press Ctrl+F5 to clear cache and reload</li>
+                <li><strong>Check console errors:</strong> Look for JavaScript errors in F12 console</li>
+                <li><strong>Check network tab:</strong> Verify API calls are working</li>
+                <li><strong>Try different ticker:</strong> Test with <a href="http://localhost:3000/analysis/KO" target="_blank">KO</a> or <a href="http://localhost:3000/analysis/MSFT" target="_blank">MSFT</a></li>
+            </ol>
+        </div>
+
+        <div class="highlight">
+            <h3>🧪 Test the Functionality</h3>
+            <p>Once you can see the components, test their functionality:</p>
+            <ol>
+                <li><strong>Add Data:</strong> Click "Add Data" and enter some test financial data</li>
+                <li><strong>View Data:</strong> Expand sections in Financial Data Display to see saved data</li>
+                <li><strong>Refresh Analysis:</strong> Click "Refresh Data" to see updated fair value calculations</li>
+            </ol>
+        </div>
+    </div>
+
+    <script>
+        console.log('🧪 Component Visibility Test Page Loaded');
+        console.log('📍 Navigate to http://localhost:3000/analysis/AAPL to test');
+        
+        // Auto-open the analysis page after 2 seconds
+        setTimeout(() => {
+            console.log('🚀 Auto-opening analysis page...');
+            window.open('http://localhost:3000/analysis/AAPL', '_blank');
+        }, 2000);
+    </script>
+</body>
+</html>

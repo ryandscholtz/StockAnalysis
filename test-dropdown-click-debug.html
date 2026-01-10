@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Dropdown Click Issue</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .success {
+            color: #10b981;
+            font-weight: bold;
+        }
+        .error {
+            color: #ef4444;
+            font-weight: bold;
+        }
+        .info {
+            color: #2563eb;
+            font-weight: bold;
+        }
+        .warning {
+            color: #f59e0b;
+            font-weight: bold;
+        }
+        .code {
+            background: #f3f4f6;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            margin: 10px 0;
+            white-space: pre-wrap;
+        }
+        .issue-box {
+            background: #fef2f2;
+            border: 1px solid #ef4444;
+            border-radius: 6px;
+            padding: 16px;
+            margin: 16px 0;
+        }
+        .fix-box {
+            background: #f0fdf4;
+            border: 1px solid #10b981;
+            border-radius: 6px;
+            padding: 16px;
+            margin: 16px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>🐛 Debug: Dropdown Click Issue</h1>
+    
+    <div class="test-section">
+        <h2>🔍 Potential Issue Identified</h2>
+        <p class="warning">The dropdown click might be getting interfered with by the input's onBlur event.</p>
+        
+        <div class="issue-box">
+            <h3>❌ Current Problem:</h3>
+            <p>When user clicks on a dropdown item:</p>
+            <ol>
+                <li>Input loses focus → <code>onBlur</code> fires</li>
+                <li><code>onBlur</code> sets timeout to hide suggestions after 200ms</li>
+                <li>User's click might happen after the 200ms delay</li>
+                <li>Dropdown is hidden before click registers</li>
+                <li>Click event is lost</li>
+            </ol>
+        </div>
+    </div>
+    
+    <div class="test-section">
+        <h2>🔧 Proposed Fix</h2>
+        <p>Use <code>onMouseDown</code> instead of <code>onClick</code> for dropdown items.</p>
+        
+        <div class="fix-box">
+            <h3>✅ Why This Works:</h3>
+            <ul>
+                <li><code>onMouseDown</code> fires before <code>onBlur</code></li>
+                <li>This ensures the selection happens before the dropdown hides</li>
+                <li>More reliable for dropdown interactions</li>
+            </ul>
+        </div>
+        
+        <h3>Code Change:</h3>
+        <div class="code">// Current (problematic)
+&lt;div
+  onClick={() => handleSelect(suggestion)}
+  // ...
+&gt;
+
+// Fixed
+&lt;div
+  onMouseDown={(e) => {
+    e.preventDefault() // Prevent input blur
+    handleSelect(suggestion)
+  }}
+  // ...
+&gt;</div>
+    </div>
+    
+    <div class="test-section">
+        <h2>🎯 Alternative Solutions</h2>
+        <ol>
+            <li><strong>Increase Delay:</strong> Change 200ms to 300ms in onBlur timeout</li>
+            <li><strong>Use onMouseDown:</strong> Fire selection before blur (recommended)</li>
+            <li><strong>Prevent Blur:</strong> Use preventDefault in onMouseDown</li>
+            <li><strong>State Management:</strong> Track mouse over dropdown to prevent hiding</li>
+        </ol>
+    </div>
+    
+    <div class="test-section">
+        <h2>🧪 Testing Steps</h2>
+        <ol>
+            <li>Open browser dev tools → Console</li>
+            <li>Go to <code>/watchlist/add</code></li>
+            <li>Type "amazon" in search</li>
+            <li>Watch console for "=== WATCHLIST ADD SEARCH DEBUG ===" logs</li>
+            <li>Click on "AMZN" in dropdown</li>
+            <li>Check if "=== WATCHLIST ADD DEBUG ===" appears</li>
+            <li>If not, the click isn't registering</li>
+        </ol>
+        
+        <h3>Expected Console Output:</h3>
+        <div class="code">1. Search logs appear
+2. Click on dropdown item
+3. "=== WATCHLIST ADD DEBUG ===" should appear
+4. "Selected suggestion: {ticker: 'AMZN', ...}" should appear
+5. "Calling addToWatchlist with: ..." should appear</div>
+        
+        <p class="info">If step 3-5 don't appear, the click event is being lost due to the blur timing issue.</p>
+    </div>
+    
+    <div class="test-section">
+        <h2>🚀 Quick Fix Implementation</h2>
+        <p>I'll implement the onMouseDown fix to resolve this issue immediately.</p>
+    </div>
+</body>
+</html>

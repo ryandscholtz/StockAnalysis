@@ -9,6 +9,7 @@ import * as sns from 'aws-cdk-lib/aws-sns';
 import * as snsSubscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as logs from 'aws-cdk-lib/aws-logs';
+import * as cognito from 'aws-cdk-lib/aws-cognito';
 import { Construct } from 'constructs';
 
 export interface StockAnalysisInfrastructureStackProps extends cdk.StackProps {
@@ -24,6 +25,9 @@ export class StockAnalysisInfrastructureStack extends cdk.Stack {
   public readonly apiFunction: lambda.Function;
   public readonly alertTopic: sns.Topic;
   public readonly criticalAlertTopic: sns.Topic;
+  public readonly userPool: cognito.UserPool;
+  public readonly userPoolClient: cognito.UserPoolClient;
+  public readonly identityPool: cognito.CfnIdentityPool;
 
   constructor(scope: Construct, id: string, props: StockAnalysisInfrastructureStackProps) {
     super(scope, id, props);
@@ -60,6 +64,172 @@ export class StockAnalysisInfrastructureStack extends cdk.Stack {
       indexName: 'SectorQualityIndex',
       partitionKey: { name: 'GSI3PK', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'GSI3SK', type: dynamodb.AttributeType.STRING },
+    });
+
+    // Add User-specific index for per-user watchlists
+    this.table.addGlobalSecondaryIndex({
+      indexName: 'UserDataIndex',
+      partitionKey: { name: 'GSI4PK', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'GSI4SK', type: dynamodb.AttributeType.STRING },
+    });
+
+    // Cognito User Pool for authentication
+    this.userPool = new cognito.UserPool(this, 'UserPool', {
+      userPoolName: `stock-analysis-users-${environment}`,
+      selfSignUpEnabled: true,
+      signInAliases: {
+        email: true,
+        username: true
+      },
+      autoVerify: {
+        email: true
+      },
+      standardAttributes: {
+        email: {
+          required: true,
+          mutable: true
+        },
+        givenName: {
+          required: false,
+          mutable: true
+        },
+        familyName: {
+          required: false,
+          mutable: true
+        }
+      },
+      customAttributes: {
+        'subscription_tier': new cognito.StringAttribute({ 
+          minLen: 1, 
+          maxLen: 20, 
+          mutable: true 
+        }),
+        'created_at': new cognito.StringAttribute({ 
+          minLen: 1, 
+          maxLen: 50, 
+          mutable: false 
+        })
+      },
+      passwordPolicy: {
+        minLength: 8,
+        requireLowercase: true,
+        requireUppercase: true,
+        requireDigits: true,
+        requireSymbols: false
+      },
+      accountRecovery: cognito.AccountRecovery.EMAIL_ONLY,
+      removalPolicy: environment === 'production' 
+        ? cdk.RemovalPolicy.RETAIN 
+        : cdk.RemovalPolicy.DESTROY,
+    });
+
+    // User Pool Client for web application
+    this.userPoolClient = new cognito.UserPoolClient(this, 'UserPoolClient', {
+      userPool: this.userPool,
+      userPoolClientName: `stock-analysis-web-client-${environment}`,
+      generateSecret: false, // For web applications, don't generate secret
+      authFlows: {
+        userPassword: true,
+        userSrp: true,
+        custom: true,
+        adminUserPassword: true
+      },
+      oAuth: {
+        flows: {
+          authorizationCodeGrant: true,
+          implicitCodeGrant: true
+        },
+        scopes: [
+          cognito.OAuthScope.EMAIL,
+          cognito.OAuthScope.OPENID,
+          cognito.OAuthScope.PROFILE
+        ],
+        callbackUrls: [
+          'http://localhost:3000/auth/callback',
+          'https://localhost:3000/auth/callback',
+          ...(environment === 'production' ? ['https://your-domain.com/auth/callback'] : [])
+        ],
+        logoutUrls: [
+          'http://localhost:3000/auth/logout',
+          'https://localhost:3000/auth/logout',
+          ...(environment === 'production' ? ['https://your-domain.com/auth/logout'] : [])
+        ]
+      },
+      supportedIdentityProviders: [
+        cognito.UserPoolClientIdentityProvider.COGNITO
+      ],
+      refreshTokenValidity: cdk.Duration.days(30),
+      accessTokenValidity: cdk.Duration.hours(1),
+      idTokenValidity: cdk.Duration.hours(1),
+      preventUserExistenceErrors: true
+    });
+
+    // Cognito Identity Pool for AWS resource access
+    this.identityPool = new cognito.CfnIdentityPool(this, 'IdentityPool', {
+      identityPoolName: `stock_analysis_identity_pool_${environment}`,
+      allowUnauthenticatedIdentities: false,
+      cognitoIdentityProviders: [{
+        clientId: this.userPoolClient.userPoolClientId,
+        providerName: this.userPool.userPoolProviderName,
+        serverSideTokenCheck: true
+      }]
+    });
+
+    // IAM roles for authenticated users
+    const authenticatedRole = new iam.Role(this, 'AuthenticatedRole', {
+      assumedBy: new iam.FederatedPrincipal(
+        'cognito-identity.amazonaws.com',
+        {
+          StringEquals: {
+            'cognito-identity.amazonaws.com:aud': this.identityPool.ref
+          },
+          'ForAnyValue:StringLike': {
+            'cognito-identity.amazonaws.com:amr': 'authenticated'
+          }
+        },
+        'sts:AssumeRoleWithWebIdentity'
+      ),
+      inlinePolicies: {
+        UserDataAccess: new iam.PolicyDocument({
+          statements: [
+            new iam.PolicyStatement({
+              effect: iam.Effect.ALLOW,
+              actions: [
+                'dynamodb:GetItem',
+                'dynamodb:PutItem',
+                'dynamodb:UpdateItem',
+                'dynamodb:DeleteItem',
+                'dynamodb:Query'
+              ],
+              resources: [
+                this.table.tableArn,
+                `${this.table.tableArn}/index/UserDataIndex`
+              ],
+              conditions: {
+                'ForAllValues:StringEquals': {
+                  'dynamodb:LeadingKeys': ['${cognito-identity.amazonaws.com:sub}']
+                }
+              }
+            })
+          ]
+        })
+      }
+    });
+
+    // Attach the roles to the identity pool
+    new cognito.CfnIdentityPoolRoleAttachment(this, 'IdentityPoolRoleAttachment', {
+      identityPoolId: this.identityPool.ref,
+      roles: {
+        authenticated: authenticatedRole.roleArn
+      }
+    });
+
+    // User Pool Domain for hosted UI
+    const userPoolDomain = new cognito.UserPoolDomain(this, 'UserPoolDomain', {
+      userPool: this.userPool,
+      cognitoDomain: {
+        domainPrefix: `stock-analysis-${environment}-${Math.random().toString(36).substring(2, 8)}`
+      }
     });
 
     // Secrets Manager for sensitive configuration
@@ -115,6 +285,22 @@ export class StockAnalysisInfrastructureStack extends cdk.Stack {
             })
           ]
         }),
+        CognitoAccess: new iam.PolicyDocument({
+          statements: [
+            new iam.PolicyStatement({
+              effect: iam.Effect.ALLOW,
+              actions: [
+                'cognito-idp:AdminGetUser',
+                'cognito-idp:AdminCreateUser',
+                'cognito-idp:AdminUpdateUserAttributes',
+                'cognito-idp:AdminDeleteUser',
+                'cognito-idp:ListUsers',
+                'cognito-idp:AdminListGroupsForUser'
+              ],
+              resources: [this.userPool.userPoolArn]
+            })
+          ]
+        }),
         CloudWatchMetrics: new iam.PolicyDocument({
           statements: [
             new iam.PolicyStatement({
@@ -145,10 +331,15 @@ export class StockAnalysisInfrastructureStack extends cdk.Stack {
         ENVIRONMENT: environment,
         TABLE_NAME: this.table.tableName,
         SECRETS_ARN: apiSecrets.secretArn,
+        USER_POOL_ID: this.userPool.userPoolId,
+        USER_POOL_CLIENT_ID: this.userPoolClient.userPoolClientId,
+        IDENTITY_POOL_ID: this.identityPool.ref,
         LOG_LEVEL: environment === 'production' ? 'INFO' : 'DEBUG',
         STRUCTURED_LOGGING: 'true',
+        // CORS configuration - allow all origins for testing
+        CORS_ALLOW_ALL: environment !== 'production' ? 'true' : 'false',
         // Add version to force update
-        CODE_VERSION: '1.2.0'
+        CODE_VERSION: '1.3.0'
       },
       
       // Enable X-Ray tracing
@@ -166,23 +357,21 @@ export class StockAnalysisInfrastructureStack extends cdk.Stack {
       description: `Serverless stock analysis API for ${environment}`,
       
       // CORS configuration
+      // Allow all origins for testing (including file:// protocol and local testing)
       defaultCorsPreflightOptions: {
-        allowOrigins: [
-          'http://localhost:3000',
-          'http://localhost:3001', 
-          'http://127.0.0.1:3000',
-          'https://stockanalysis.cerebrum.com'
-        ],
-        allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+        allowOrigins: apigateway.Cors.ALL_ORIGINS, // Allow all origins for testing
+        allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'HEAD', 'PATCH'],
         allowHeaders: [
           'Content-Type', 
           'X-Amz-Date', 
           'Authorization', 
           'X-Api-Key', 
           'X-Correlation-Id',
-          'X-Requested-With'
+          'X-Requested-With',
+          'Accept',
+          'Origin'
         ],
-        allowCredentials: false,
+        allowCredentials: false, // Cannot use credentials with wildcard origin
         maxAge: cdk.Duration.seconds(86400)
       },
       
@@ -596,6 +785,27 @@ def lambda_handler(event, context):
     new cdk.CfnOutput(this, 'DashboardUrl', {
       value: `https://console.aws.amazon.com/cloudwatch/home?region=${this.region}#dashboards:name=${dashboard.dashboardName}`,
       description: 'CloudWatch Dashboard URL'
+    });
+
+    // Cognito outputs
+    new cdk.CfnOutput(this, 'UserPoolId', {
+      value: this.userPool.userPoolId,
+      description: 'Cognito User Pool ID'
+    });
+
+    new cdk.CfnOutput(this, 'UserPoolClientId', {
+      value: this.userPoolClient.userPoolClientId,
+      description: 'Cognito User Pool Client ID'
+    });
+
+    new cdk.CfnOutput(this, 'IdentityPoolId', {
+      value: this.identityPool.ref,
+      description: 'Cognito Identity Pool ID'
+    });
+
+    new cdk.CfnOutput(this, 'UserPoolDomain', {
+      value: userPoolDomain.domainName,
+      description: 'Cognito User Pool Domain'
     });
 
     if (environment === 'production') {
