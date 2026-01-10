@@ -307,33 +307,55 @@ export default function AnalysisPage() {
               </p>
             )}
           </div>
-          <button
-            onClick={() => setShowWeightsConfig(!showWeightsConfig)}
-            style={{
-              padding: '10px 20px',
-              background: showWeightsConfig ? '#dc2626' : '#2563eb',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontSize: '14px',
-              fontWeight: '600',
-              whiteSpace: 'nowrap',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px'
-            }}
-          >
-            {showWeightsConfig 
-              ? '✕ Close Config' 
-              : (() => {
-                  const currentModel = businessType || analysis.businessType;
-                  const modelName = currentModel 
-                    ? currentModel.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
-                    : 'Default';
-                  return `⚙️ ${modelName} Model`;
-                })()}
-          </button>
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            <button
+              onClick={() => setShowWeightsConfig(!showWeightsConfig)}
+              style={{
+                padding: '10px 20px',
+                background: showWeightsConfig ? '#dc2626' : '#2563eb',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '14px',
+                fontWeight: '600',
+                whiteSpace: 'nowrap',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}
+            >
+              {showWeightsConfig 
+                ? '✕ Close Config' 
+                : (() => {
+                    const currentModel = businessType || analysis.businessType;
+                    const modelName = currentModel 
+                      ? currentModel.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+                      : 'Default';
+                    return `⚙️ ${modelName} Model`;
+                  })()}
+            </button>
+            <button
+              onClick={() => loadAnalysis(true)}
+              disabled={loading}
+              style={{
+                padding: '10px 20px',
+                background: loading ? '#9ca3af' : '#10b981',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: loading ? 'not-allowed' : 'pointer',
+                fontSize: '14px',
+                fontWeight: '600',
+                whiteSpace: 'nowrap',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}
+            >
+              {loading ? '🔄 Refreshing...' : '🔄 Refresh Data'}
+            </button>
+          </div>
         </div>
       </div>
 
