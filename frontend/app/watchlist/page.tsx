@@ -24,38 +24,14 @@ export default function WatchlistPage() {
       console.log('🔄 Loading watchlist...')
       const startTime = Date.now()
       
-      // Try cached endpoint first for instant response
-      try {
-        console.log('📦 Trying cached endpoint...')
-        const cacheStartTime = Date.now()
-        const cachedResponse = await fetch('https://127.0.0.1:8000/api/cache/watchlist')
-        const cacheTime = Date.now() - cacheStartTime
-        console.log(`📦 Cache response: ${cachedResponse.status} in ${cacheTime}ms`)
-        
-        if (cachedResponse.ok) {
-          const cachedData = await cachedResponse.json()
-          console.log(`✅ Cache success: ${cachedData.items?.length || 0} items in ${Date.now() - startTime}ms total`)
-          setWatchlist(cachedData.items)
-          setLoading(false)
-          return // Success with cached data
-        } else {
-          console.log(`❌ Cache failed: ${cachedResponse.status} ${cachedResponse.statusText}`)
-        }
-      } catch (cacheError) {
-        console.log('❌ Cache error:', cacheError)
-        console.log('🔄 Falling back to regular endpoint')
-      }
-      
-      // Fallback to regular endpoint
-      console.log('🌐 Trying regular endpoint...')
-      const regularStartTime = Date.now()
+      // Load watchlist from API (enhanced with MarketStack integration)
+      console.log('🌐 Loading watchlist...')
       const result = await stockApi.getWatchlist()
-      const regularTime = Date.now() - regularStartTime
-      console.log(`🌐 Regular endpoint: ${result.items?.length || 0} items in ${regularTime}ms`)
-      console.log(`✅ Total time: ${Date.now() - startTime}ms`)
+      const loadTime = Date.now() - startTime
+      console.log(`✅ Watchlist loaded: ${result.items?.length || 0} items in ${loadTime}ms`)
       setWatchlist(result.items)
     } catch (err: any) {
-      console.log('❌ Final error:', err)
+      console.log('❌ Error loading watchlist:', err)
       // Use formatted error message (from api.ts interceptor)
       setError(err.message || 'Failed to load watchlist')
       console.error('Error loading watchlist:', err)
@@ -68,61 +44,11 @@ export default function WatchlistPage() {
     try {
       setRefreshingPrices(true)
       
-      // Try the new async endpoint first
-      try {
-        const asyncResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'}/api/watchlist/live-prices-async`)
-        if (asyncResponse.ok) {
-          const asyncData = await asyncResponse.json()
-          
-          // If we got cached results immediately
-          if ('live_prices' in asyncData) {
-            setLivePrices(asyncData.live_prices)
-            return
-          }
-          
-          // If we got a task ID, poll for results
-          if ('task_id' in asyncData) {
-            const taskId = asyncData.task_id
-            
-            // Poll for results every 2 seconds
-            const pollInterval = setInterval(async () => {
-              try {
-                const statusResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'}/api/tasks/${taskId}`)
-                if (statusResponse.ok) {
-                  const statusData = await statusResponse.json()
-                  
-                  if (statusData.status === 'completed' && statusData.result) {
-                    clearInterval(pollInterval)
-                    setLivePrices(statusData.result.live_prices)
-                    return
-                  } else if (statusData.status === 'failed') {
-                    clearInterval(pollInterval)
-                    console.error('Background task failed:', statusData.error)
-                    // Fall back to old endpoint
-                    throw new Error('Background task failed')
-                  }
-                }
-              } catch (pollError) {
-                clearInterval(pollInterval)
-                throw pollError
-              }
-            }, 2000)
-            
-            // Set timeout to prevent infinite polling
-            setTimeout(() => {
-              clearInterval(pollInterval)
-            }, 60000) // 1 minute timeout
-            
-            return
-          }
-        }
-      } catch (asyncError) {
-        console.log('Async endpoint failed, falling back to sync endpoint')
-      }
-      
-      // Fallback to original endpoint
+      // Use the standard live prices endpoint (enhanced with MarketStack)
+      console.log('🔄 Refreshing live prices from MarketStack API...')
       const result = await stockApi.getWatchlistLivePrices()
       setLivePrices(result.live_prices)
+      console.log('✅ Live prices updated successfully')
     } catch (err: any) {
       console.error('Error refreshing live prices:', err)
       // Set empty object to prevent undefined errors
