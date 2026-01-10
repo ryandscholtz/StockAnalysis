@@ -35,6 +35,12 @@ export interface StockAnalysis {
   dataQualityWarnings?: DataQualityWarning[]
   analysisWeights?: AnalysisWeights
   businessType?: string
+  dataSource?: {
+    price_source: string
+    has_real_price: boolean
+    api_available: boolean
+    error?: string
+  }
 }
 
 export interface ValuationBreakdown {

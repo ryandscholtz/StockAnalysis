@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Proper Fundamental Analysis</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        pre { background-color: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+        .valuation-breakdown { margin: 10px 0; }
+        .valuation-method { margin: 5px 0; padding: 5px; background-color: #f8f9fa; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <h1>Test Proper Fundamental Analysis Implementation</h1>
+    <p>Testing the updated Lambda handler with proper DCF, EPV, and Asset-based valuation methodology.</p>
+
+    <div id="results"></div>
+
+    <script>
+        const API_BASE_URL = 'https://dx0w31lbc1.execute-api.eu-west-1.amazonaws.com/production';
+        
+        async function testAnalysis(ticker) {
+            const resultsDiv = document.getElementById('results');
+            
+            try {
+                console.log(`Testing analysis for ${ticker}...`);
+                
+                const response = await fetch(`${API_BASE_URL}/api/analyze/${ticker}`, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                console.log(`Response status: ${response.status}`);
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                }
+                
+                const data = await response.json();
+                console.log(`Analysis data for ${ticker}:`, data);
+                
+                // Create test result section
+                const section = document.createElement('div');
+                section.className = 'test-section success';
+                
+                // Calculate margin of safety percentage
+                const marginOfSafety = data.currentPrice && data.fairValue ? 
+                    ((data.fairValue - data.currentPrice) / data.currentPrice * 100).toFixed(2) : 'N/A';
+                
+                const isUndervalued = marginOfSafety !== 'N/A' && parseFloat(marginOfSafety) > 0;
+                const valuationStatus = isUndervalued ? 
+                    `${marginOfSafety}% Undervalued` : 
+                    marginOfSafety !== 'N/A' ? `${Math.abs(parseFloat(marginOfSafety)).toFixed(2)}% Overvalued` : 'N/A';
+                
+                section.innerHTML = `
+                    <h3>✅ ${ticker} Analysis - ${data.businessType || 'Unknown'} Business Type</h3>
+                    <div class="valuation-breakdown">
+                        <h4>Price & Valuation:</h4>
+                        <p><strong>Current Price:</strong> $${data.currentPrice?.toFixed(2) || 'N/A'}</p>
+                        <p><strong>Fair Value:</strong> $${data.fairValue?.toFixed(2) || 'N/A'}</p>
+                        <p><strong>Valuation Status:</strong> <span style="color: ${isUndervalued ? 'green' : 'red'}">${valuationStatus}</span></p>
+                        <p><strong>Recommendation:</strong> ${data.recommendation || 'N/A'}</p>
+                    </div>
+                    
+                    <div class="valuation-breakdown">
+                        <h4>Valuation Method Breakdown:</h4>
+                        <div class="valuation-method">
+                            <strong>DCF Value:</strong> $${data.valuation?.dcf?.toFixed(2) || 'N/A'} 
+                            (Weight: ${data.analysisWeights?.dcf_weight ? (data.analysisWeights.dcf_weight * 100).toFixed(0) + '%' : 'N/A'})
+                        </div>
+                        <div class="valuation-method">
+                            <strong>EPV Value:</strong> $${data.valuation?.earningsPower?.toFixed(2) || 'N/A'} 
+                            (Weight: ${data.analysisWeights?.epv_weight ? (data.analysisWeights.epv_weight * 100).toFixed(0) + '%' : 'N/A'})
+                        </div>
+                        <div class="valuation-method">
+                            <strong>Asset Value:</strong> $${data.valuation?.assetBased?.toFixed(2) || 'N/A'} 
+                            (Weight: ${data.analysisWeights?.asset_weight ? (data.analysisWeights.asset_weight * 100).toFixed(0) + '%' : 'N/A'})
+                        </div>
+                        <div class="valuation-method" style="background-color: #e7f3ff; font-weight: bold;">
+                            <strong>Weighted Average:</strong> $${data.valuation?.weightedAverage?.toFixed(2) || 'N/A'}
+                        </div>
+                    </div>
+                    
+                    <div class="valuation-breakdown">
+                        <h4>Data Source:</h4>
+                        <p><strong>Price Source:</strong> ${data.dataSource?.price_source || 'N/A'}</p>
+                        <p><strong>Valuation Method:</strong> ${data.dataSource?.valuation_method || 'N/A'}</p>
+                        <p><strong>Has Real Price:</strong> ${data.dataSource?.has_real_price ? 'Yes' : 'No'}</p>
+                    </div>
+                    
+                    <details>
+                        <summary>Full Response Data</summary>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    </details>
+                `;
+                
+                resultsDiv.appendChild(section);
+                
+            } catch (error) {
+                console.error(`Error testing ${ticker}:`, error);
+                
+                const section = document.createElement('div');
+                section.className = 'test-section error';
+                section.innerHTML = `
+                    <h3>❌ ${ticker} Analysis Failed</h3>
+                    <p><strong>Error:</strong> ${error.message}</p>
+                    <pre>${error.stack || 'No stack trace available'}</pre>
+                `;
+                resultsDiv.appendChild(section);
+            }
+        }
+        
+        // Test multiple tickers with different business types
+        async function runTests() {
+            const tickers = [
+                'KO',    // Mature consumer staple (should show proper DCF/EPV/Asset breakdown)
+                'AAPL',  // Technology (should show tech weighting)
+                'TSLA',  // High Growth (should show high growth weighting)
+                'JPM',   // Bank (should show bank weighting)
+                'XOM'    // Energy (should show energy weighting)
+            ];
+            
+            console.log('Starting fundamental analysis tests...');
+            
+            for (const ticker of tickers) {
+                await testAnalysis(ticker);
+                // Add small delay between requests
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+            
+            console.log('All tests completed!');
+        }
+        
+        // Start tests when page loads
+        window.addEventListener('load', runTests);
+    </script>
+</body>
+</html>

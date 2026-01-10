@@ -6,7 +6,7 @@ import { stockApi, WatchlistItemDetail } from '@/lib/api'
 import { StockAnalysis } from '@/types/analysis'
 import { formatPrice } from '@/lib/currency'
 import AnalysisCard from '@/components/AnalysisCard'
-import MarginOfSafety from '@/components/MarginOfSafety'
+import ValuationStatus from '@/components/ValuationStatus'
 import ValuationChart from '@/components/ValuationChart'
 import FinancialHealth from '@/components/FinancialHealth'
 import BusinessQuality from '@/components/BusinessQuality'
@@ -723,7 +723,7 @@ export default function WatchlistDetailPage() {
 
           {/* Analysis Components */}
           <AnalysisCard analysis={analysis} />
-          <MarginOfSafety analysis={analysis} />
+          <ValuationStatus analysis={analysis} />
           <ValuationChart analysis={analysis} />
           <PriceRatios priceRatios={analysis.priceRatios} />
           <GrowthMetrics growthMetrics={analysis.growthMetrics} currency={analysis.currency} />

@@ -45,11 +45,13 @@ export default function AnalysisCard({ analysis }: AnalysisCardProps) {
       )}
 
       <div className="metric">
-        <span className="metric-label">Margin of Safety</span>
+        <span className="metric-label">Valuation Status</span>
         <span className="metric-value" style={{ color: analysis.marginOfSafety && analysis.marginOfSafety > 0 ? '#059669' : analysis.marginOfSafety && analysis.marginOfSafety < 0 ? '#dc2626' : '#6b7280' }}>
           {analysis.marginOfSafety !== null && analysis.marginOfSafety !== undefined && !isNaN(analysis.marginOfSafety)
-            ? `${analysis.marginOfSafety > 0 ? '+' : ''}${analysis.marginOfSafety.toFixed(1)}%`
-            : '-'}
+            ? analysis.marginOfSafety > 0 
+              ? `${Math.abs(analysis.marginOfSafety).toFixed(1)}% Undervalued`
+              : `${Math.abs(analysis.marginOfSafety).toFixed(1)}% Overvalued`
+            : 'Fair Value'}
         </span>
       </div>
 

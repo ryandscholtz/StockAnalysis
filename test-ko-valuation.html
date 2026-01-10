@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>KO Valuation Debug</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
+        .result { margin: 15px 0; padding: 15px; border: 1px solid #ccc; border-radius: 8px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .warning { background-color: #fff3cd; border-color: #ffeaa7; }
+        button { padding: 12px 24px; margin: 10px 5px; font-size: 16px; cursor: pointer; border: none; border-radius: 6px; }
+        .btn-primary { background-color: #007bff; color: white; }
+        pre { background-color: #f8f9fa; padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 12px; }
+        .calculation { background-color: #e9ecef; padding: 15px; border-radius: 6px; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h1>🔍 KO (Coca-Cola) Valuation Debug</h1>
+    <p>Investigating the fair value calculation issue for KO</p>
+    
+    <button class="btn-primary" onclick="debugKOValuation()">🔍 Debug KO Valuation</button>
+    
+    <div id="results"></div>
+
+    <script>
+        const API_BASE_URL = 'https://dx0w31lbc1.execute-api.eu-west-1.amazonaws.com/production';
+        
+        async function debugKOValuation() {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<div class="result">🔄 Debugging KO valuation...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/analyze/KO`);
+                const data = await response.json();
+                
+                // Calculate what the margin should be
+                const currentPrice = data.currentPrice;
+                const fairValue = data.fairValue;
+                const reportedMargin = data.marginOfSafety;
+                
+                // Manual calculation
+                const calculatedMargin = ((fairValue - currentPrice) / currentPrice) * 100;
+                const calculatedValuationStatus = calculatedMargin > 0 
+                    ? `${Math.abs(calculatedMargin).toFixed(1)}% Undervalued`
+                    : `${Math.abs(calculatedMargin).toFixed(1)}% Overvalued`;
+                
+                // Check if there's a discrepancy
+                const marginDiscrepancy = Math.abs(reportedMargin - calculatedMargin);
+                const hasDiscrepancy = marginDiscrepancy > 0.1; // Allow for small rounding differences
+                
+                let resultClass = hasDiscrepancy ? 'error' : 'success';
+                
+                resultsDiv.innerHTML = `
+                    <div class="result ${resultClass}">
+                        <h3>🔍 KO Valuation Analysis</h3>
+                        
+                        <div class="calculation">
+                            <h4>📊 Raw Data from API:</h4>
+                            <p><strong>Current Price:</strong> $${currentPrice}</p>
+                            <p><strong>Fair Value:</strong> $${fairValue?.toFixed(2)}</p>
+                            <p><strong>Reported Margin of Safety:</strong> ${reportedMargin?.toFixed(2)}%</p>
+                        </div>
+                        
+                        <div class="calculation">
+                            <h4>🧮 Manual Calculation:</h4>
+                            <p><strong>Formula:</strong> (Fair Value - Current Price) / Current Price × 100</p>
+                            <p><strong>Calculation:</strong> ($${fairValue?.toFixed(2)} - $${currentPrice}) / $${currentPrice} × 100</p>
+                            <p><strong>Result:</strong> ${calculatedMargin.toFixed(2)}%</p>
+                            <p><strong>Valuation Status:</strong> ${calculatedValuationStatus}</p>
+                        </div>
+                        
+                        <div class="calculation">
+                            <h4>✅ Verification:</h4>
+                            <p><strong>Margin Discrepancy:</strong> ${marginDiscrepancy.toFixed(4)}% ${hasDiscrepancy ? '❌ SIGNIFICANT' : '✅ ACCEPTABLE'}</p>
+                            <p><strong>Calculation Status:</strong> ${hasDiscrepancy ? 'ERROR - Values don\'t match!' : 'CORRECT - Values match'}</p>
+                        </div>
+                        
+                        <div class="calculation">
+                            <h4>🎯 Expected Frontend Display:</h4>
+                            <p><strong>Valuation Status:</strong> <span style="color: ${calculatedMargin > 0 ? '#059669' : '#dc2626'}; font-weight: bold;">${calculatedValuationStatus}</span></p>
+                            <p><strong>Color:</strong> ${calculatedMargin > 0 ? 'Green (Undervalued)' : 'Red (Overvalued)'}</p>
+                        </div>
+                        
+                        <h4>🔍 Potential Issues:</h4>
+                        <ul>
+                            ${hasDiscrepancy ? '<li>❌ API calculation error - margin of safety doesn\'t match manual calculation</li>' : '<li>✅ API calculation is correct</li>'}
+                            <li>Check if frontend is caching old data</li>
+                            <li>Verify frontend is using the correct API endpoint</li>
+                            <li>Check if there are multiple API calls with different results</li>
+                        </ul>
+                        
+                        <details>
+                            <summary>Full API Response</summary>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </details>
+                    </div>
+                `;
+            } catch (error) {
+                resultsDiv.innerHTML = `
+                    <div class="result error">
+                        <h3>❌ Debug Error</h3>
+                        <p><strong>Error:</strong> ${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+        
+        // Auto-run on page load
+        window.onload = function() {
+            debugKOValuation();
+        };
+    </script>
+</body>
+</html>

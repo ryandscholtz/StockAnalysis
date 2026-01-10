@@ -49,6 +49,28 @@ export default function WatchlistPage() {
       const result = await stockApi.getWatchlistLivePrices()
       setLivePrices(result.live_prices)
       console.log('✅ Live prices updated successfully')
+      
+      // Also refresh analysis data for each stock to get fair values
+      console.log('🔄 Refreshing analysis data for valuation...')
+      const updatedWatchlist = await Promise.all(
+        watchlist.map(async (item) => {
+          try {
+            const analysis = await stockApi.analyzeStock(item.ticker)
+            return {
+              ...item,
+              current_price: analysis.currentPrice,
+              fair_value: analysis.fairValue,
+              margin_of_safety_pct: analysis.marginOfSafety,
+              recommendation: analysis.recommendation
+            }
+          } catch (error) {
+            console.warn(`Failed to get analysis for ${item.ticker}:`, error)
+            return item // Return original item if analysis fails
+          }
+        })
+      )
+      setWatchlist(updatedWatchlist)
+      console.log('✅ Analysis data updated successfully')
     } catch (err: any) {
       console.error('Error refreshing live prices:', err)
       // Set empty object to prevent undefined errors
@@ -369,13 +391,17 @@ export default function WatchlistPage() {
                       </div>
                     </div>
                     <div>
-                      <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>Margin of Safety</div>
+                      <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>Valuation</div>
                       <div style={{
                         fontSize: '16px',
                         fontWeight: '600',
                         color: item.margin_of_safety_pct && item.margin_of_safety_pct > 0 ? '#10b981' : '#ef4444'
                       }}>
-                        {formatPercent(item.margin_of_safety_pct)}
+                        {item.margin_of_safety_pct && item.margin_of_safety_pct !== 0 
+                          ? item.margin_of_safety_pct > 0 
+                            ? `${Math.abs(item.margin_of_safety_pct).toFixed(1)}% Under`
+                            : `${Math.abs(item.margin_of_safety_pct).toFixed(1)}% Over`
+                          : 'Fair Value'}
                       </div>
                     </div>
                     {item.last_analyzed_at && (

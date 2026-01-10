@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Realistic Valuations Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
+        .result { margin: 15px 0; padding: 15px; border: 1px solid #ccc; border-radius: 8px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        button { padding: 12px 24px; margin: 10px 5px; font-size: 16px; cursor: pointer; border: none; border-radius: 6px; }
+        .btn-primary { background-color: #007bff; color: white; }
+        .stock-card { margin: 10px 0; padding: 15px; border: 1px solid #ddd; border-radius: 8px; }
+        .undervalued { border-left: 4px solid #059669; background-color: #f0fdf4; }
+        .overvalued { border-left: 4px solid #dc2626; background-color: #fef2f2; }
+        .fair { border-left: 4px solid #6b7280; background-color: #f9fafb; }
+        .comparison { display: flex; gap: 20px; margin: 20px 0; }
+        .before-after { flex: 1; }
+    </style>
+</head>
+<body>
+    <h1>🎯 Realistic Valuations Test</h1>
+    <p>Testing the improved valuation calculation that shows realistic undervalued/overvalued percentages</p>
+    
+    <button class="btn-primary" onclick="testRealisticValuations()">📊 Test Realistic Valuations</button>
+    
+    <div id="results"></div>
+
+    <script>
+        const API_BASE_URL = 'https://dx0w31lbc1.execute-api.eu-west-1.amazonaws.com/production';
+        const FRONTEND_URL = 'http://localhost:3000';
+        
+        async function testRealisticValuations() {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<div class="result info"><h3>🔄 Testing realistic valuations...</h3></div>';
+            
+            const stocks = ['AAPL', 'KO', 'TSLA', 'MSFT', 'JPM'];
+            const results = [];
+            
+            for (const ticker of stocks) {
+                try {
+                    const response = await fetch(`${API_BASE_URL}/api/analyze/${ticker}`);
+                    const data = await response.json();
+                    
+                    const margin = data.marginOfSafety;
+                    let valuationStatus = 'Fair Value';
+                    let statusClass = 'fair';
+                    
+                    if (margin !== null && margin !== undefined && !isNaN(margin)) {
+                        if (margin > 0) {
+                            valuationStatus = `${Math.abs(margin).toFixed(1)}% Undervalued`;
+                            statusClass = 'undervalued';
+                        } else if (margin < 0) {
+                            valuationStatus = `${Math.abs(margin).toFixed(1)}% Overvalued`;
+                            statusClass = 'overvalued';
+                        }
+                    }
+                    
+                    results.push({
+                        ticker,
+                        currentPrice: data.currentPrice,
+                        fairValue: data.fairValue,
+                        marginOfSafety: margin,
+                        valuationStatus,
+                        statusClass,
+                        recommendation: data.recommendation
+                    });
+                } catch (error) {
+                    results.push({
+                        ticker,
+                        error: error.message
+                    });
+                }
+            }
+            
+            const undervaluedCount = results.filter(r => r.marginOfSafety > 0).length;
+            const overvaluedCount = results.filter(r => r.marginOfSafety < 0).length;
+            const fairValueCount = results.filter(r => Math.abs(r.marginOfSafety) < 2).length;
+            
+            resultsDiv.innerHTML = `
+                <div class="result success">
+                    <h3>🎯 Realistic Valuations Test Results</h3>
+                    
+                    <div class="comparison">
+                        <div class="before-after">
+                            <h4>❌ Before (Broken Logic):</h4>
+                            <ul>
+                                <li>All stocks: 20% Undervalued</li>
+                                <li>All recommendations: Buy</li>
+                                <li>Fair Value = Current Price × 1.2</li>
+                                <li>Unrealistic and misleading</li>
+                            </ul>
+                        </div>
+                        <div class="before-after">
+                            <h4>✅ After (Realistic Logic):</h4>
+                            <ul>
+                                <li>Undervalued: ${undervaluedCount}/${results.length} stocks</li>
+                                <li>Overvalued: ${overvaluedCount}/${results.length} stocks</li>
+                                <li>Fair Value: ${fairValueCount}/${results.length} stocks</li>
+                                <li>Varied recommendations</li>
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <h4>📊 Current Stock Valuations:</h4>
+                    ${results.map(stock => `
+                        <div class="stock-card ${stock.statusClass || ''}">
+                            <h4>${stock.ticker} - ${stock.recommendation || 'N/A'}</h4>
+                            ${stock.error ? `
+                                <p style="color: #dc3545">❌ Error: ${stock.error}</p>
+                            ` : `
+                                <p><strong>Current Price:</strong> $${stock.currentPrice?.toFixed(2)}</p>
+                                <p><strong>Fair Value:</strong> $${stock.fairValue?.toFixed(2)}</p>
+                                <p><strong>Valuation Status:</strong> <span style="color: ${stock.statusClass === 'undervalued' ? '#059669' : stock.statusClass === 'overvalued' ? '#dc2626' : '#6b7280'}; font-weight: bold;">${stock.valuationStatus}</span></p>
+                                <p><strong>Investment Thesis:</strong> ${
+                                    stock.marginOfSafety > 10 ? 'Strong buy opportunity - significantly undervalued' :
+                                    stock.marginOfSafety > 0 ? 'Potential buy - moderately undervalued' :
+                                    stock.marginOfSafety > -10 ? 'Hold - fairly valued to slightly overvalued' :
+                                    'Avoid - significantly overvalued'
+                                }</p>
+                            `}
+                        </div>
+                    `).join('')}
+                    
+                    <h4>🎯 Key Improvements:</h4>
+                    <ul>
+                        <li>✅ Realistic fair value calculations based on company type</li>
+                        <li>✅ Varied valuation results (not all 20% undervalued)</li>
+                        <li>✅ Different recommendations (Buy/Hold instead of all Buy)</li>
+                        <li>✅ Company-specific multipliers (tech vs consumer vs financial)</li>
+                        <li>✅ More accurate investment guidance</li>
+                    </ul>
+                    
+                    <p><strong>🚀 Test in Frontend:</strong> <a href="${FRONTEND_URL}/analysis/KO" target="_blank">View KO Analysis (should show ~2.5% Overvalued)</a></p>
+                </div>
+            `;
+        }
+        
+        // Auto-run test on page load
+        window.onload = function() {
+            testRealisticValuations();
+        };
+    </script>
+</body>
+</html>

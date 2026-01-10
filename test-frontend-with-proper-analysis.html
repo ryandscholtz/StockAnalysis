@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Frontend with Proper Analysis</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        pre { background-color: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+        .stock-card { margin: 10px 0; padding: 15px; border: 1px solid #ccc; border-radius: 8px; background-color: #f9f9f9; }
+        .valuation-status { font-weight: bold; font-size: 1.1em; }
+        .undervalued { color: #28a745; }
+        .overvalued { color: #dc3545; }
+        button { padding: 10px 20px; margin: 5px; background-color: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        button:hover { background-color: #0056b3; }
+        button:disabled { background-color: #6c757d; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+    <h1>Test Frontend with Proper Fundamental Analysis</h1>
+    <p>Testing the frontend integration with the updated Lambda handler that implements proper DCF/EPV/Asset valuation.</p>
+
+    <div class="test-section info">
+        <h3>Test Controls</h3>
+        <button onclick="testWatchlistRefresh()">Test Watchlist Refresh</button>
+        <button onclick="testIndividualAnalysis()">Test Individual Analysis</button>
+        <button onclick="testValuationStatus()">Test Valuation Status Display</button>
+    </div>
+
+    <div id="results"></div>
+
+    <script>
+        const API_BASE_URL = 'https://dx0w31lbc1.execute-api.eu-west-1.amazonaws.com/production';
+        
+        function formatValuationStatus(currentPrice, fairValue) {
+            if (!currentPrice || !fairValue || currentPrice <= 0 || fairValue <= 0) {
+                return { text: 'N/A', class: '' };
+            }
+            
+            const marginOfSafety = ((fairValue - currentPrice) / currentPrice) * 100;
+            
+            if (marginOfSafety > 0) {
+                return {
+                    text: `${marginOfSafety.toFixed(1)}% Undervalued`,
+                    class: 'undervalued'
+                };
+            } else {
+                return {
+                    text: `${Math.abs(marginOfSafety).toFixed(1)}% Overvalued`,
+                    class: 'overvalued'
+                };
+            }
+        }
+        
+        async function testWatchlistRefresh() {
+            const resultsDiv = document.getElementById('results');
+            
+            try {
+                console.log('Testing watchlist refresh...');
+                
+                // First get the watchlist
+                const watchlistResponse = await fetch(`${API_BASE_URL}/api/watchlist`);
+                const watchlistData = await watchlistResponse.json();
+                
+                console.log('Watchlist data:', watchlistData);
+                
+                // Then get live prices
+                const pricesResponse = await fetch(`${API_BASE_URL}/api/watchlist/live-prices`);
+                const pricesData = await pricesResponse.json();
+                
+                console.log('Live prices data:', pricesData);
+                
+                // Create result section
+                const section = document.createElement('div');
+                section.className = 'test-section success';
+                section.innerHTML = `
+                    <h3>✅ Watchlist Refresh Test</h3>
+                    <p><strong>Watchlist Items:</strong> ${watchlistData.total || 0}</p>
+                    <p><strong>Live Prices Available:</strong> ${Object.keys(pricesData.live_prices || {}).length}</p>
+                `;
+                
+                // Display each watchlist item with live price
+                const itemsDiv = document.createElement('div');
+                
+                if (watchlistData.items && watchlistData.items.length > 0) {
+                    for (const item of watchlistData.items) {
+                        const ticker = item.ticker;
+                        const livePrice = pricesData.live_prices?.[ticker];
+                        
+                        // Get analysis for this ticker to get fair value
+                        try {
+                            const analysisResponse = await fetch(`${API_BASE_URL}/api/analyze/${ticker}`);
+                            let analysisData = null;
+                            
+                            if (analysisResponse.ok) {
+                                analysisData = await analysisResponse.json();
+                            }
+                            
+                            const currentPrice = livePrice?.price || analysisData?.currentPrice;
+                            const fairValue = analysisData?.fairValue;
+                            const valuationStatus = formatValuationStatus(currentPrice, fairValue);
+                            
+                            const itemDiv = document.createElement('div');
+                            itemDiv.className = 'stock-card';
+                            itemDiv.innerHTML = `
+                                <h4>${ticker} - ${item.company_name || 'Unknown Company'}</h4>
+                                <p><strong>Current Price:</strong> ${currentPrice ? '$' + currentPrice.toFixed(2) : 'N/A'}</p>
+                                <p><strong>Fair Value:</strong> ${fairValue ? '$' + fairValue.toFixed(2) : 'N/A'}</p>
+                                <p class="valuation-status ${valuationStatus.class}"><strong>Status:</strong> ${valuationStatus.text}</p>
+                                <p><strong>Business Type:</strong> ${analysisData?.businessType || 'N/A'}</p>
+                                <p><strong>Recommendation:</strong> ${analysisData?.recommendation || 'N/A'}</p>
+                                ${livePrice?.success === false ? `<p style="color: red;"><strong>Price Error:</strong> ${livePrice.error}</p>` : ''}
+                                ${analysisData?.dataSource?.valuation_method ? `<p><strong>Valuation Method:</strong> ${analysisData.dataSource.valuation_method}</p>` : ''}
+                            `;
+                            itemsDiv.appendChild(itemDiv);
+                            
+                        } catch (error) {
+                            console.error(`Error getting analysis for ${ticker}:`, error);
+                            
+                            const itemDiv = document.createElement('div');
+                            itemDiv.className = 'stock-card';
+                            itemDiv.innerHTML = `
+                                <h4>${ticker} - ${item.company_name || 'Unknown Company'}</h4>
+                                <p><strong>Current Price:</strong> ${livePrice?.price ? '$' + livePrice.price.toFixed(2) : 'N/A'}</p>
+                                <p><strong>Fair Value:</strong> Analysis failed</p>
+                                <p style="color: red;"><strong>Error:</strong> ${error.message}</p>
+                            `;
+                            itemsDiv.appendChild(itemDiv);
+                        }
+                        
+                        // Add delay between analysis requests
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                    }
+                } else {
+                    itemsDiv.innerHTML = '<p>No watchlist items found. The API may be returning mock data.</p>';
+                }
+                
+                section.appendChild(itemsDiv);
+                resultsDiv.appendChild(section);
+                
+            } catch (error) {
+                console.error('Error testing watchlist refresh:', error);
+                
+                const section = document.createElement('div');
+                section.className = 'test-section error';
+                section.innerHTML = `
+                    <h3>❌ Watchlist Refresh Test Failed</h3>
+                    <p><strong>Error:</strong> ${error.message}</p>
+                `;
+                resultsDiv.appendChild(section);
+            }
+        }
+        
+        async function testIndividualAnalysis() {
+            const resultsDiv = document.getElementById('results');
+            
+            try {
+                console.log('Testing individual analysis for KO...');
+                
+                const response = await fetch(`${API_BASE_URL}/api/analyze/KO`);
+                const data = await response.json();
+                
+                console.log('KO analysis data:', data);
+                
+                const valuationStatus = formatValuationStatus(data.currentPrice, data.fairValue);
+                
+                const section = document.createElement('div');
+                section.className = 'test-section success';
+                section.innerHTML = `
+                    <h3>✅ Individual Analysis Test - KO (Coca-Cola)</h3>
+                    <div class="stock-card">
+                        <h4>KO - The Coca-Cola Company</h4>
+                        <p><strong>Business Type:</strong> ${data.businessType || 'N/A'}</p>
+                        <p><strong>Current Price:</strong> ${data.currentPrice ? '$' + data.currentPrice.toFixed(2) : 'N/A'}</p>
+                        <p><strong>Fair Value:</strong> ${data.fairValue ? '$' + data.fairValue.toFixed(2) : 'N/A'}</p>
+                        <p class="valuation-status ${valuationStatus.class}"><strong>Status:</strong> ${valuationStatus.text}</p>
+                        <p><strong>Recommendation:</strong> ${data.recommendation || 'N/A'}</p>
+                        
+                        <h5>Valuation Breakdown:</h5>
+                        <p><strong>DCF Value:</strong> ${data.valuation?.dcf ? '$' + data.valuation.dcf.toFixed(2) : 'N/A'} 
+                           (${data.analysisWeights?.dcf_weight ? (data.analysisWeights.dcf_weight * 100).toFixed(0) + '%' : 'N/A'})</p>
+                        <p><strong>EPV Value:</strong> ${data.valuation?.earningsPower ? '$' + data.valuation.earningsPower.toFixed(2) : 'N/A'} 
+                           (${data.analysisWeights?.epv_weight ? (data.analysisWeights.epv_weight * 100).toFixed(0) + '%' : 'N/A'})</p>
+                        <p><strong>Asset Value:</strong> ${data.valuation?.assetBased ? '$' + data.valuation.assetBased.toFixed(2) : 'N/A'} 
+                           (${data.analysisWeights?.asset_weight ? (data.analysisWeights.asset_weight * 100).toFixed(0) + '%' : 'N/A'})</p>
+                        
+                        <p><strong>Data Source:</strong> ${data.dataSource?.price_source || 'N/A'}</p>
+                        <p><strong>Valuation Method:</strong> ${data.dataSource?.valuation_method || 'N/A'}</p>
+                    </div>
+                `;
+                
+                resultsDiv.appendChild(section);
+                
+            } catch (error) {
+                console.error('Error testing individual analysis:', error);
+                
+                const section = document.createElement('div');
+                section.className = 'test-section error';
+                section.innerHTML = `
+                    <h3>❌ Individual Analysis Test Failed</h3>
+                    <p><strong>Error:</strong> ${error.message}</p>
+                `;
+                resultsDiv.appendChild(section);
+            }
+        }
+        
+        async function testValuationStatus() {
+            const resultsDiv = document.getElementById('results');
+            
+            try {
+                console.log('Testing valuation status display...');
+                
+                const tickers = ['AAPL', 'TSLA', 'JPM'];
+                const section = document.createElement('div');
+                section.className = 'test-section success';
+                section.innerHTML = '<h3>✅ Valuation Status Display Test</h3>';
+                
+                for (const ticker of tickers) {
+                    try {
+                        const response = await fetch(`${API_BASE_URL}/api/analyze/${ticker}`);
+                        const data = await response.json();
+                        
+                        const valuationStatus = formatValuationStatus(data.currentPrice, data.fairValue);
+                        
+                        const tickerDiv = document.createElement('div');
+                        tickerDiv.className = 'stock-card';
+                        tickerDiv.innerHTML = `
+                            <h4>${ticker} - ${data.businessType || 'Unknown'} Business Type</h4>
+                            <p><strong>Current Price:</strong> ${data.currentPrice ? '$' + data.currentPrice.toFixed(2) : 'N/A'}</p>
+                            <p><strong>Fair Value:</strong> ${data.fairValue ? '$' + data.fairValue.toFixed(2) : 'N/A'}</p>
+                            <p class="valuation-status ${valuationStatus.class}"><strong>Valuation Status:</strong> ${valuationStatus.text}</p>
+                            <p><strong>Recommendation:</strong> ${data.recommendation || 'N/A'}</p>
+                        `;
+                        section.appendChild(tickerDiv);
+                        
+                    } catch (error) {
+                        console.error(`Error analyzing ${ticker}:`, error);
+                        
+                        const tickerDiv = document.createElement('div');
+                        tickerDiv.className = 'stock-card';
+                        tickerDiv.innerHTML = `
+                            <h4>${ticker} - Analysis Failed</h4>
+                            <p style="color: red;"><strong>Error:</strong> ${error.message}</p>
+                        `;
+                        section.appendChild(tickerDiv);
+                    }
+                    
+                    // Add delay between requests
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+                
+                resultsDiv.appendChild(section);
+                
+            } catch (error) {
+                console.error('Error testing valuation status:', error);
+                
+                const section = document.createElement('div');
+                section.className = 'test-section error';
+                section.innerHTML = `
+                    <h3>❌ Valuation Status Test Failed</h3>
+                    <p><strong>Error:</strong> ${error.message}</p>
+                `;
+                resultsDiv.appendChild(section);
+            }
+        }
+        
+        // Add initial info
+        window.addEventListener('load', () => {
+            const resultsDiv = document.getElementById('results');
+            const infoSection = document.createElement('div');
+            infoSection.className = 'test-section info';
+            infoSection.innerHTML = `
+                <h3>ℹ️ Test Information</h3>
+                <p>This page tests the frontend integration with the updated Lambda handler that implements proper fundamental analysis.</p>
+                <p><strong>API Endpoint:</strong> ${API_BASE_URL}</p>
+                <p><strong>Expected Improvements:</strong></p>
+                <ul>
+                    <li>Fair values calculated using proper DCF, EPV, and Asset-based methods</li>
+                    <li>Business-type-specific weighting (e.g., Technology: DCF 50% | EPV 35% | Asset 15%)</li>
+                    <li>Accurate valuation status (Undervalued/Overvalued) instead of fake values</li>
+                    <li>Proper recommendation logic based on margin of safety</li>
+                </ul>
+                <p>Click the buttons above to run different tests.</p>
+            `;
+            resultsDiv.appendChild(infoSection);
+        });
+    </script>
+</body>
+</html>

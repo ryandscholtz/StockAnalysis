@@ -6,7 +6,7 @@ import { stockApi } from '@/lib/api'
 import { StockAnalysis } from '@/types/analysis'
 import { formatPrice } from '@/lib/currency'
 import AnalysisCard from '@/components/AnalysisCard'
-import MarginOfSafety from '@/components/MarginOfSafety'
+import ValuationStatus from '@/components/ValuationStatus'
 import ValuationChart from '@/components/ValuationChart'
 import FinancialHealth from '@/components/FinancialHealth'
 import BusinessQuality from '@/components/BusinessQuality'
@@ -102,6 +102,8 @@ export default function AnalysisPage() {
   }
 
   const loadAnalysis = async (forceRefresh: boolean = false) => {
+    console.log(`🔄 loadAnalysis called with forceRefresh=${forceRefresh}`);
+    
     // Abort any previous request
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
@@ -117,7 +119,8 @@ export default function AnalysisPage() {
     
     try {
       const normalizedTicker = normalizeTicker(ticker)
-      console.log('Starting analysis for', normalizedTicker, '(original:', ticker, ')')
+      console.log('🎯 Starting analysis for', normalizedTicker, '(original:', ticker, ')')
+      console.log('📊 forceRefresh:', forceRefresh, 'businessType:', businessType, 'analysisWeights:', analysisWeights);
       
       // For force refresh, use simple endpoint without progress to ensure compatibility
       // with our Lambda handler that doesn't support streaming
@@ -153,8 +156,15 @@ export default function AnalysisPage() {
       
       // Only update state if component is still mounted and request not aborted
       if (isMountedRef.current && !controller.signal.aborted) {
-        console.log('Analysis complete:', data)
+        console.log('✅ Analysis complete - NEW DATA:', data)
+        console.log('💰 New current price:', data.currentPrice)
+        console.log('🎯 New fair value:', data.fairValue)
+        console.log('📊 Data source:', data.dataSource)
+        
+        console.log('🔄 Updating analysis state...')
         setAnalysis(data)
+        console.log('✅ Analysis state updated!')
+        
         // Update weights and business type from response
         if (data.analysisWeights) {
           setAnalysisWeights(data.analysisWeights)
@@ -172,7 +182,7 @@ export default function AnalysisPage() {
       
       // Only show error if component is still mounted
       if (isMountedRef.current) {
-        console.error('Analysis error:', err)
+        console.error('❌ Analysis error:', err)
         // Use formatted error message (from api.ts interceptor)
         setError(err.message || 'Failed to load analysis')
       }
@@ -299,11 +309,46 @@ export default function AnalysisPage() {
                     ({analysis.currency})
                   </span>
                 )}
+                {analysis.dataSource?.price_source && (
+                  <span style={{ fontSize: '12px', marginLeft: '8px', color: '#10b981' }}>
+                    (Source: {analysis.dataSource.price_source})
+                  </span>
+                )}
               </p>
             ) : (
-              <p style={{ fontSize: '16px', color: '#dc2626', marginTop: '8px' }}>
-                ⚠️ Current price unavailable - Price API may be temporarily unavailable or rate limited
-              </p>
+              <div style={{ marginTop: '8px' }}>
+                <p style={{ fontSize: '16px', color: '#dc2626', marginBottom: '8px' }}>
+                  ⚠️ Current price unavailable
+                </p>
+                {analysis.dataSource?.error && analysis.dataSource.error.includes('rate limit') ? (
+                  <div style={{ 
+                    background: '#fff3cd', 
+                    border: '1px solid #ffeaa7', 
+                    borderRadius: '6px', 
+                    padding: '12px',
+                    fontSize: '14px',
+                    color: '#856404'
+                  }}>
+                    <p style={{ margin: '0 0 8px 0', fontWeight: '600' }}>
+                      📊 MarketStack API Limit Reached
+                    </p>
+                    <p style={{ margin: '0 0 8px 0' }}>
+                      {analysis.dataSource.error.includes('monthly') 
+                        ? 'The monthly usage limit (100 requests) has been exceeded.'
+                        : 'The API has reached its hourly rate limit.'}
+                    </p>
+                    <p style={{ margin: '0', fontSize: '12px' }}>
+                      💡 {analysis.dataSource.error.includes('monthly')
+                        ? 'Upgrade to a paid MarketStack plan or wait until next month for the limit to reset.'
+                        : 'Try again in about 1 hour, or upgrade to a paid MarketStack plan for higher limits.'}
+                    </p>
+                  </div>
+                ) : (
+                  <p style={{ fontSize: '14px', color: '#6b7280' }}>
+                    Price data temporarily unavailable. Please try refreshing in a few minutes.
+                  </p>
+                )}
+              </div>
             )}
             {/* Show current business type and weights info */}
             {analysis.businessType && (
@@ -348,7 +393,11 @@ export default function AnalysisPage() {
                   })()}
             </button>
             <button
-              onClick={() => loadAnalysis(true)}
+              onClick={() => {
+                console.log('🔄 Refresh Data button clicked!');
+                console.log('Current analysis state before refresh:', analysis);
+                loadAnalysis(true);
+              }}
               disabled={loading}
               style={{
                 padding: '10px 20px',
@@ -465,7 +514,7 @@ export default function AnalysisPage() {
       )}
 
       <AnalysisCard analysis={analysis} />
-      <MarginOfSafety analysis={analysis} />
+      <ValuationStatus analysis={analysis} />
       <ValuationChart analysis={analysis} />
       <PriceRatios priceRatios={analysis.priceRatios} />
       <GrowthMetrics growthMetrics={analysis.growthMetrics} currency={analysis.currency} />

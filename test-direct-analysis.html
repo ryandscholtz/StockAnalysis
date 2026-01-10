@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Direct Analysis Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .result { margin: 10px 0; padding: 10px; border: 1px solid #ccc; }
+        .success { background-color: #d4edda; }
+        .error { background-color: #f8d7da; }
+        button { padding: 10px 20px; margin: 10px 0; font-size: 16px; }
+    </style>
+</head>
+<body>
+    <h1>Direct Analysis Endpoint Test</h1>
+    <p>This bypasses all frontend complexity and directly calls the analysis API.</p>
+    
+    <button onclick="testAnalysis()">🔄 Test Analysis Endpoint</button>
+    <button onclick="testWatchlist()">📋 Test Watchlist Endpoint</button>
+    
+    <div id="results"></div>
+
+    <script>
+        const API_BASE_URL = 'https://dx0w31lbc1.execute-api.eu-west-1.amazonaws.com/production';
+        
+        async function testAnalysis() {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<div>🔄 Testing analysis endpoint...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/analyze/AAPL`);
+                const data = await response.json();
+                
+                resultsDiv.innerHTML = `
+                    <div class="result success">
+                        <h3>✅ Analysis Endpoint (/api/analyze/AAPL)</h3>
+                        <p><strong>Status:</strong> ${response.status}</p>
+                        <p><strong>Current Price:</strong> $${data.currentPrice || 'N/A'}</p>
+                        <p><strong>Fair Value:</strong> $${data.fairValue?.toFixed(2) || 'N/A'}</p>
+                        <p><strong>Recommendation:</strong> ${data.recommendation || 'N/A'}</p>
+                        <p><strong>Price Source:</strong> ${data.dataSource?.price_source || 'N/A'}</p>
+                        <p><strong>Has Real Price:</strong> ${data.dataSource?.has_real_price || 'N/A'}</p>
+                        <details>
+                            <summary>Full Response</summary>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </details>
+                    </div>
+                `;
+            } catch (error) {
+                resultsDiv.innerHTML = `
+                    <div class="result error">
+                        <h3>❌ Analysis Endpoint Error</h3>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+        
+        async function testWatchlist() {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<div>🔄 Testing watchlist endpoint...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/watchlist/AAPL`);
+                const data = await response.json();
+                
+                resultsDiv.innerHTML = `
+                    <div class="result error">
+                        <h3>📋 Watchlist Endpoint (/api/watchlist/AAPL)</h3>
+                        <p><strong>Status:</strong> ${response.status}</p>
+                        <p><strong>Current Price:</strong> $${data.latest_analysis?.currentPrice || 'N/A'}</p>
+                        <p><strong>Fair Value:</strong> $${data.latest_analysis?.fairValue || 'N/A'}</p>
+                        <p><strong>Note:</strong> This endpoint should NOT be used for analysis data!</p>
+                        <details>
+                            <summary>Full Response</summary>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </details>
+                    </div>
+                `;
+            } catch (error) {
+                resultsDiv.innerHTML = `
+                    <div class="result error">
+                        <h3>❌ Watchlist Endpoint Error</h3>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>

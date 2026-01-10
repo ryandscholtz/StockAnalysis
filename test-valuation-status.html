@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Valuation Status Changes</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
+        .result { margin: 15px 0; padding: 15px; border: 1px solid #ccc; border-radius: 8px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        button { padding: 12px 24px; margin: 10px 5px; font-size: 16px; cursor: pointer; border: none; border-radius: 6px; }
+        .btn-primary { background-color: #007bff; color: white; }
+        .stock-card { margin: 10px 0; padding: 15px; border: 1px solid #ddd; border-radius: 8px; }
+        .undervalued { border-left: 4px solid #059669; }
+        .overvalued { border-left: 4px solid #dc2626; }
+        .fair { border-left: 4px solid #6b7280; }
+    </style>
+</head>
+<body>
+    <h1>🎯 Valuation Status Test</h1>
+    <p>Testing the new "Undervalued/Overvalued" display instead of "Margin of Safety"</p>
+    
+    <button class="btn-primary" onclick="testValuationDisplay()">📊 Test Valuation Status Display</button>
+    
+    <div id="results"></div>
+
+    <script>
+        const API_BASE_URL = 'https://dx0w31lbc1.execute-api.eu-west-1.amazonaws.com/production';
+        const FRONTEND_URL = 'http://localhost:3000';
+        
+        async function testValuationDisplay() {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<div class="result info"><h3>🔄 Testing valuation status display...</h3></div>';
+            
+            const stocks = ['AAPL', 'MSFT', 'GOOGL', 'TSLA'];
+            const results = [];
+            
+            for (const ticker of stocks) {
+                try {
+                    const response = await fetch(`${API_BASE_URL}/api/analyze/${ticker}`);
+                    const data = await response.json();
+                    
+                    const margin = data.marginOfSafety;
+                    let valuationStatus = 'Fair Value';
+                    let statusClass = 'fair';
+                    
+                    if (margin !== null && margin !== undefined && !isNaN(margin)) {
+                        if (margin > 0) {
+                            valuationStatus = `${Math.abs(margin).toFixed(1)}% Undervalued`;
+                            statusClass = 'undervalued';
+                        } else if (margin < 0) {
+                            valuationStatus = `${Math.abs(margin).toFixed(1)}% Overvalued`;
+                            statusClass = 'overvalued';
+                        }
+                    }
+                    
+                    results.push({
+                        ticker,
+                        currentPrice: data.currentPrice,
+                        fairValue: data.fairValue,
+                        marginOfSafety: margin,
+                        valuationStatus,
+                        statusClass,
+                        recommendation: data.recommendation
+                    });
+                } catch (error) {
+                    results.push({
+                        ticker,
+                        error: error.message
+                    });
+                }
+            }
+            
+            resultsDiv.innerHTML = `
+                <div class="result success">
+                    <h3>📊 Valuation Status Display Test Results</h3>
+                    <p>Testing the new user-friendly valuation display format:</p>
+                    
+                    ${results.map(stock => `
+                        <div class="stock-card ${stock.statusClass || ''}">
+                            <h4>${stock.ticker}</h4>
+                            ${stock.error ? `
+                                <p style="color: #dc3545">❌ Error: ${stock.error}</p>
+                            ` : `
+                                <p><strong>Current Price:</strong> $${stock.currentPrice}</p>
+                                <p><strong>Fair Value:</strong> $${stock.fairValue?.toFixed(2)}</p>
+                                <p><strong>Old Display:</strong> ${stock.marginOfSafety > 0 ? '+' : ''}${stock.marginOfSafety?.toFixed(1)}% (Margin of Safety)</p>
+                                <p><strong>New Display:</strong> <span style="color: ${stock.statusClass === 'undervalued' ? '#059669' : stock.statusClass === 'overvalued' ? '#dc2626' : '#6b7280'}; font-weight: bold;">${stock.valuationStatus}</span></p>
+                                <p><strong>Recommendation:</strong> ${stock.recommendation}</p>
+                            `}
+                        </div>
+                    `).join('')}
+                    
+                    <h4>🎯 Key Improvements:</h4>
+                    <ul>
+                        <li>✅ "30% Undervalued" instead of "+30% Margin of Safety"</li>
+                        <li>✅ "15% Overvalued" instead of "-15% Margin of Safety"</li>
+                        <li>✅ More intuitive language for general users</li>
+                        <li>✅ Clear visual distinction between undervalued/overvalued</li>
+                    </ul>
+                    
+                    <p><strong>🚀 Test in Frontend:</strong> <a href="${FRONTEND_URL}/analysis/AAPL" target="_blank">View AAPL Analysis with New Valuation Status</a></p>
+                </div>
+            `;
+        }
+        
+        // Auto-run test on page load
+        window.onload = function() {
+            testValuationDisplay();
+        };
+    </script>
+</body>
+</html>

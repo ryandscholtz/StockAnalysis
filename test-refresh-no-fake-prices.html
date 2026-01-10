@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Refresh Button - No Fake Prices</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .result { margin: 10px 0; padding: 15px; border: 1px solid #ccc; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .warning { background-color: #fff3cd; border-color: #ffeaa7; }
+        button { padding: 12px 24px; margin: 10px 5px; font-size: 16px; cursor: pointer; }
+        .btn-primary { background-color: #007bff; color: white; border: none; border-radius: 4px; }
+        .btn-success { background-color: #28a745; color: white; border: none; border-radius: 4px; }
+        pre { background-color: #f8f9fa; padding: 10px; border-radius: 4px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>🔄 Refresh Button Test - No Fake Prices Version</h1>
+    <p>Testing that the refresh functionality no longer returns fake $150/$180 prices when MarketStack is rate limited.</p>
+    
+    <button class="btn-primary" onclick="testAnalysisEndpoint()">🔍 Test Analysis Endpoint</button>
+    <button class="btn-success" onclick="testFrontendRefresh()">🔄 Test Frontend Refresh Logic</button>
+    
+    <div id="results"></div>
+
+    <script>
+        const API_BASE_URL = 'https://dx0w31lbc1.execute-api.eu-west-1.amazonaws.com/production';
+        
+        async function testAnalysisEndpoint() {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<div class="result">🔄 Testing analysis endpoint directly...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/analyze/AAPL`);
+                const data = await response.json();
+                
+                let resultClass = 'success';
+                let statusIcon = '✅';
+                let message = '';
+                
+                if (response.status === 503) {
+                    // Expected when rate limited
+                    resultClass = 'warning';
+                    statusIcon = '⚠️';
+                    message = 'API correctly returns 503 Service Unavailable when rate limited (no fake prices!)';
+                } else if (response.status === 200 && data.currentPrice && data.currentPrice !== 150 && data.currentPrice !== 180) {
+                    // Real price data
+                    message = 'API returned real price data from MarketStack!';
+                } else if (response.status === 200 && (data.currentPrice === 150 || data.currentPrice === 180)) {
+                    // This would be bad - fake prices
+                    resultClass = 'error';
+                    statusIcon = '❌';
+                    message = 'ERROR: API still returning fake prices ($150/$180)!';
+                } else {
+                    message = 'API response received';
+                }
+                
+                resultsDiv.innerHTML = `
+                    <div class="result ${resultClass}">
+                        <h3>${statusIcon} Analysis Endpoint Test</h3>
+                        <p><strong>Status:</strong> ${response.status}</p>
+                        <p><strong>Result:</strong> ${message}</p>
+                        <p><strong>Current Price:</strong> ${data.currentPrice || 'null (correct when rate limited)'}</p>
+                        <p><strong>Fair Value:</strong> ${data.fairValue || 'null (correct when rate limited)'}</p>
+                        <p><strong>Recommendation:</strong> ${data.recommendation || 'null (correct when rate limited)'}</p>
+                        <p><strong>Price Source:</strong> ${data.dataSource?.price_source || 'N/A'}</p>
+                        <p><strong>Has Real Price:</strong> ${data.dataSource?.has_real_price || 'N/A'}</p>
+                        ${data.error ? `<p><strong>Error Message:</strong> ${data.error}</p>` : ''}
+                        ${data.suggestions ? `<p><strong>Suggestions:</strong> ${data.suggestions.join(', ')}</p>` : ''}
+                        <details>
+                            <summary>Full API Response</summary>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </details>
+                    </div>
+                `;
+            } catch (error) {
+                resultsDiv.innerHTML = `
+                    <div class="result error">
+                        <h3>❌ API Test Error</h3>
+                        <p><strong>Error:</strong> ${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+        
+        async function testFrontendRefresh() {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<div class="result">🔄 Testing frontend refresh logic...</div>';
+            
+            // Simulate what the frontend refresh button does
+            try {
+                // Test the same endpoint the frontend uses
+                const response = await fetch(`${API_BASE_URL}/api/analyze/AAPL`);
+                const data = await response.json();
+                
+                let resultClass = 'success';
+                let statusIcon = '✅';
+                let message = '';
+                
+                // Check if frontend would handle this correctly
+                if (response.status === 503) {
+                    message = 'Frontend should show error message instead of fake prices';
+                    resultClass = 'warning';
+                    statusIcon = '⚠️';
+                } else if (response.status === 200 && data.currentPrice && data.currentPrice !== 150 && data.currentPrice !== 180) {
+                    message = 'Frontend would display real price data correctly';
+                } else if (data.currentPrice === 150 || data.currentPrice === 180) {
+                    message = 'ERROR: Frontend would still show fake prices!';
+                    resultClass = 'error';
+                    statusIcon = '❌';
+                } else {
+                    message = 'Frontend refresh logic test completed';
+                }
+                
+                resultsDiv.innerHTML = `
+                    <div class="result ${resultClass}">
+                        <h3>${statusIcon} Frontend Refresh Test</h3>
+                        <p><strong>Status:</strong> ${response.status}</p>
+                        <p><strong>Frontend Behavior:</strong> ${message}</p>
+                        <p><strong>Price Data:</strong> ${data.currentPrice || 'null'}</p>
+                        <p><strong>Expected Behavior:</strong> ${response.status === 503 ? 'Show error message to user' : 'Display real price data'}</p>
+                        
+                        <h4>🎯 Test Results:</h4>
+                        <ul>
+                            <li>✅ No fake $150 price: ${data.currentPrice !== 150 ? 'PASS' : 'FAIL'}</li>
+                            <li>✅ No fake $180 fair value: ${data.fairValue !== 180 ? 'PASS' : 'FAIL'}</li>
+                            <li>✅ Proper error handling: ${response.status === 503 || (data.currentPrice && data.currentPrice !== 150) ? 'PASS' : 'FAIL'}</li>
+                            <li>✅ Rate limit message: ${data.error && data.error.includes('rate limit') ? 'PASS' : (response.status === 200 ? 'N/A (real data)' : 'FAIL')}</li>
+                        </ul>
+                        
+                        <details>
+                            <summary>Full Response for Frontend</summary>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </details>
+                    </div>
+                `;
+            } catch (error) {
+                resultsDiv.innerHTML = `
+                    <div class="result error">
+                        <h3>❌ Frontend Test Error</h3>
+                        <p><strong>Error:</strong> ${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+        
+        // Auto-run tests on page load
+        window.onload = function() {
+            testAnalysisEndpoint();
+        };
+    </script>
+</body>
+</html>

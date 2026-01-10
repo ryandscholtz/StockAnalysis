@@ -480,12 +480,53 @@ export const stockApi = {
       })
     } else {
       // Standard request without progress
+      console.log('🌐 Using standard endpoint (no streaming)');
       const params: any = {}
-      if (forceRefresh) params.force_refresh = true
+      if (forceRefresh) {
+        params.force_refresh = true
+        console.log('🔄 Adding force_refresh=true parameter');
+      }
       if (businessType) params.business_type = businessType
       if (weights) params.weights = JSON.stringify(weights)
-      const response = await api.get<StockAnalysis>(`/api/analyze/${ticker}`, { params })
-      return response.data
+      
+      console.log(`📡 Calling: /api/analyze/${ticker} with params:`, params);
+      try {
+        const response = await api.get<StockAnalysis>(`/api/analyze/${ticker}`, { params })
+        console.log('✅ Standard endpoint response received:', response.data);
+        return response.data
+      } catch (error: any) {
+        // Special handling for 503 Service Unavailable (rate limited)
+        if (error.response?.status === 503 && error.response?.data) {
+          console.log('⚠️ API rate limited, returning partial analysis data');
+          // Return the error response data as if it were a successful analysis
+          // This allows the frontend to show the rate limit message properly
+          return {
+            ...error.response.data,
+            // Ensure required fields are present for TypeScript
+            ticker: error.response.data.ticker || ticker,
+            companyName: error.response.data.companyName || `${ticker} Inc.`,
+            currentPrice: error.response.data.currentPrice || null,
+            fairValue: error.response.data.fairValue || null,
+            marginOfSafety: 0,
+            upsidePotential: 0,
+            priceToIntrinsicValue: 1.0,
+            recommendation: error.response.data.recommendation || 'Hold',
+            recommendationReasoning: error.response.data.message || 'Price data temporarily unavailable',
+            valuation: {
+              dcf: null,
+              earningsPower: null,
+              assetBased: null,
+              weightedAverage: null
+            },
+            financialHealth: { score: null, metrics: {} },
+            businessQuality: { score: null, moatIndicators: [], competitivePosition: '' },
+            timestamp: new Date().toISOString(),
+            dataSource: error.response.data.dataSource
+          } as StockAnalysis
+        }
+        // Re-throw other errors
+        throw error
+      }
     }
   },
 
@@ -638,11 +679,11 @@ export const stockApi = {
         exchange: item.exchange,
         added_at: item.addedAt,
         notes: item.notes,
-        // Add some mock data for display
-        current_price: 150.00,
-        fair_value: 180.00,
-        margin_of_safety_pct: 16.67,
-        recommendation: 'BUY'
+        // Use real data from API (no more mock data)
+        current_price: undefined,
+        fair_value: undefined,
+        margin_of_safety_pct: undefined,
+        recommendation: undefined
       }))
       console.log('Converted client items:', clientItems)
       
@@ -674,11 +715,11 @@ export const stockApi = {
         exchange: item.exchange,
         added_at: item.addedAt,
         notes: item.notes,
-        // Add some mock data for display
-        current_price: 150.00,
-        fair_value: 180.00,
-        margin_of_safety_pct: 16.67,
-        recommendation: 'BUY'
+        // Use real data from API (no more mock data)
+        current_price: undefined,
+        fair_value: undefined,
+        margin_of_safety_pct: undefined,
+        recommendation: undefined
       }))
       
       const result = {

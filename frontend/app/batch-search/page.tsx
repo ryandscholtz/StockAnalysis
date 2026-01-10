@@ -665,7 +665,11 @@ export default function BatchSearchPage() {
                       <div>Price: {formatPrice(stock.current_price)}</div>
                       <div>Fair Value: {formatPrice(stock.fair_value)}</div>
                       <div style={{ marginTop: '4px', color: isGoodDeal ? '#10b981' : '#6b7280' }}>
-                        Margin: {formatPercent(stock.margin_of_safety_pct, 1)}
+                        Valuation: {stock.margin_of_safety_pct && stock.margin_of_safety_pct !== 0 
+                          ? stock.margin_of_safety_pct > 0 
+                            ? `${Math.abs(stock.margin_of_safety_pct).toFixed(1)}% Under`
+                            : `${Math.abs(stock.margin_of_safety_pct).toFixed(1)}% Over`
+                          : 'Fair Value'}
                       </div>
                     </div>
                   </div>
