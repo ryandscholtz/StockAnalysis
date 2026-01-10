@@ -118,26 +118,38 @@ export default function AnalysisPage() {
     try {
       const normalizedTicker = normalizeTicker(ticker)
       console.log('Starting analysis for', normalizedTicker, '(original:', ticker, ')')
-      const data = await stockApi.analyzeStock(
-        normalizedTicker, 
-        (update) => {
-        // Only update if component is still mounted and request not aborted
-        if (isMountedRef.current && !controller.signal.aborted) {
-          console.log('Progress callback received:', update)
-          if (update.type === 'progress') {
-            setProgress({
-              step: update.step || 0,
-              total: update.total || 8,
-              task: update.task || ''
-            })
-          }
-        }
-      }, 
-      controller.signal, 
-      forceRefresh,
-      businessType,
-      analysisWeights
-      )
+      
+      // For force refresh, use simple endpoint without progress to ensure compatibility
+      // with our Lambda handler that doesn't support streaming
+      const data = forceRefresh 
+        ? await stockApi.analyzeStock(
+            normalizedTicker, 
+            undefined, // No progress callback for refresh to use simple endpoint
+            controller.signal, 
+            forceRefresh,
+            businessType,
+            analysisWeights
+          )
+        : await stockApi.analyzeStock(
+            normalizedTicker, 
+            (update) => {
+              // Only update if component is still mounted and request not aborted
+              if (isMountedRef.current && !controller.signal.aborted) {
+                console.log('Progress callback received:', update)
+                if (update.type === 'progress') {
+                  setProgress({
+                    step: update.step || 0,
+                    total: update.total || 8,
+                    task: update.task || ''
+                  })
+                }
+              }
+            }, 
+            controller.signal, 
+            forceRefresh,
+            businessType,
+            analysisWeights
+          )
       
       // Only update state if component is still mounted and request not aborted
       if (isMountedRef.current && !controller.signal.aborted) {
