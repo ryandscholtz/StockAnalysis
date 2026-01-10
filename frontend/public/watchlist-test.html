@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Watchlist Simulation Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        button { margin: 5px; padding: 10px 15px; }
+        .result { margin: 10px 0; padding: 10px; background: #f0f0f0; border-radius: 5px; }
+        .success { background: #d4edda; }
+        .error { background: #f8d7da; }
+    </style>
+</head>
+<body>
+    <h1>Watchlist Simulation Test</h1>
+    <p>Testing client-side watchlist functionality</p>
+    
+    <button onclick="testAddKO()">Add KO (Coca-Cola)</button>
+    <button onclick="testAddAAPL()">Add AAPL (Apple)</button>
+    <button onclick="showWatchlist()">Show Watchlist</button>
+    <button onclick="clearWatchlist()">Clear Watchlist</button>
+    
+    <div id="results"></div>
+
+    <script>
+        // Copy the WatchlistSimulation class directly here for testing
+        class WatchlistSimulation {
+            static getWatchlist() {
+                try {
+                    const stored = localStorage.getItem('stock-analysis-watchlist')
+                    return stored ? JSON.parse(stored) : []
+                } catch (error) {
+                    console.error('Error reading watchlist from localStorage:', error)
+                    return []
+                }
+            }
+
+            static addToWatchlist(ticker, companyName, exchange, notes) {
+                try {
+                    const watchlist = this.getWatchlist()
+                    
+                    // Check if already exists
+                    if (watchlist.some(item => item.ticker.toUpperCase() === ticker.toUpperCase())) {
+                        return false // Already exists
+                    }
+
+                    const newItem = {
+                        ticker: ticker.toUpperCase(),
+                        companyName,
+                        exchange,
+                        addedAt: new Date().toISOString(),
+                        notes
+                    }
+
+                    watchlist.push(newItem)
+                    localStorage.setItem('stock-analysis-watchlist', JSON.stringify(watchlist))
+                    return true
+                } catch (error) {
+                    console.error('Error adding to watchlist:', error)
+                    return false
+                }
+            }
+
+            static removeFromWatchlist(ticker) {
+                try {
+                    const watchlist = this.getWatchlist()
+                    const filtered = watchlist.filter(item => item.ticker.toUpperCase() !== ticker.toUpperCase())
+                    
+                    if (filtered.length === watchlist.length) {
+                        return false // Item not found
+                    }
+
+                    localStorage.setItem('stock-analysis-watchlist', JSON.stringify(filtered))
+                    return true
+                } catch (error) {
+                    console.error('Error removing from watchlist:', error)
+                    return false
+                }
+            }
+
+            static isInWatchlist(ticker) {
+                const watchlist = this.getWatchlist()
+                return watchlist.some(item => item.ticker.toUpperCase() === ticker.toUpperCase())
+            }
+
+            static clearWatchlist() {
+                localStorage.removeItem('stock-analysis-watchlist')
+            }
+        }
+
+        function addResult(message, isSuccess = true) {
+            const resultsDiv = document.getElementById('results');
+            const div = document.createElement('div');
+            div.className = `result ${isSuccess ? 'success' : 'error'}`;
+            div.innerHTML = `<strong>${new Date().toLocaleTimeString()}</strong>: ${message}`;
+            resultsDiv.appendChild(div);
+        }
+
+        function testAddKO() {
+            console.log('Testing add KO...');
+            try {
+                const result = WatchlistSimulation.addToWatchlist('KO', 'The Coca-Cola Company', 'NYSE');
+                console.log('Add KO result:', result);
+                
+                if (result) {
+                    addResult('✅ Successfully added KO to watchlist', true);
+                } else {
+                    addResult('⚠️ KO already in watchlist or failed to add', false);
+                }
+                
+                showWatchlist();
+            } catch (error) {
+                console.error('Error adding KO:', error);
+                addResult(`❌ Error adding KO: ${error.message}`, false);
+            }
+        }
+
+        function testAddAAPL() {
+            console.log('Testing add AAPL...');
+            try {
+                const result = WatchlistSimulation.addToWatchlist('AAPL', 'Apple Inc.', 'NASDAQ');
+                console.log('Add AAPL result:', result);
+                
+                if (result) {
+                    addResult('✅ Successfully added AAPL to watchlist', true);
+                } else {
+                    addResult('⚠️ AAPL already in watchlist or failed to add', false);
+                }
+                
+                showWatchlist();
+            } catch (error) {
+                console.error('Error adding AAPL:', error);
+                addResult(`❌ Error adding AAPL: ${error.message}`, false);
+            }
+        }
+
+        function showWatchlist() {
+            try {
+                const watchlist = WatchlistSimulation.getWatchlist();
+                console.log('Current watchlist:', watchlist);
+                
+                if (watchlist.length === 0) {
+                    addResult('📋 Watchlist is empty', true);
+                } else {
+                    const items = watchlist.map(item => `${item.ticker} (${item.companyName})`).join(', ');
+                    addResult(`📋 Watchlist (${watchlist.length} items): ${items}`, true);
+                }
+            } catch (error) {
+                console.error('Error showing watchlist:', error);
+                addResult(`❌ Error showing watchlist: ${error.message}`, false);
+            }
+        }
+
+        function clearWatchlist() {
+            try {
+                WatchlistSimulation.clearWatchlist();
+                addResult('🗑️ Watchlist cleared', true);
+                showWatchlist();
+            } catch (error) {
+                console.error('Error clearing watchlist:', error);
+                addResult(`❌ Error clearing watchlist: ${error.message}`, false);
+            }
+        }
+
+        // Test localStorage access on page load
+        window.onload = function() {
+            try {
+                // Test localStorage access
+                localStorage.setItem('test', 'test');
+                localStorage.removeItem('test');
+                addResult('✅ localStorage access working', true);
+                
+                // Show current watchlist
+                showWatchlist();
+            } catch (error) {
+                addResult(`❌ localStorage access failed: ${error.message}`, false);
+            }
+        };
+    </script>
+</body>
+</html>

@@ -1,0 +1,53 @@
+
+<!DOCTYPE html>
+<html>
+<head><title>Watchlist Debug</title></head>
+<body>
+  <h1>Watchlist Debug Test</h1>
+  <div id="results"></div>
+  <script>
+    console.log('Testing localStorage...');
+    
+    // Test localStorage
+    try {
+      localStorage.setItem('test', 'working');
+      const test = localStorage.getItem('test');
+      console.log('localStorage test:', test);
+      localStorage.removeItem('test');
+      
+      // Test watchlist simulation
+      const WATCHLIST_STORAGE_KEY = 'stock-analysis-watchlist';
+      
+      // Clear any existing data
+      localStorage.removeItem(WATCHLIST_STORAGE_KEY);
+      
+      // Test adding an item
+      const watchlist = [];
+      const newItem = {
+        ticker: 'KO',
+        companyName: 'The Coca-Cola Company',
+        exchange: 'NYSE',
+        addedAt: new Date().toISOString()
+      };
+      
+      watchlist.push(newItem);
+      localStorage.setItem(WATCHLIST_STORAGE_KEY, JSON.stringify(watchlist));
+      
+      // Test reading back
+      const stored = localStorage.getItem(WATCHLIST_STORAGE_KEY);
+      const parsed = JSON.parse(stored);
+      
+      console.log('Stored watchlist:', parsed);
+      
+      document.getElementById('results').innerHTML = 
+        '<p>✅ localStorage working</p>' +
+        '<p>✅ Watchlist simulation working</p>' +
+        '<p>Stored: ' + JSON.stringify(parsed, null, 2) + '</p>';
+        
+    } catch (error) {
+      console.error('Error:', error);
+      document.getElementById('results').innerHTML = '<p>❌ Error: ' + error.message + '</p>';
+    }
+  </script>
+</body>
+</html>

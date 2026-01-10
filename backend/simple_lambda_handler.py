@@ -1,11 +1,79 @@
 """
-Simplified AWS Lambda handler for Stock Analysis API
-This is a minimal version to get basic functionality working
+Enhanced AWS Lambda handler for Stock Analysis API with MarketStack integration
+Provides real stock data using MarketStack API
 """
 
 import json
 import os
-from typing import Dict, Any
+import requests
+import logging
+from typing import Dict, Any, Optional
+
+# Set up logging
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+class MarketStackClient:
+    """MarketStack API client for real stock data"""
+    
+    def __init__(self, api_key: Optional[str] = None):
+        self.api_key = api_key or os.getenv("MARKETSTACK_API_KEY")
+        self.base_url = "http://api.marketstack.com/v1"
+    
+    def _make_request(self, endpoint: str, params: Optional[Dict] = None) -> Optional[Dict]:
+        """Make API request to MarketStack"""
+        if not self.api_key:
+            logger.warning("MarketStack API key not configured")
+            return None
+        
+        try:
+            url = f"{self.base_url}/{endpoint}"
+            request_params = {"access_key": self.api_key}
+            if params:
+                request_params.update(params)
+            
+            response = requests.get(url, params=request_params, timeout=10)
+            
+            if response.status_code == 200:
+                return response.json()
+            elif response.status_code == 429:
+                logger.warning("MarketStack rate limit exceeded")
+                return None
+            else:
+                logger.warning(f"MarketStack returned status {response.status_code}")
+                return None
+        except Exception as e:
+            logger.error(f"Error calling MarketStack API: {e}")
+            return None
+    
+    def get_latest_price(self, ticker: str) -> Optional[Dict]:
+        """Get latest price for a ticker"""
+        data = self._make_request("intraday/latest", {"symbols": ticker})
+        if data and data.get('data'):
+            latest = data['data'][0] if isinstance(data['data'], list) else data['data']
+            return {
+                'price': latest.get('last'),
+                'volume': latest.get('volume'),
+                'timestamp': latest.get('date'),
+                'symbol': latest.get('symbol')
+            }
+        return None
+    
+    def get_end_of_day(self, ticker: str) -> Optional[Dict]:
+        """Get end of day data for a ticker"""
+        data = self._make_request("eod/latest", {"symbols": ticker})
+        if data and data.get('data'):
+            latest = data['data'][0] if isinstance(data['data'], list) else data['data']
+            return {
+                'price': latest.get('close'),
+                'open': latest.get('open'),
+                'high': latest.get('high'),
+                'low': latest.get('low'),
+                'volume': latest.get('volume'),
+                'timestamp': latest.get('date'),
+                'symbol': latest.get('symbol')
+            }
+        return None
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
@@ -174,7 +242,83 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 })
             }
         
-        # Individual watchlist item endpoint - handle GET, POST, DELETE
+        # Watchlist live prices endpoint - Enhanced with MarketStack (MUST BE BEFORE individual item handler)
+        if path == '/api/watchlist/live-prices':
+            # Initialize MarketStack client
+            marketstack = MarketStackClient()
+            
+            # Get watchlist tickers (for now, use common tickers from the mock watchlist)
+            # In a real implementation, this would fetch from the user's actual watchlist
+            watchlist_tickers = ['AAPL', 'KO', 'MSFT', 'GOOGL', 'TSLA']
+            
+            live_prices = {}
+            
+            for ticker in watchlist_tickers:
+                try:
+                    # Try to get real price from MarketStack
+                    price_data = marketstack.get_latest_price(ticker)
+                    
+                    if price_data and price_data.get('price'):
+                        live_prices[ticker] = {
+                            'price': float(price_data['price']),
+                            'company_name': f'{ticker} Inc.' if ticker == 'AAPL' else f'{ticker} Corporation',
+                            'success': True,
+                            'timestamp': price_data.get('timestamp'),
+                            'volume': price_data.get('volume'),
+                            'source': 'MarketStack'
+                        }
+                        logger.info(f"Got real price for {ticker}: ${price_data['price']}")
+                    else:
+                        # Fallback to end-of-day data if intraday fails
+                        eod_data = marketstack.get_end_of_day(ticker)
+                        if eod_data and eod_data.get('price'):
+                            live_prices[ticker] = {
+                                'price': float(eod_data['price']),
+                                'company_name': f'{ticker} Inc.' if ticker == 'AAPL' else f'{ticker} Corporation',
+                                'success': True,
+                                'timestamp': eod_data.get('timestamp'),
+                                'volume': eod_data.get('volume'),
+                                'source': 'MarketStack (EOD)',
+                                'comment': 'End-of-day price (intraday not available)'
+                            }
+                            logger.info(f"Got EOD price for {ticker}: ${eod_data['price']}")
+                        else:
+                            # Final fallback to mock data with error indication
+                            live_prices[ticker] = {
+                                'price': 150.00,
+                                'company_name': f'{ticker} Inc.' if ticker == 'AAPL' else f'{ticker} Corporation',
+                                'success': False,
+                                'error': 'MarketStack API unavailable',
+                                'comment': 'Using cached/mock price - API limit may be reached',
+                                'source': 'Mock (fallback)'
+                            }
+                            logger.warning(f"Using mock price for {ticker} - MarketStack unavailable")
+                            
+                except Exception as e:
+                    logger.error(f"Error fetching price for {ticker}: {e}")
+                    live_prices[ticker] = {
+                        'price': 150.00,
+                        'company_name': f'{ticker} Inc.' if ticker == 'AAPL' else f'{ticker} Corporation',
+                        'success': False,
+                        'error': f'Error: {str(e)}',
+                        'source': 'Mock (error fallback)'
+                    }
+            
+            return {
+                'statusCode': 200,
+                'headers': headers,
+                'body': json.dumps({
+                    'live_prices': live_prices,
+                    'api_info': {
+                        'source': 'MarketStack API',
+                        'has_api_key': bool(marketstack.api_key),
+                        'tickers_requested': len(watchlist_tickers),
+                        'tickers_with_real_data': len([p for p in live_prices.values() if p.get('success')])
+                    }
+                })
+            }
+        
+        # Individual watchlist item endpoint - handle GET, POST, DELETE (AFTER live-prices check)
         if path.startswith('/api/watchlist/') and not path.endswith('/live-prices'):
             ticker = path.split('/')[-1].upper()
             
@@ -337,18 +481,154 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 })
             }
         
-        # Watchlist live prices endpoint
+        # Watchlist live prices endpoint - Enhanced with MarketStack
         if path == '/api/watchlist/live-prices':
+            # Initialize MarketStack client
+            marketstack = MarketStackClient()
+            
+            # Get watchlist tickers (for now, use common tickers from the mock watchlist)
+            # In a real implementation, this would fetch from the user's actual watchlist
+            watchlist_tickers = ['AAPL', 'KO', 'MSFT', 'GOOGL', 'TSLA']
+            
+            live_prices = {}
+            
+            for ticker in watchlist_tickers:
+                try:
+                    # Try to get real price from MarketStack
+                    price_data = marketstack.get_latest_price(ticker)
+                    
+                    if price_data and price_data.get('price'):
+                        live_prices[ticker] = {
+                            'price': float(price_data['price']),
+                            'company_name': f'{ticker} Inc.' if ticker == 'AAPL' else f'{ticker} Corporation',
+                            'success': True,
+                            'timestamp': price_data.get('timestamp'),
+                            'volume': price_data.get('volume'),
+                            'source': 'MarketStack'
+                        }
+                        logger.info(f"Got real price for {ticker}: ${price_data['price']}")
+                    else:
+                        # Fallback to end-of-day data if intraday fails
+                        eod_data = marketstack.get_end_of_day(ticker)
+                        if eod_data and eod_data.get('price'):
+                            live_prices[ticker] = {
+                                'price': float(eod_data['price']),
+                                'company_name': f'{ticker} Inc.' if ticker == 'AAPL' else f'{ticker} Corporation',
+                                'success': True,
+                                'timestamp': eod_data.get('timestamp'),
+                                'volume': eod_data.get('volume'),
+                                'source': 'MarketStack (EOD)',
+                                'comment': 'End-of-day price (intraday not available)'
+                            }
+                            logger.info(f"Got EOD price for {ticker}: ${eod_data['price']}")
+                        else:
+                            # Final fallback to mock data with error indication
+                            live_prices[ticker] = {
+                                'price': 150.00,
+                                'company_name': f'{ticker} Inc.' if ticker == 'AAPL' else f'{ticker} Corporation',
+                                'success': False,
+                                'error': 'MarketStack API unavailable',
+                                'comment': 'Using cached/mock price - API limit may be reached',
+                                'source': 'Mock (fallback)'
+                            }
+                            logger.warning(f"Using mock price for {ticker} - MarketStack unavailable")
+                            
+                except Exception as e:
+                    logger.error(f"Error fetching price for {ticker}: {e}")
+                    live_prices[ticker] = {
+                        'price': 150.00,
+                        'company_name': f'{ticker} Inc.' if ticker == 'AAPL' else f'{ticker} Corporation',
+                        'success': False,
+                        'error': f'Error: {str(e)}',
+                        'source': 'Mock (error fallback)'
+                    }
+            
             return {
                 'statusCode': 200,
                 'headers': headers,
                 'body': json.dumps({
-                    'live_prices': {
-                        'AAPL': {
-                            'price': 150.00,
-                            'company_name': 'Apple Inc.',
-                            'success': True
+                    'live_prices': live_prices,
+                    'api_info': {
+                        'source': 'MarketStack API',
+                        'has_api_key': bool(marketstack.api_key),
+                        'tickers_requested': len(watchlist_tickers),
+                        'tickers_with_real_data': len([p for p in live_prices.values() if p.get('success')])
+                    }
+                })
+            }
+        
+        # Watchlist live prices endpoint - Enhanced with MarketStack
+        if path == '/api/watchlist/live-prices':
+            # Initialize MarketStack client
+            marketstack = MarketStackClient()
+            
+            # Get watchlist tickers (for now, use common tickers from the mock watchlist)
+            # In a real implementation, this would fetch from the user's actual watchlist
+            watchlist_tickers = ['AAPL', 'KO', 'MSFT', 'GOOGL', 'TSLA']
+            
+            live_prices = {}
+            
+            for ticker in watchlist_tickers:
+                try:
+                    # Try to get real price from MarketStack
+                    price_data = marketstack.get_latest_price(ticker)
+                    
+                    if price_data and price_data.get('price'):
+                        live_prices[ticker] = {
+                            'price': float(price_data['price']),
+                            'company_name': f'{ticker} Inc.' if ticker == 'AAPL' else f'{ticker} Corporation',
+                            'success': True,
+                            'timestamp': price_data.get('timestamp'),
+                            'volume': price_data.get('volume'),
+                            'source': 'MarketStack'
                         }
+                        logger.info(f"Got real price for {ticker}: ${price_data['price']}")
+                    else:
+                        # Fallback to end-of-day data if intraday fails
+                        eod_data = marketstack.get_end_of_day(ticker)
+                        if eod_data and eod_data.get('price'):
+                            live_prices[ticker] = {
+                                'price': float(eod_data['price']),
+                                'company_name': f'{ticker} Inc.' if ticker == 'AAPL' else f'{ticker} Corporation',
+                                'success': True,
+                                'timestamp': eod_data.get('timestamp'),
+                                'volume': eod_data.get('volume'),
+                                'source': 'MarketStack (EOD)',
+                                'comment': 'End-of-day price (intraday not available)'
+                            }
+                            logger.info(f"Got EOD price for {ticker}: ${eod_data['price']}")
+                        else:
+                            # Final fallback to mock data with error indication
+                            live_prices[ticker] = {
+                                'price': 150.00,
+                                'company_name': f'{ticker} Inc.' if ticker == 'AAPL' else f'{ticker} Corporation',
+                                'success': False,
+                                'error': 'MarketStack API unavailable',
+                                'comment': 'Using cached/mock price - API limit may be reached',
+                                'source': 'Mock (fallback)'
+                            }
+                            logger.warning(f"Using mock price for {ticker} - MarketStack unavailable")
+                            
+                except Exception as e:
+                    logger.error(f"Error fetching price for {ticker}: {e}")
+                    live_prices[ticker] = {
+                        'price': 150.00,
+                        'company_name': f'{ticker} Inc.' if ticker == 'AAPL' else f'{ticker} Corporation',
+                        'success': False,
+                        'error': f'Error: {str(e)}',
+                        'source': 'Mock (error fallback)'
+                    }
+            
+            return {
+                'statusCode': 200,
+                'headers': headers,
+                'body': json.dumps({
+                    'live_prices': live_prices,
+                    'api_info': {
+                        'source': 'MarketStack API',
+                        'has_api_key': bool(marketstack.api_key),
+                        'tickers_requested': len(watchlist_tickers),
+                        'tickers_with_real_data': len([p for p in live_prices.values() if p.get('success')])
                     }
                 })
             }

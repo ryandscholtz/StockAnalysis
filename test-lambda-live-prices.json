@@ -1,0 +1,9 @@
+{
+  "httpMethod": "GET",
+  "path": "/api/watchlist/live-prices",
+  "queryStringParameters": null,
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": null
+}

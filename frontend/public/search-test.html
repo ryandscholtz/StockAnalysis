@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Search Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        input { padding: 10px; width: 300px; margin: 10px 0; }
+        button { padding: 10px 20px; }
+        .result { margin: 5px 0; padding: 10px; background: #f0f0f0; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <h1>Enhanced Search Test</h1>
+    <input type="text" id="searchInput" placeholder="Search for stocks (e.g., AAPL, coke, tesla)" />
+    <button onclick="testSearch()">Search</button>
+    <div id="results"></div>
+
+    <script>
+        // Copy the enhanced search logic directly here for testing
+        const POPULAR_TICKERS = [
+            { ticker: 'AAPL', companyName: 'Apple Inc.', exchange: 'NASDAQ', sector: 'Technology', aliases: ['apple'] },
+            { ticker: 'MSFT', companyName: 'Microsoft Corporation', exchange: 'NASDAQ', sector: 'Technology', aliases: ['microsoft'] },
+            { ticker: 'GOOGL', companyName: 'Alphabet Inc. Class A', exchange: 'NASDAQ', sector: 'Technology', aliases: ['google', 'alphabet'] },
+            { ticker: 'GOOG', companyName: 'Alphabet Inc. Class C', exchange: 'NASDAQ', sector: 'Technology', aliases: ['google', 'alphabet'] },
+            { ticker: 'AMZN', companyName: 'Amazon.com Inc.', exchange: 'NASDAQ', sector: 'Technology', aliases: ['amazon'] },
+            { ticker: 'TSLA', companyName: 'Tesla Inc.', exchange: 'NASDAQ', sector: 'Technology', aliases: ['tesla'] },
+            { ticker: 'META', companyName: 'Meta Platforms Inc.', exchange: 'NASDAQ', sector: 'Technology', aliases: ['meta', 'facebook', 'fb'] },
+            { ticker: 'NVDA', companyName: 'NVIDIA Corporation', exchange: 'NASDAQ', sector: 'Technology', aliases: ['nvidia'] },
+            { ticker: 'NFLX', companyName: 'Netflix Inc.', exchange: 'NASDAQ', sector: 'Technology', aliases: ['netflix'] },
+            { ticker: 'KO', companyName: 'The Coca-Cola Company', exchange: 'NYSE', sector: 'Consumer', aliases: ['coke', 'coca cola', 'coca-cola'] },
+            { ticker: 'PEP', companyName: 'PepsiCo Inc.', exchange: 'NASDAQ', sector: 'Consumer', aliases: ['pepsi'] },
+            { ticker: 'WMT', companyName: 'Walmart Inc.', exchange: 'NYSE', sector: 'Consumer', aliases: ['walmart'] },
+            { ticker: 'HD', companyName: 'The Home Depot Inc.', exchange: 'NYSE', sector: 'Consumer', aliases: ['home depot'] },
+            { ticker: 'MCD', companyName: 'McDonald\'s Corporation', exchange: 'NYSE', sector: 'Consumer', aliases: ['mcdonalds', 'mcdonald'] },
+        ];
+
+        function searchTickers(query, limit = 10) {
+            if (!query || query.trim().length === 0) {
+                return []
+            }
+
+            const queryUpper = query.toUpperCase().trim()
+            const results = []
+
+            // First, find exact ticker matches
+            const exactMatches = POPULAR_TICKERS.filter(ticker => 
+                ticker.ticker.toUpperCase() === queryUpper
+            )
+            results.push(...exactMatches)
+
+            // Then, find ticker starts with matches
+            if (results.length < limit) {
+                const startsWithMatches = POPULAR_TICKERS.filter(ticker => 
+                    ticker.ticker.toUpperCase().startsWith(queryUpper) && 
+                    !results.some(r => r.ticker === ticker.ticker)
+                )
+                results.push(...startsWithMatches.slice(0, limit - results.length))
+            }
+
+            // Then, find ticker contains matches
+            if (results.length < limit) {
+                const containsMatches = POPULAR_TICKERS.filter(ticker => 
+                    ticker.ticker.toUpperCase().includes(queryUpper) && 
+                    !results.some(r => r.ticker === ticker.ticker)
+                )
+                results.push(...containsMatches.slice(0, limit - results.length))
+            }
+
+            // Then, find company name matches
+            if (results.length < limit) {
+                const companyMatches = POPULAR_TICKERS.filter(ticker => 
+                    ticker.companyName.toUpperCase().includes(queryUpper) && 
+                    !results.some(r => r.ticker === ticker.ticker)
+                )
+                results.push(...companyMatches.slice(0, limit - results.length))
+            }
+
+            // Finally, find alias matches
+            if (results.length < limit) {
+                const aliasMatches = POPULAR_TICKERS.filter(ticker => 
+                    ticker.aliases && 
+                    ticker.aliases.some(alias => alias.toUpperCase().includes(queryUpper)) &&
+                    !results.some(r => r.ticker === ticker.ticker)
+                )
+                results.push(...aliasMatches.slice(0, limit - results.length))
+            }
+
+            return results.slice(0, limit)
+        }
+
+        function testSearch() {
+            const query = document.getElementById('searchInput').value;
+            const results = searchTickers(query, 10);
+            
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '';
+            
+            if (results.length === 0) {
+                resultsDiv.innerHTML = '<div class="result">❌ No results found</div>';
+                return;
+            }
+            
+            results.forEach(result => {
+                const div = document.createElement('div');
+                div.className = 'result';
+                div.innerHTML = `
+                    <strong>${result.ticker}</strong> - ${result.companyName} (${result.exchange})
+                    ${result.aliases ? '<br><small>Aliases: ' + result.aliases.join(', ') + '</small>' : ''}
+                `;
+                resultsDiv.appendChild(div);
+            });
+        }
+
+        // Test on Enter key
+        document.getElementById('searchInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                testSearch();
+            }
+        });
+
+        // Auto-test some queries
+        window.onload = function() {
+            const testQueries = ['AAPL', 'coke', 'tesla', 'KO'];
+            let index = 0;
+            
+            function runNextTest() {
+                if (index < testQueries.length) {
+                    document.getElementById('searchInput').value = testQueries[index];
+                    testSearch();
+                    index++;
+                    setTimeout(runNextTest, 2000);
+                }
+            }
+            
+            setTimeout(runNextTest, 1000);
+        };
+    </script>
+</body>
+</html>

@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CORS Test - Stock Analysis API</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .result { margin: 10px 0; padding: 10px; border: 1px solid #ccc; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; color: #155724; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; color: #721c24; }
+        button { margin: 5px; padding: 10px 15px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 5px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>🔍 CORS Test - Stock Analysis API</h1>
+    <p>Testing CORS connectivity from browser to production API</p>
+    <p><strong>API Base:</strong> https://9ye8wru6s5.execute-api.us-east-1.amazonaws.com/production</p>
+    
+    <button onclick="runAllTests()">🚀 Run All Tests</button>
+    <button onclick="clearResults()">🗑️ Clear Results</button>
+    
+    <div id="results"></div>
+
+    <script>
+        const API_BASE = 'https://9ye8wru6s5.execute-api.us-east-1.amazonaws.com/production';
+        
+        function addResult(title, content, isError = false, details = null) {
+            const resultsDiv = document.getElementById('results');
+            const resultDiv = document.createElement('div');
+            resultDiv.className = `result ${isError ? 'error' : 'success'}`;
+            
+            let html = `<h3>${title}</h3>`;
+            if (typeof content === 'string') {
+                html += `<p>${content}</p>`;
+            } else {
+                html += `<pre>${JSON.stringify(content, null, 2)}</pre>`;
+            }
+            
+            if (details) {
+                html += `<details><summary>Details</summary><pre>${JSON.stringify(details, null, 2)}</pre></details>`;
+            }
+            
+            resultDiv.innerHTML = html;
+            resultsDiv.appendChild(resultDiv);
+        }
+        
+        function clearResults() {
+            document.getElementById('results').innerHTML = '';
+        }
+        
+        async function testEndpoint(endpoint, description) {
+            console.log(`Testing ${description}...`);
+            
+            try {
+                const url = `${API_BASE}${endpoint}`;
+                console.log(`Fetching: ${url}`);
+                
+                const response = await fetch(url, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                console.log(`Response status: ${response.status}`);
+                console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('Response data:', data);
+                    
+                    const corsHeaders = {
+                        'Access-Control-Allow-Origin': response.headers.get('Access-Control-Allow-Origin'),
+                        'Access-Control-Allow-Methods': response.headers.get('Access-Control-Allow-Methods'),
+                        'Access-Control-Allow-Headers': response.headers.get('Access-Control-Allow-Headers')
+                    };
+                    
+                    addResult(
+                        `✅ ${description} - SUCCESS`,
+                        `Status: ${response.status} OK`,
+                        false,
+                        { corsHeaders, responseData: data }
+                    );
+                    return true;
+                } else {
+                    addResult(
+                        `❌ ${description} - HTTP Error`,
+                        `Status: ${response.status} ${response.statusText}`,
+                        true
+                    );
+                    return false;
+                }
+            } catch (error) {
+                console.error(`Error testing ${description}:`, error);
+                
+                let errorMessage = error.message;
+                let isCorsProblem = false;
+                
+                // Check for common CORS error patterns
+                if (error.message.includes('CORS') || 
+                    error.message.includes('blocked') || 
+                    error.message.includes('Failed to fetch') ||
+                    error.name === 'TypeError') {
+                    isCorsProblem = true;
+                    errorMessage = `🚫 CORS Error: ${error.message}`;
+                }
+                
+                addResult(
+                    `❌ ${description} - ${isCorsProblem ? 'CORS' : 'Network'} Error`,
+                    errorMessage,
+                    true,
+                    { 
+                        errorName: error.name,
+                        errorMessage: error.message,
+                        stack: error.stack,
+                        isCorsProblem
+                    }
+                );
+                return false;
+            }
+        }
+        
+        async function runAllTests() {
+            clearResults();
+            addResult('🔄 Starting Tests', 'Testing CORS connectivity to production API...', false);
+            
+            const tests = [
+                ['/api/version', 'API Version'],
+                ['/api/watchlist', 'Watchlist'],
+                ['/api/search?q=AAPL', 'Search (AAPL)'],
+                ['/health', 'Health Check']
+            ];
+            
+            let passed = 0;
+            let total = tests.length;
+            
+            for (const [endpoint, description] of tests) {
+                if (await testEndpoint(endpoint, description)) {
+                    passed++;
+                }
+                // Small delay between tests
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+            
+            // Summary
+            const summaryTitle = passed === total 
+                ? `🎉 All Tests Passed (${passed}/${total})`
+                : `⚠️ Some Tests Failed (${passed}/${total})`;
+            
+            const summaryMessage = passed === total
+                ? 'CORS is working correctly! The frontend should be able to connect to the API.'
+                : 'Some tests failed. Check the details above for CORS issues.';
+            
+            addResult(summaryTitle, summaryMessage, passed !== total);
+            
+            // Additional guidance
+            if (passed === total) {
+                addResult(
+                    '💡 Next Steps',
+                    'If you\'re still seeing CORS errors in the main application:\n' +
+                    '1. Clear your browser cache (Ctrl+F5 or Cmd+Shift+R)\n' +
+                    '2. Try opening the app in an incognito/private window\n' +
+                    '3. Check the browser console for specific error messages\n' +
+                    '4. Restart the Next.js development server',
+                    false
+                );
+            } else {
+                addResult(
+                    '🔧 Troubleshooting',
+                    'CORS tests failed. This could indicate:\n' +
+                    '1. Network connectivity issues\n' +
+                    '2. API Gateway configuration problems\n' +
+                    '3. Browser security restrictions\n' +
+                    '4. Cached failed CORS responses',
+                    true
+                );
+            }
+        }
+        
+        // Auto-run tests when page loads
+        window.addEventListener('load', () => {
+            setTimeout(runAllTests, 1000);
+        });
+    </script>
+</body>
+</html>
