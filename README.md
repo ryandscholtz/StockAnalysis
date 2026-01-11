@@ -2,11 +2,24 @@
 
 A web-based stock analysis tool that uses value investing principles to analyze stocks, focusing on calculating intrinsic value (fair value per share) and comparing it to current market price (cost per share) to determine margin of safety.
 
+## 📊 **NEW: Enhanced Financial Ratios System**
+
+The tool now features a comprehensive financial ratios system that displays key metrics prominently on stock pages:
+
+- **P/E, P/B, P/S Ratios** - Essential valuation metrics
+- **ROE, Debt-to-Equity, Current Ratio** - Financial health indicators  
+- **Market Cap, Enterprise Value** - Market data
+- **Color-coded indicators** for quick assessment
+- **Real-time calculations** from financial statements
+
+**📖 [View Complete Financial Ratios Documentation](FINANCIAL_RATIOS_SYSTEM.md)**
+
 ## Architecture
 
 - **Frontend**: Next.js 14+ (React, TypeScript)
-- **Backend**: Python FastAPI
-- **Data Sources**: Yahoo Finance (yfinance), Alpha Vantage, FRED API
+- **Backend**: Enhanced AWS Lambda Function (Python)
+- **Data Sources**: MarketStack API ready, Yahoo Finance fallback
+- **Current Version**: Backend `4.0.0-marketstack`, Frontend with Financial Summary Cards
 
 ## Features
 
@@ -21,32 +34,34 @@ A web-based stock analysis tool that uses value investing principles to analyze 
 
 4. **Comprehensive Analysis** - Financial health scores, business quality metrics, and investment recommendations
 
-## Getting Started
+## Quick Start
 
-### Backend Setup
+### Current System (Enhanced Lambda)
 
-1. Navigate to backend directory:
+The system now runs on an enhanced AWS Lambda function with comprehensive financial ratios:
+
+**Backend**: Already deployed at `https://dx0w31lbc1.execute-api.eu-west-1.amazonaws.com/production`
+- Version: `4.0.0-marketstack-{timestamp}`
+- Features: Financial ratios, real price data, comprehensive analysis
+
+**Frontend**: Run locally with:
 ```bash
-cd backend
+cd frontend
+npm install
+npm run dev
 ```
 
-2. Create virtual environment:
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
+### Available Stock Data
+- **AAPL**: Apple Inc. (P/E: 23.4, ROE: 196.9%)
+- **GOOGL**: Alphabet Inc. (P/E: 48.6, ROE: 26.0%)  
+- **MSFT**: Microsoft Corp. (P/E: 35.5, ROE: 42.7%)
+- **TSLA**: Tesla Inc. (P/E: 39.1, ROE: 23.9%)
 
-3. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-4. Run the server:
-```bash
-uvicorn app.main:app --reload
-```
-
-Backend will be available at `http://localhost:8000`
+### Key Endpoints
+- `GET /api/watchlist` - Watchlist with financial ratios
+- `GET /api/manual-data/{ticker}` - Comprehensive financial data
+- `GET /api/analyze/{ticker}` - Full stock analysis
+- `GET /health` - System status and version
 
 ### Frontend Setup
 

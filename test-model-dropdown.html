@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Model Dropdown Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            padding: 20px;
+            background-color: #f9fafb;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .model-selector {
+            position: relative;
+            display: inline-block;
+        }
+        .model-display {
+            font-size: 14px;
+            color: #6b7280;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 4px;
+            border: 1px solid transparent;
+            transition: all 0.2s ease;
+        }
+        .model-display:hover {
+            background-color: #f9fafb;
+        }
+        .model-display.active {
+            background-color: #f3f4f6;
+            border-color: #d1d5db;
+        }
+        .dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            z-index: 1000;
+            background-color: white;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            min-width: 280px;
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 4px;
+        }
+        .dropdown-header {
+            padding: 8px 12px;
+            font-size: 12px;
+            font-weight: 600;
+            color: #6b7280;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .dropdown-item {
+            padding: 10px 12px;
+            cursor: pointer;
+            font-size: 14px;
+            border-left: 3px solid transparent;
+        }
+        .dropdown-item:hover {
+            background-color: #f9fafb;
+        }
+        .dropdown-item.selected {
+            background-color: #eff6ff;
+            color: #1d4ed8;
+            border-left-color: #2563eb;
+        }
+        .dropdown-item-title {
+            font-weight: 500;
+            margin-bottom: 2px;
+        }
+        .dropdown-item-weights {
+            font-size: 12px;
+            color: #6b7280;
+        }
+        .dropdown-footer {
+            padding: 8px 12px;
+            font-size: 12px;
+            color: #6b7280;
+            border-top: 1px solid #e5e7eb;
+            background-color: #f9fafb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>AMZN Stock Analysis</h1>
+        <p>Current Price: $185.75</p>
+        
+        <!-- Model Selector -->
+        <div class="model-selector" id="modelSelector">
+            <div class="model-display" id="modelDisplay">
+                Business Type: <strong>Default</strong>
+                <span style="margin-left: 12px;">(DCF: 40%, EPV: 40%, Asset: 20%)</span>
+                <span style="margin-left: 8px; font-size: 12px;" id="dropdownArrow">▼</span>
+            </div>
+            
+            <!-- Dropdown -->
+            <div class="dropdown" id="dropdown" style="display: none;">
+                <div style="padding: 8px 0;">
+                    <div class="dropdown-header">Select Valuation Model</div>
+                    
+                    <div class="dropdown-item selected" data-model="default">
+                        <div class="dropdown-item-title">Default</div>
+                        <div class="dropdown-item-weights">DCF: 40%, EPV: 40%, Asset: 20%</div>
+                    </div>
+                    
+                    <div class="dropdown-item" data-model="growth_company">
+                        <div class="dropdown-item-title">Growth Company</div>
+                        <div class="dropdown-item-weights">DCF: 60%, EPV: 30%, Asset: 10%</div>
+                    </div>
+                    
+                    <div class="dropdown-item" data-model="mature_company">
+                        <div class="dropdown-item-title">Mature Company</div>
+                        <div class="dropdown-item-weights">DCF: 40%, EPV: 50%, Asset: 10%</div>
+                    </div>
+                    
+                    <div class="dropdown-item" data-model="asset_heavy">
+                        <div class="dropdown-item-title">Asset Heavy</div>
+                        <div class="dropdown-item-weights">DCF: 30%, EPV: 30%, Asset: 40%</div>
+                    </div>
+                    
+                    <div class="dropdown-item" data-model="distressed_company">
+                        <div class="dropdown-item-title">Distressed Company</div>
+                        <div class="dropdown-item-weights">DCF: 20%, EPV: 30%, Asset: 50%</div>
+                    </div>
+                    
+                    <div class="dropdown-footer">
+                        💡 Click a model to re-run analysis with new weights
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div style="margin-top: 40px;">
+            <h3>Analysis Results</h3>
+            <p id="analysisResult">Click on the Business Type above to change the valuation model and see how it affects the analysis.</p>
+        </div>
+    </div>
+
+    <script>
+        const modelDisplay = document.getElementById('modelDisplay');
+        const dropdown = document.getElementById('dropdown');
+        const dropdownArrow = document.getElementById('dropdownArrow');
+        const analysisResult = document.getElementById('analysisResult');
+        let isOpen = false;
+
+        // Toggle dropdown
+        modelDisplay.addEventListener('click', () => {
+            isOpen = !isOpen;
+            dropdown.style.display = isOpen ? 'block' : 'none';
+            dropdownArrow.textContent = isOpen ? '▲' : '▼';
+            modelDisplay.classList.toggle('active', isOpen);
+        });
+
+        // Handle model selection
+        document.querySelectorAll('.dropdown-item').forEach(item => {
+            item.addEventListener('click', (e) => {
+                const model = e.currentTarget.dataset.model;
+                const title = e.currentTarget.querySelector('.dropdown-item-title').textContent;
+                const weights = e.currentTarget.querySelector('.dropdown-item-weights').textContent;
+                
+                // Update display
+                modelDisplay.innerHTML = `Business Type: <strong>${title}</strong>
+                    <span style="margin-left: 12px;">(${weights})</span>
+                    <span style="margin-left: 8px; font-size: 12px;">▼</span>`;
+                
+                // Update selected state
+                document.querySelectorAll('.dropdown-item').forEach(i => i.classList.remove('selected'));
+                e.currentTarget.classList.add('selected');
+                
+                // Close dropdown
+                isOpen = false;
+                dropdown.style.display = 'none';
+                modelDisplay.classList.remove('active');
+                
+                // Update analysis result
+                analysisResult.innerHTML = `<strong>Model changed to: ${title}</strong><br>
+                    Weights: ${weights}<br>
+                    <em>Analysis would be re-run with new valuation weights...</em>`;
+            });
+        });
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!document.getElementById('modelSelector').contains(e.target)) {
+                isOpen = false;
+                dropdown.style.display = 'none';
+                dropdownArrow.textContent = '▼';
+                modelDisplay.classList.remove('active');
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Upload Browser Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        .result { margin: 10px 0; padding: 10px; border-radius: 5px; font-family: monospace; }
+        .success { background-color: #d4edda; border: 1px solid #c3e6cb; color: #155724; }
+        .error { background-color: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; }
+        .info { background-color: #d1ecf1; border: 1px solid #bee5eb; color: #0c5460; }
+        button { background-color: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin: 5px; }
+        button:hover { background-color: #0056b3; }
+        input[type="file"] { margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h1>🔍 PDF Upload Browser Test</h1>
+    <p>Testing PDF upload endpoints directly from browser to bypass caching issues</p>
+    
+    <div>
+        <h3>1. Test Endpoint Availability</h3>
+        <button onclick="testEndpoints()">Test Endpoints</button>
+        <div id="endpointResults" class="result info" style="display: none;"></div>
+    </div>
+    
+    <div>
+        <h3>2. Test PDF Upload</h3>
+        <input type="file" id="pdfFile" accept=".pdf" />
+        <button onclick="testPDFUpload()">Upload PDF</button>
+        <div id="uploadResults" class="result info" style="display: none;"></div>
+    </div>
+    
+    <script>
+        const API_BASE_URL = 'https://dx0w31lbc1.execute-api.eu-west-1.amazonaws.com/production';
+        
+        async function testEndpoints() {
+            const results = document.getElementById('endpointResults');
+            results.style.display = 'block';
+            results.className = 'result info';
+            results.textContent = 'Testing endpoints...\n';
+            
+            // Add cache-busting parameters
+            const timestamp = Date.now();
+            const random = Math.random();
+            
+            // Test upload endpoint (should return 405 for GET)
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/upload-pdf?v=${timestamp}&r=${random}`, {
+                    method: 'GET',
+                    cache: 'no-cache',
+                    headers: {
+                        'Cache-Control': 'no-cache, no-store, must-revalidate',
+                        'Pragma': 'no-cache',
+                        'Expires': '0'
+                    }
+                });
+                
+                results.textContent += `GET /api/upload-pdf: Status ${response.status}\n`;
+                
+                if (response.status === 405) {
+                    results.textContent += '✅ Upload endpoint is working (405 Method Not Allowed for GET)\n';
+                } else if (response.status === 400) {
+                    const data = await response.json();
+                    if (data.error && data.error.includes('multipart/form-data')) {
+                        results.textContent += '✅ Upload endpoint is working (400 asking for multipart/form-data)\n';
+                    } else {
+                        results.textContent += `⚠️ Unexpected 400 response: ${JSON.stringify(data)}\n`;
+                    }
+                } else if (response.status === 404) {
+                    const data = await response.json();
+                    results.textContent += `❌ Upload endpoint not found: ${data.message}\n`;
+                    results.textContent += `Available endpoints: ${data.available_endpoints?.join(', ')}\n`;
+                } else {
+                    results.textContent += `⚠️ Unexpected status: ${response.status}\n`;
+                }
+            } catch (error) {
+                results.textContent += `❌ Error testing upload endpoint: ${error.message}\n`;
+            }
+            
+            // Test manual data endpoint
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/manual-data/AAPL?v=${timestamp}&r=${random}`, {
+                    cache: 'no-cache',
+                    headers: {
+                        'Cache-Control': 'no-cache, no-store, must-revalidate',
+                        'Pragma': 'no-cache',
+                        'Expires': '0'
+                    }
+                });
+                
+                results.textContent += `\nGET /api/manual-data/AAPL: Status ${response.status}\n`;
+                
+                if (response.status === 200) {
+                    const data = await response.json();
+                    results.textContent += `✅ Manual data endpoint working: ${data.ticker}\n`;
+                } else {
+                    results.textContent += `❌ Manual data endpoint failed: ${response.status}\n`;
+                }
+            } catch (error) {
+                results.textContent += `❌ Error testing manual data endpoint: ${error.message}\n`;
+            }
+        }
+        
+        async function testPDFUpload() {
+            const fileInput = document.getElementById('pdfFile');
+            const results = document.getElementById('uploadResults');
+            
+            if (!fileInput.files[0]) {
+                alert('Please select a PDF file first');
+                return;
+            }
+            
+            const file = fileInput.files[0];
+            results.style.display = 'block';
+            results.className = 'result info';
+            results.textContent = `Testing PDF upload: ${file.name} (${(file.size / 1024).toFixed(2)} KB)\n`;
+            
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                const timestamp = Date.now();
+                const response = await fetch(`${API_BASE_URL}/api/upload-pdf?ticker=AAPL&v=${timestamp}`, {
+                    method: 'POST',
+                    body: formData,
+                    cache: 'no-cache',
+                    headers: {
+                        'Cache-Control': 'no-cache, no-store, must-revalidate',
+                        'Pragma': 'no-cache',
+                        'Expires': '0'
+                    }
+                });
+                
+                results.textContent += `Response Status: ${response.status}\n`;
+                
+                const responseText = await response.text();
+                results.textContent += `Response: ${responseText}\n`;
+                
+                if (response.ok) {
+                    results.className = 'result success';
+                    results.textContent += '\n✅ PDF Upload Successful!\n';
+                } else {
+                    results.className = 'result error';
+                    results.textContent += '\n❌ PDF Upload Failed!\n';
+                }
+                
+            } catch (error) {
+                results.className = 'result error';
+                results.textContent += `\n❌ Error: ${error.message}\n`;
+            }
+        }
+        
+        // Auto-test endpoints on page load
+        window.onload = function() {
+            testEndpoints();
+        };
+    </script>
+</body>
+</html>

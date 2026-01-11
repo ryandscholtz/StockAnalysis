@@ -573,30 +573,20 @@ export default function AnalysisPage() {
       
       {/* Show missing data prompt if fair value is 0 or if data is missing */}
       {(analysis.fairValue === 0 || (analysis.missingData?.has_missing_data)) && (
-        <>
-          <PDFUpload
-            ticker={analysis.ticker}
-            onDataExtracted={() => {
-              // Reload analysis and watchlist data after PDF data is extracted
-              loadAnalysis()
-              loadWatchlistData()
-            }}
-          />
-          <MissingDataPrompt
-            ticker={analysis.ticker}
-            missingData={analysis.missingData || {
-              income_statement: [],
-              balance_sheet: [],
-              cashflow: [],
-              key_metrics: [],
-              has_missing_data: true
-            }}
-            onDataAdded={() => {
-              // Reload analysis after data is added (force refresh to get new analysis)
-              loadAnalysis(true)
-            }}
-          />
-        </>
+        <MissingDataPrompt
+          ticker={analysis.ticker}
+          missingData={analysis.missingData || {
+            income_statement: [],
+            balance_sheet: [],
+            cashflow: [],
+            key_metrics: [],
+            has_missing_data: true
+          }}
+          onDataAdded={() => {
+            // Reload analysis after data is added (force refresh to get new analysis)
+            loadAnalysis(true)
+          }}
+        />
       )}
 
       {/* Add Financial Data Section */}

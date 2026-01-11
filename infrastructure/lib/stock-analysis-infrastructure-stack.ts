@@ -10,6 +10,7 @@ import * as snsSubscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
+import * as s3 from 'aws-cdk-lib/aws-s3';
 import { Construct } from 'constructs';
 
 export interface StockAnalysisInfrastructureStackProps extends cdk.StackProps {
@@ -28,11 +29,38 @@ export class StockAnalysisInfrastructureStack extends cdk.Stack {
   public readonly userPool: cognito.UserPool;
   public readonly userPoolClient: cognito.UserPoolClient;
   public readonly identityPool: cognito.CfnIdentityPool;
+  public readonly textractBucket: s3.Bucket;
 
   constructor(scope: Construct, id: string, props: StockAnalysisInfrastructureStackProps) {
     super(scope, id, props);
 
     const { environment, alertEmail, slackWebhookUrl } = props;
+
+    // S3 Bucket for large PDF processing with AWS Textract
+    this.textractBucket = new s3.Bucket(this, 'TextractProcessingBucket', {
+      bucketName: `stock-analysis-textract-${environment}-${this.account}`,
+      versioned: false,
+      publicReadAccess: false,
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      lifecycleRules: [
+        {
+          id: 'DeleteTempFiles',
+          enabled: true,
+          expiration: cdk.Duration.days(7), // Auto-delete temp files after 7 days
+          prefix: 'textract-temp/',
+        },
+        {
+          id: 'DeleteProcessedFiles',
+          enabled: true,
+          expiration: cdk.Duration.days(30), // Keep processed files for 30 days
+          prefix: 'processed/',
+        }
+      ],
+      removalPolicy: environment === 'production' 
+        ? cdk.RemovalPolicy.RETAIN 
+        : cdk.RemovalPolicy.DESTROY,
+    });
 
     // DynamoDB Table for stock analyses
     this.table = new dynamodb.Table(this, 'StockAnalysesTable', {
@@ -311,6 +339,53 @@ export class StockAnalysisInfrastructureStack extends cdk.Stack {
               resources: ['*']
             })
           ]
+        }),
+        TextractAccess: new iam.PolicyDocument({
+          statements: [
+            new iam.PolicyStatement({
+              effect: iam.Effect.ALLOW,
+              actions: [
+                'textract:AnalyzeDocument',
+                'textract:StartDocumentAnalysis',
+                'textract:GetDocumentAnalysis',
+                'textract:StartDocumentTextDetection',
+                'textract:GetDocumentTextDetection'
+              ],
+              resources: ['*'] // Textract doesn't support resource-level permissions
+            })
+          ]
+        }),
+        BedrockAccess: new iam.PolicyDocument({
+          statements: [
+            new iam.PolicyStatement({
+              effect: iam.Effect.ALLOW,
+              actions: [
+                'bedrock:InvokeModel',
+                'bedrock:InvokeModelWithResponseStream'
+              ],
+              resources: [
+                'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-sonnet-20240229-v1:0',
+                'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-haiku-20240307-v1:0'
+              ]
+            })
+          ]
+        }),
+        S3Access: new iam.PolicyDocument({
+          statements: [
+            new iam.PolicyStatement({
+              effect: iam.Effect.ALLOW,
+              actions: [
+                's3:GetObject',
+                's3:PutObject',
+                's3:DeleteObject',
+                's3:ListBucket'
+              ],
+              resources: [
+                this.textractBucket.bucketArn,
+                `${this.textractBucket.bucketArn}/*`
+              ]
+            })
+          ]
         })
       }
     });
@@ -334,12 +409,13 @@ export class StockAnalysisInfrastructureStack extends cdk.Stack {
         USER_POOL_ID: this.userPool.userPoolId,
         USER_POOL_CLIENT_ID: this.userPoolClient.userPoolClientId,
         IDENTITY_POOL_ID: this.identityPool.ref,
+        TEXTRACT_S3_BUCKET: this.textractBucket.bucketName,
         LOG_LEVEL: environment === 'production' ? 'INFO' : 'DEBUG',
         STRUCTURED_LOGGING: 'true',
         // CORS configuration - allow all origins for testing
         CORS_ALLOW_ALL: environment !== 'production' ? 'true' : 'false',
         // Add version to force update
-        CODE_VERSION: '1.3.0'
+        CODE_VERSION: '1.3.1'
       },
       
       // Enable X-Ray tracing
@@ -803,7 +879,7 @@ def lambda_handler(event, context):
       description: 'Cognito Identity Pool ID'
     });
 
-    new cdk.CfnOutput(this, 'UserPoolDomain', {
+    new cdk.CfnOutput(this, 'UserPoolDomainOutput', {
       value: userPoolDomain.domainName,
       description: 'Cognito User Pool Domain'
     });

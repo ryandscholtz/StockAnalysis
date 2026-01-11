@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Frontend Display</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .debug-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .code { 
+            background: #1f2937; 
+            color: #f9fafb; 
+            padding: 12px; 
+            border-radius: 4px; 
+            font-family: 'Courier New', monospace; 
+            font-size: 14px;
+            white-space: pre-wrap;
+            margin: 10px 0;
+        }
+        .highlight { background-color: #fef3c7; padding: 2px 4px; border-radius: 2px; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Debug Frontend Display Issue</h1>
+    <p>This will help debug exactly what the frontend should be displaying</p>
+
+    <div class="debug-section">
+        <h2>Current API Data</h2>
+        <div id="api-data">Loading...</div>
+    </div>
+
+    <div class="debug-section">
+        <h2>Frontend Logic Step-by-Step</h2>
+        <div id="logic-debug">Loading...</div>
+    </div>
+
+    <div class="debug-section">
+        <h2>What You Should See</h2>
+        <div id="expected-display">Loading...</div>
+    </div>
+
+    <div class="debug-section">
+        <h2>Browser Console Commands</h2>
+        <p>Copy and paste these commands in your browser's developer console when on the BEL.XJSE page:</p>
+        <div class="code">// Check what data the page has loaded
+console.log('Watchlist Data:', window.watchlistData);
+console.log('Analysis Data:', window.analysis);
+
+// Check the API directly
+fetch('https://dx0w31lbc1.execute-api.eu-west-1.amazonaws.com/production/api/watchlist/BEL.XJSE')
+  .then(r => r.json())
+  .then(data => console.log('Fresh API Data:', data));
+
+// Check localStorage for cached data
+console.log('LocalStorage:', localStorage.getItem('watchlist'));
+console.log('SessionStorage:', sessionStorage.getItem('watchlist'));</div>
+    </div>
+
+    <script>
+        const API_URL = 'https://dx0w31lbc1.execute-api.eu-west-1.amazonaws.com/production';
+        
+        async function debugFrontendDisplay() {
+            try {
+                // Get current API data
+                const response = await fetch(`${API_URL}/api/watchlist/BEL.XJSE`);
+                const watchlistData = await response.json();
+                
+                document.getElementById('api-data').innerHTML = `
+                    <div class="code">API Response:
+${JSON.stringify(watchlistData, null, 2)}</div>
+                `;
+                
+                // Debug the frontend logic
+                const analysis = watchlistData.latest_analysis || null;
+                const watchlistItem = { watchlist_item: watchlistData };
+                const ticker = 'BEL.XJSE';
+                
+                const step1 = analysis?.companyName;
+                const step2 = analysis?.company_name;
+                const step3 = watchlistItem?.watchlist_item?.company_name;
+                const step4 = ticker;
+                
+                const finalResult = step1 || step2 || step3 || step4;
+                
+                document.getElementById('logic-debug').innerHTML = `
+                    <div class="code">Frontend Logic (line 415 in page.tsx):
+const companyName = analysis?.companyName || 
+                   analysis?.company_name || 
+                   watchlistData?.watchlist_item?.company_name || 
+                   ticker
+
+Step-by-step evaluation:
+1. analysis?.companyName = ${step1 || 'undefined'}
+2. analysis?.company_name = ${step2 || 'undefined'}  
+3. watchlistData?.watchlist_item?.company_name = <span class="highlight">${step3 || 'undefined'}</span>
+4. ticker = ${step4}
+
+Final result: <span class="highlight">${finalResult}</span></div>
+                `;
+                
+                // Show what should be displayed
+                const isCorrect = finalResult === 'BELL EQUIPMENT LTD';
+                document.getElementById('expected-display').innerHTML = `
+                    <h3>Header should show:</h3>
+                    <div style="font-size: 36px; font-weight: 700; color: #111827; margin: 20px 0; padding: 20px; background: #f9fafb; border-radius: 8px;">
+                        ${finalResult} (${ticker})
+                    </div>
+                    <p><strong>Status:</strong> ${isCorrect ? '✅ CORRECT' : '❌ INCORRECT'}</p>
+                    ${!isCorrect ? '<p style="color: #dc2626;"><strong>Expected:</strong> BELL EQUIPMENT LTD (BEL.XJSE)</p>' : ''}
+                    
+                    <h3>If you're still seeing the wrong name:</h3>
+                    <ol>
+                        <li><strong>Hard refresh:</strong> Ctrl+F5 (Windows) or Cmd+Shift+R (Mac)</li>
+                        <li><strong>Clear cache:</strong> F12 → Application tab → Clear Storage</li>
+                        <li><strong>Check Network tab:</strong> F12 → Network → look for API calls</li>
+                        <li><strong>Restart dev server:</strong> Stop and restart with npm run dev</li>
+                    </ol>
+                `;
+                
+            } catch (error) {
+                document.getElementById('api-data').innerHTML = `
+                    <div style="color: #dc2626;">Error: ${error.message}</div>
+                `;
+            }
+        }
+
+        debugFrontendDisplay();
+    </script>
+</body>
+</html>

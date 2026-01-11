@@ -1,0 +1,9 @@
+{
+  "httpMethod": "GET",
+  "path": "/api/upload-pdf",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "queryStringParameters": null,
+  "body": null
+}

@@ -38,12 +38,12 @@ function WatchlistContent() {
       console.log('🌐 Loading watchlist...')
       const result = await stockApi.getWatchlist()
       const loadTime = Date.now() - startTime
-      console.log(`✅ Watchlist loaded: ${result.items?.length || 0} items in ${loadTime}ms`)
-      setWatchlist(result.items)
+      console.log(`✅ Watchlist loaded: ${result?.items?.length || 0} items in ${loadTime}ms`)
+      setWatchlist(result?.items || [])
     } catch (err: any) {
       console.log('❌ Error loading watchlist:', err)
       // Use formatted error message (from api.ts interceptor)
-      setError(err.message || 'Failed to load watchlist')
+      setError(err?.message || 'Failed to load watchlist')
       console.error('Error loading watchlist:', err)
     } finally {
       setLoading(false)
@@ -57,24 +57,25 @@ function WatchlistContent() {
       // Use the standard live prices endpoint (enhanced with MarketStack)
       console.log('🔄 Refreshing live prices from MarketStack API...')
       const result = await stockApi.getWatchlistLivePrices()
-      setLivePrices(result.live_prices)
+      setLivePrices(result?.live_prices || {})
       console.log('✅ Live prices updated successfully')
       
       // Also refresh analysis data for each stock to get fair values
       console.log('🔄 Refreshing analysis data for valuation...')
       const updatedWatchlist = await Promise.all(
-        watchlist.map(async (item) => {
+        (watchlist || []).map(async (item) => {
           try {
+            if (!item?.ticker) return item
             const analysis = await stockApi.analyzeStock(item.ticker)
             return {
               ...item,
-              current_price: analysis.currentPrice,
-              fair_value: analysis.fairValue,
-              margin_of_safety_pct: analysis.marginOfSafety,
-              recommendation: analysis.recommendation
+              current_price: analysis?.currentPrice,
+              fair_value: analysis?.fairValue,
+              margin_of_safety_pct: analysis?.marginOfSafety,
+              recommendation: analysis?.recommendation
             }
           } catch (error) {
-            console.warn(`Failed to get analysis for ${item.ticker}:`, error)
+            console.warn(`Failed to get analysis for ${item?.ticker}:`, error)
             return item // Return original item if analysis fails
           }
         })
@@ -101,7 +102,7 @@ function WatchlistContent() {
       await loadWatchlist()
     } catch (err: any) {
       // Use formatted error message (from api.ts interceptor)
-      alert(err.message || 'Failed to remove from watchlist')
+      alert(err?.message || 'Failed to remove from watchlist')
       console.error('Error removing from watchlist:', err)
     }
   }
@@ -237,10 +238,14 @@ function WatchlistContent() {
           display: 'grid',
           gap: '16px'
         }}>
-          {watchlist && watchlist.map((item) => (
+          {watchlist && Array.isArray(watchlist) && watchlist.map((item) => {
+            // Safety check for item
+            if (!item) return null
+            
+            return (
             <div
-              key={item.ticker}
-              onClick={() => router.push(`/watchlist/${item.ticker}`)}
+              key={item?.ticker || Math.random()}
+              onClick={() => router.push(`/watchlist/${item?.ticker || ''}`)}
               style={{
                 padding: '20px',
                 backgroundColor: 'white',
@@ -263,9 +268,9 @@ function WatchlistContent() {
                 <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
                     <h2 style={{ fontSize: '20px', fontWeight: '700', color: '#111827', margin: 0 }}>
-                      {item.company_name || item.ticker}
+                      {item?.company_name || item?.ticker || 'Unknown Company'}
                     </h2>
-                    {item.recommendation && (
+                    {item?.recommendation && (
                       <span style={{
                         padding: '4px 12px',
                         borderRadius: '12px',
@@ -278,7 +283,7 @@ function WatchlistContent() {
                       </span>
                     )}
                     {/* Cache status indicator */}
-                    {item.cache_info && (
+                    {item?.cache_info && (
                       <span style={{
                         padding: '2px 8px',
                         borderRadius: '8px',
@@ -297,7 +302,7 @@ function WatchlistContent() {
                   </div>
                   
                   <p style={{ fontSize: '14px', color: '#6b7280', margin: '0 0 12px 0', fontWeight: '600' }}>
-                    {item.ticker}
+                    {item?.ticker || 'Unknown Ticker'}
                   </p>
 
                   <div style={{
@@ -308,9 +313,9 @@ function WatchlistContent() {
                   }}>
                     {/* Show live price if available, otherwise cached price */}
                     {(() => {
-                      const tickerPriceData = livePrices?.[item.ticker]
+                      const tickerPriceData = livePrices?.[item?.ticker || '']
                       const livePrice = tickerPriceData?.price
-                      const cachedPrice = item.current_price
+                      const cachedPrice = item?.current_price
                       const priceError = tickerPriceData?.error
                       
                       // Show live price if available and valid
@@ -344,7 +349,7 @@ function WatchlistContent() {
                           <div>
                             <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>
                               Current Price
-                              {item.cache_info?.last_updated && (
+                              {item?.cache_info?.last_updated && (
                                 <span style={{ fontSize: '10px', marginLeft: '4px' }}>
                                   ({item.cache_info.last_updated})
                                 </span>
@@ -395,7 +400,7 @@ function WatchlistContent() {
                     <div>
                       <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>Fair Value</div>
                       <div style={{ fontSize: '16px', fontWeight: '600', color: '#111827' }}>
-                        {item.fair_value && item.fair_value > 0 ? formatPrice(item.fair_value) : 'Not available'}
+                        {item?.fair_value && item.fair_value > 0 ? formatPrice(item.fair_value) : 'Not available'}
                       </div>
                     </div>
                     <div>
@@ -403,16 +408,16 @@ function WatchlistContent() {
                       <div style={{
                         fontSize: '16px',
                         fontWeight: '600',
-                        color: item.margin_of_safety_pct && item.margin_of_safety_pct > 0 ? '#10b981' : '#ef4444'
+                        color: item?.margin_of_safety_pct && item.margin_of_safety_pct > 0 ? '#10b981' : '#ef4444'
                       }}>
-                        {item.fair_value && item.margin_of_safety_pct && item.margin_of_safety_pct !== 0 
+                        {item?.fair_value && item?.margin_of_safety_pct && item.margin_of_safety_pct !== 0 
                           ? item.margin_of_safety_pct > 0 
                             ? `${Math.abs(item.margin_of_safety_pct).toFixed(1)}% Under`
                             : `${Math.abs(item.margin_of_safety_pct).toFixed(1)}% Over`
                           : 'Not available'}
                       </div>
                     </div>
-                    {item.last_analyzed_at && (
+                    {item?.last_analyzed_at && (
                       <div>
                         <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>Last Analyzed</div>
                         <div style={{ fontSize: '14px', color: '#111827' }}>
@@ -422,7 +427,7 @@ function WatchlistContent() {
                     )}
                   </div>
 
-                  {item.notes && (
+                  {item?.notes && (
                     <div style={{
                       marginTop: '12px',
                       padding: '8px 12px',
@@ -439,7 +444,7 @@ function WatchlistContent() {
                 <button
                   onClick={(e) => {
                     e.stopPropagation()
-                    handleRemove(item.ticker)
+                    handleRemove(item?.ticker || '')
                   }}
                   style={{
                     padding: '6px 12px',
@@ -459,7 +464,8 @@ function WatchlistContent() {
                 </button>
               </div>
             </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>

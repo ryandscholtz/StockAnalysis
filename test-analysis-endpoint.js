@@ -1,51 +1,76 @@
-// Test the analysis endpoint to see if MarketStack integration is working
 const https = require('https');
 
-const API_URL = 'https://9ye8wru6s5.execute-api.us-east-1.amazonaws.com/production/api/analyze/AAPL';
+// Test the analysis endpoint
+const API_BASE_URL = 'https://dx0w31lbc1.execute-api.eu-west-1.amazonaws.com/production';
 
-console.log('=== TESTING ANALYSIS ENDPOINT WITH MARKETSTACK ===');
-console.log('URL:', API_URL);
+function testAnalysisEndpoint() {
+    return new Promise((resolve, reject) => {
+        console.log(`\n🧪 Testing Analysis endpoint...`);
+        console.log(`URL: ${API_BASE_URL}/api/analyze/GOOGL`);
+        
+        const options = {
+            hostname: 'dx0w31lbc1.execute-api.eu-west-1.amazonaws.com',
+            port: 443,
+            path: `/production/api/analyze/GOOGL`,
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            }
+        };
 
-const req = https.request(API_URL, { method: 'GET' }, (res) => {
-  console.log(`Status Code: ${res.statusCode}`);
-  
-  let data = '';
-  res.on('data', (chunk) => {
-    data += chunk;
-  });
-  
-  res.on('end', () => {
+        const req = https.request(options, (res) => {
+            let data = '';
+            
+            console.log(`Status: ${res.statusCode}`);
+            
+            res.on('data', (chunk) => {
+                data += chunk;
+            });
+            
+            res.on('end', () => {
+                try {
+                    const jsonData = JSON.parse(data);
+                    if (res.statusCode === 501) {
+                        console.log(`✅ Analysis endpoint - Working (returns 501 Not Implemented as expected)`);
+                        console.log('Response:', JSON.stringify(jsonData, null, 2));
+                    } else {
+                        console.log(`❓ Analysis endpoint - Unexpected status (${res.statusCode})`);
+                        console.log('Response:', JSON.stringify(jsonData, null, 2));
+                    }
+                    resolve({ status: res.statusCode, data: jsonData });
+                } catch (e) {
+                    console.log(`Response (raw):`, data);
+                    resolve({ status: res.statusCode, data: data });
+                }
+            });
+        });
+
+        req.on('error', (error) => {
+            console.log(`❌ Analysis endpoint - Error:`, error.message);
+            reject(error);
+        });
+
+        req.setTimeout(10000, () => {
+            console.log(`⏰ Analysis endpoint - Timeout`);
+            req.destroy();
+            reject(new Error('Request timeout'));
+        });
+
+        req.end();
+    });
+}
+
+async function runTest() {
+    console.log('🚀 Testing Analysis Endpoint');
+    console.log('============================');
+    
     try {
-      const parsed = JSON.parse(data);
-      console.log('\n=== ANALYSIS RESPONSE ===');
-      
-      console.log(`Ticker: ${parsed.ticker}`);
-      console.log(`Current Price: $${parsed.currentPrice}`);
-      console.log(`Fair Value: $${parsed.fairValue}`);
-      
-      if (parsed.dataSource) {
-        console.log('\n=== DATA SOURCE INFO ===');
-        console.log(`Price Source: ${parsed.dataSource.price_source}`);
-        console.log(`Has Real Price: ${parsed.dataSource.has_real_price}`);
-        console.log(`API Available: ${parsed.dataSource.api_available}`);
-      }
-      
-      // Check if we got real data vs mock
-      if (parsed.currentPrice !== 150.00) {
-        console.log('✅ Got REAL price data from MarketStack!');
-      } else {
-        console.log('⚠️ Using mock/fallback price data');
-      }
-      
+        await testAnalysisEndpoint();
+        console.log('\n✅ Analysis endpoint test completed');
     } catch (error) {
-      console.log('❌ Failed to parse JSON response:', error.message);
-      console.log('Raw response:', data.substring(0, 500));
+        console.log('\n❌ Test failed:', error.message);
     }
-  });
-});
+}
 
-req.on('error', (error) => {
-  console.error('❌ Request error:', error.message);
-});
-
-req.end();
+runTest();

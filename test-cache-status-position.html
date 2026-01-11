@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Cache Status Position</title>
+</head>
+<body>
+    <h1>Testing Cache Status Indicator Position</h1>
+    
+    <div style="max-width: 800px; margin: 0 auto; padding: 20px;">
+        <h2>Stock View Layout Test</h2>
+        
+        <!-- Simulated stock header -->
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px;">
+            <div>
+                <div style="margin-bottom: 8px;">
+                    <h1 style="font-size: 36px; font-weight: 700; color: #111827; margin: 0;">
+                        BELL EQUIPMENT LTD (BEL.XJSE)
+                    </h1>
+                </div>
+                
+                <!-- Price section with cache status and recommendation below it -->
+                <div>
+                    <p style="font-size: 20px; color: #6b7280; margin: 0;">
+                        Current Price: $12.45 (ZAR)
+                    </p>
+                    
+                    <!-- Cache Status Indicator - positioned below price -->
+                    <div style="padding: 6px 10px; border-radius: 4px; font-size: 11px; font-weight: 500; display: inline-flex; align-items: center; gap: 4px; margin-top: 6px; background-color: #dcfce7; color: #166534;">
+                        ✅ Fresh
+                        <span style="font-size: 10px; opacity: 0.8;">
+                            (2026-01-11 17:52:47 UTC)
+                        </span>
+                    </div>
+                    
+                    <!-- Recommendation Badge - positioned below price -->
+                    <div style="margin-top: 8px;">
+                        <span style="padding: 6px 16px; border-radius: 16px; font-size: 14px; font-weight: 600; color: white; background-color: #10b981;">
+                            Buy
+                        </span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Right side buttons (NO cache status here anymore) -->
+            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                <button style="padding: 10px 20px; background-color: #059669; color: white; border: none; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer;">
+                    🔄 Refresh Data
+                </button>
+                <button style="padding: 10px 20px; background-color: #2563eb; color: white; border: none; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer;">
+                    Run Analysis
+                </button>
+                <button style="padding: 10px 20px; background-color: #fee2e2; color: #991b1b; border: none; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer;">
+                    Remove from Watchlist
+                </button>
+            </div>
+        </div>
+        
+        <div style="margin-top: 20px; padding: 20px; background-color: #f9fafb; border-radius: 8px;">
+            <h3>✅ Changes Made:</h3>
+            <ul>
+                <li><strong>Cache status indicator moved</strong> from top-right buttons area to below the price display</li>
+                <li><strong>Recommendation badge moved</strong> from next to company name to below the price display</li>
+                <li><strong>Old cache status removed</strong> from the buttons section</li>
+                <li><strong>TypeScript error fixed</strong> - removed reference to non-existent <code>analysis?.company_name</code></li>
+                <li><strong>Layout improved</strong> - both cache status and recommendation now logically positioned near the price information</li>
+            </ul>
+            
+            <h3>📍 New Layout Order:</h3>
+            <ol>
+                <li><strong>Company Name & Ticker</strong> - Clean header without badges</li>
+                <li><strong>Current Price</strong> - Main price display</li>
+                <li><strong>Cache Status</strong> - Data freshness indicator (✅ Fresh)</li>
+                <li><strong>Recommendation</strong> - Buy/Sell/Hold badge</li>
+            </ol>
+            
+            <h3>🎯 User Requests Completed:</h3>
+            <ul>
+                <li>✅ Cache status indicator moved below price</li>
+                <li>✅ Recommendation badge moved below price</li>
+                <li>✅ Clean, logical information hierarchy</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

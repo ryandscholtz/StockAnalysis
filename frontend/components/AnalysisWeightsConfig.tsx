@@ -50,15 +50,49 @@ export default function AnalysisWeightsConfig({
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
       const response = await fetch(`${apiUrl}/api/analysis-presets`)
-      const data = await response.json()
-      setPresets(data.presets)
-      setBusinessTypes(data.business_types)
       
-      if (!selectedPreset && data.business_types.length > 0) {
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
+      const data = await response.json()
+      
+      // Defensive programming - ensure data structure exists
+      if (data && data.presets && data.business_types) {
+        setPresets(data.presets)
+        setBusinessTypes(data.business_types)
+        
+        if (!selectedPreset && data.business_types.length > 0) {
+          setSelectedPreset('default')
+        }
+      } else {
+        // Fallback to default values if API response is malformed
+        console.warn('API response malformed, using fallback values')
+        const fallbackPresets = {
+          'default': { dcf_weight: 0.4, epv_weight: 0.4, asset_weight: 0.2 },
+          'growth_company': { dcf_weight: 0.6, epv_weight: 0.3, asset_weight: 0.1 },
+          'mature_company': { dcf_weight: 0.4, epv_weight: 0.5, asset_weight: 0.1 }
+        }
+        const fallbackTypes = ['default', 'growth_company', 'mature_company']
+        
+        setPresets(fallbackPresets)
+        setBusinessTypes(fallbackTypes)
         setSelectedPreset('default')
       }
     } catch (error) {
       console.error('Error fetching presets:', error)
+      
+      // Fallback to default values on error
+      const fallbackPresets = {
+        'default': { dcf_weight: 0.4, epv_weight: 0.4, asset_weight: 0.2 },
+        'growth_company': { dcf_weight: 0.6, epv_weight: 0.3, asset_weight: 0.1 },
+        'mature_company': { dcf_weight: 0.4, epv_weight: 0.5, asset_weight: 0.1 }
+      }
+      const fallbackTypes = ['default', 'growth_company', 'mature_company']
+      
+      setPresets(fallbackPresets)
+      setBusinessTypes(fallbackTypes)
+      setSelectedPreset('default')
     } finally {
       setLoading(false)
     }
@@ -173,7 +207,7 @@ export default function AnalysisWeightsConfig({
               onChange={(e) => handlePresetChange(e.target.value)}
               className="w-full p-2 border rounded text-sm"
             >
-              {businessTypes.map(bt => (
+              {(businessTypes || []).map(bt => (
                 <option key={bt} value={bt}>
                   {bt.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
                 </option>

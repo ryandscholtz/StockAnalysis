@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Streaming Fix</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .log { background: #f5f5f5; padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Test Streaming Analysis Fix</h1>
+    <button onclick="testStreaming()">Test AMZN Analysis</button>
+    <div id="results"></div>
+
+    <script>
+        function log(message, type = 'info') {
+            const div = document.createElement('div');
+            div.className = `log ${type}`;
+            div.textContent = message;
+            document.getElementById('results').appendChild(div);
+            console.log(message);
+        }
+
+        async function testStreaming() {
+            document.getElementById('results').innerHTML = '';
+            log('🚀 Starting streaming analysis test...');
+            
+            try {
+                const API_BASE = 'https://dx0w31lbc1.execute-api.eu-west-1.amazonaws.com/production';
+                const response = await fetch(`${API_BASE}/api/analyze/AMZN?stream=true`);
+                
+                if (!response.ok) {
+                    log(`❌ Request failed: ${response.status}`, 'error');
+                    return;
+                }
+                
+                log(`✅ Response received (${response.status})`);
+                log(`📊 Content-Type: ${response.headers.get('content-type')}`);
+                
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                let chunkCount = 0;
+                let foundCompletion = false;
+                
+                while (true) {
+                    const { done, value } = await reader.read();
+                    chunkCount++;
+                    
+                    if (chunkCount === 1) {
+                        log('✅ First chunk received, stream is working!');
+                    }
+                    
+                    if (done) {
+                        log(`📊 Stream ended after ${chunkCount} chunks. Buffer length: ${buffer.length}`);
+                        
+                        // Use the same parsing logic as the fixed frontend
+                        const lines = [];
+                        let start = 0;
+                        for (let i = 0; i < buffer.length; i++) {
+                            if (buffer.charCodeAt(i) === 10) { // LF character
+                                lines.push(buffer.substring(start, i));
+                                start = i + 1;
+                            }
+                        }
+                        if (start < buffer.length) {
+                            lines.push(buffer.substring(start));
+                        }
+                        
+                        log(`📊 Found ${lines.length} lines in buffer`);
+                        
+                        for (const line of lines) {
+                            const trimmed = line.trim();
+                            if (trimmed.startsWith('data: ')) {
+                                try {
+                                    const data = trimmed.slice(6).trim();
+                                    if (data) {
+                                        const update = JSON.parse(data);
+                                        if (update.type === 'complete' && update.data) {
+                                            foundCompletion = true;
+                                            log('🎯 COMPLETION MESSAGE FOUND!', 'success');
+                                            log(`📊 Analysis Results:`, 'success');
+                                            log(`  - Ticker: ${update.data.ticker}`, 'success');
+                                            log(`  - Company: ${update.data.companyName}`, 'success');
+                                            log(`  - Current Price: $${update.data.currentPrice}`, 'success');
+                                            log(`  - Fair Value: $${update.data.fairValue}`, 'success');
+                                            log(`  - Recommendation: ${update.data.recommendation}`, 'success');
+                                            break;
+                                        }
+                                    }
+                                } catch (error) {
+                                    log(`❌ Parse error: ${error.message}`, 'error');
+                                }
+                            }
+                        }
+                        
+                        if (foundCompletion) {
+                            log('🎉 SUCCESS: Frontend fix working!', 'success');
+                            log('✅ No more "Stream ended without completion" errors', 'success');
+                        } else {
+                            log('❌ FAILURE: Still no completion message found', 'error');
+                        }
+                        
+                        break;
+                    }
+                    
+                    const chunk = decoder.decode(value, { stream: true });
+                    buffer += chunk;
+                    
+                    // Process complete lines during streaming (same as fixed frontend)
+                    const lines = [];
+                    let start = 0;
+                    for (let i = 0; i < buffer.length; i++) {
+                        if (buffer.charCodeAt(i) === 10) { // LF character
+                            lines.push(buffer.substring(start, i));
+                            start = i + 1;
+                        }
+                    }
+                    buffer = buffer.substring(start);
+                    
+                    for (const line of lines) {
+                        const trimmed = line.trim();
+                        if (trimmed.startsWith('data: ')) {
+                            try {
+                                const data = trimmed.slice(6).trim();
+                                if (data) {
+                                    const update = JSON.parse(data);
+                                    log(`[Chunk ${chunkCount}] ${update.type}: ${update.type === 'progress' ? update.message : 'completion'}`);
+                                    
+                                    if (update.type === 'complete' && update.data) {
+                                        foundCompletion = true;
+                                        log('🎯 COMPLETION FOUND DURING STREAMING!', 'success');
+                                        log('📊 This should resolve successfully', 'success');
+                                        // In real frontend, this would resolve the promise
+                                        return;
+                                    }
+                                }
+                            } catch (error) {
+                                log(`❌ Parse error during streaming: ${error.message}`, 'error');
+                            }
+                        }
+                    }
+                }
+                
+            } catch (error) {
+                log(`❌ Test failed: ${error.message}`, 'error');
+            }
+        }
+    </script>
+</body>
+</html>

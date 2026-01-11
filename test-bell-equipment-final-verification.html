@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bell Equipment - Final Verification</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .success { color: #10b981; }
+        .error { color: #ef4444; }
+        .info { color: #3b82f6; }
+        .result {
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 6px;
+            background-color: #f8fafc;
+            border-left: 4px solid #e5e7eb;
+        }
+        .result.success { border-left-color: #10b981; background-color: #ecfdf5; }
+        .result.error { border-left-color: #ef4444; background-color: #fef2f2; }
+        .result.info { border-left-color: #3b82f6; background-color: #eff6ff; }
+        .watchlist-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            margin: 8px 0;
+            background: #f9fafb;
+            border-radius: 6px;
+            border: 1px solid #e5e7eb;
+        }
+        .ticker { font-weight: bold; color: #1f2937; }
+        .company-name { color: #6b7280; }
+        .price { color: #059669; font-weight: 500; }
+    </style>
+</head>
+<body>
+    <h1>🎉 Bell Equipment - Final Verification</h1>
+    <p>Complete end-to-end test of the Bell Equipment company name fix</p>
+
+    <div class="test-section">
+        <h2>1. Main Watchlist Test</h2>
+        <p>Testing if BEL.XJSE appears in the main watchlist with correct company name</p>
+        <div id="watchlist-result">Loading...</div>
+        <div id="watchlist-items"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>2. Individual Stock Page Test</h2>
+        <p>Testing the individual stock page data (what users see when they click on BEL.XJSE)</p>
+        <div id="individual-result">Loading...</div>
+    </div>
+
+    <div class="test-section">
+        <h2>3. Analysis Data Test</h2>
+        <p>Testing the analysis endpoint that provides detailed stock information</p>
+        <div id="analysis-result">Loading...</div>
+    </div>
+
+    <div class="test-section">
+        <h2>4. Frontend Logic Verification</h2>
+        <p>Simulating the exact frontend logic that determines what company name to display</p>
+        <div id="frontend-result">Loading...</div>
+    </div>
+
+    <div class="test-section">
+        <h2>5. Final Summary</h2>
+        <div id="summary-result">Running tests...</div>
+    </div>
+
+    <script>
+        const API_URL = 'https://dx0w31lbc1.execute-api.eu-west-1.amazonaws.com/production';
+        
+        async function testMainWatchlist() {
+            try {
+                const response = await fetch(`${API_URL}/api/watchlist`);
+                const data = await response.json();
+                
+                const resultDiv = document.getElementById('watchlist-result');
+                const itemsDiv = document.getElementById('watchlist-items');
+                
+                if (response.ok && data.items) {
+                    const belItem = data.items.find(item => item.ticker === 'BEL.XJSE');
+                    
+                    if (belItem && belItem.company_name === 'BELL EQUIPMENT LTD') {
+                        resultDiv.innerHTML = `
+                            <div class="result success">
+                                ✅ <strong>SUCCESS:</strong> BEL.XJSE found in main watchlist with correct name<br>
+                                Total watchlist items: ${data.items.length}<br>
+                                Company Name: ${belItem.company_name}<br>
+                                Current Price: $${belItem.current_price}
+                            </div>
+                        `;
+                        
+                        // Display all watchlist items
+                        itemsDiv.innerHTML = '<h3>All Watchlist Items:</h3>' + 
+                            data.items.map(item => `
+                                <div class="watchlist-item">
+                                    <div>
+                                        <span class="ticker">${item.ticker}</span> - 
+                                        <span class="company-name">${item.company_name}</span>
+                                    </div>
+                                    <div class="price">$${item.current_price}</div>
+                                </div>
+                            `).join('');
+                        
+                        return { success: true, companyName: belItem.company_name };
+                    } else {
+                        resultDiv.innerHTML = `
+                            <div class="result error">
+                                ❌ <strong>FAILED:</strong> BEL.XJSE ${belItem ? 'has wrong company name' : 'not found in watchlist'}<br>
+                                ${belItem ? `Got: ${belItem.company_name}` : 'Available tickers: ' + data.items.map(i => i.ticker).join(', ')}
+                            </div>
+                        `;
+                        return { success: false };
+                    }
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="result error">
+                            ❌ <strong>ERROR:</strong> Failed to load watchlist<br>
+                            ${data.message || 'Unknown error'}
+                        </div>
+                    `;
+                    return { success: false };
+                }
+            } catch (error) {
+                document.getElementById('watchlist-result').innerHTML = `
+                    <div class="result error">
+                        ❌ <strong>ERROR:</strong> ${error.message}
+                    </div>
+                `;
+                return { success: false, error: error.message };
+            }
+        }
+
+        async function testIndividualStock() {
+            try {
+                const response = await fetch(`${API_URL}/api/watchlist/BEL.XJSE`);
+                const data = await response.json();
+                
+                const resultDiv = document.getElementById('individual-result');
+                
+                if (response.ok && data.company_name === 'BELL EQUIPMENT LTD') {
+                    resultDiv.innerHTML = `
+                        <div class="result success">
+                            ✅ <strong>SUCCESS:</strong> Individual stock page data correct<br>
+                            Company Name: ${data.company_name}<br>
+                            Ticker: ${data.ticker}<br>
+                            Current Price: $${data.current_price}<br>
+                            Recommendation: ${data.recommendation}
+                        </div>
+                    `;
+                    return { success: true, companyName: data.company_name };
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="result error">
+                            ❌ <strong>FAILED:</strong> Individual stock page data incorrect<br>
+                            Expected: BELL EQUIPMENT LTD<br>
+                            Got: ${data.company_name || 'undefined'}
+                        </div>
+                    `;
+                    return { success: false };
+                }
+            } catch (error) {
+                document.getElementById('individual-result').innerHTML = `
+                    <div class="result error">
+                        ❌ <strong>ERROR:</strong> ${error.message}
+                    </div>
+                `;
+                return { success: false, error: error.message };
+            }
+        }
+
+        async function testAnalysisData() {
+            try {
+                const response = await fetch(`${API_URL}/api/analyze/BEL.XJSE`);
+                const data = await response.json();
+                
+                const resultDiv = document.getElementById('analysis-result');
+                
+                if (response.ok && data.companyName === 'BELL EQUIPMENT LTD') {
+                    resultDiv.innerHTML = `
+                        <div class="result success">
+                            ✅ <strong>SUCCESS:</strong> Analysis data correct<br>
+                            Company Name: ${data.companyName}<br>
+                            Ticker: ${data.ticker}<br>
+                            Current Price: $${data.currentPrice}<br>
+                            Fair Value: $${data.fairValue}<br>
+                            Recommendation: ${data.recommendation}
+                        </div>
+                    `;
+                    return { success: true, companyName: data.companyName };
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="result error">
+                            ❌ <strong>FAILED:</strong> Analysis data incorrect<br>
+                            Expected: BELL EQUIPMENT LTD<br>
+                            Got: ${data.companyName || 'undefined'}
+                        </div>
+                    `;
+                    return { success: false };
+                }
+            } catch (error) {
+                document.getElementById('analysis-result').innerHTML = `
+                    <div class="result error">
+                        ❌ <strong>ERROR:</strong> ${error.message}
+                    </div>
+                `;
+                return { success: false, error: error.message };
+            }
+        }
+
+        function testFrontendLogic(watchlistData, individualData, analysisData) {
+            // Simulate the exact frontend logic from page.tsx line 415:
+            // const companyName = analysis?.companyName || analysis?.company_name || watchlistData?.watchlist_item?.company_name || ticker
+            
+            const analysis = analysisData.success ? { companyName: analysisData.companyName } : null;
+            const watchlistItem = individualData.success ? { watchlist_item: { company_name: individualData.companyName } } : null;
+            const ticker = 'BEL.XJSE';
+            
+            const finalCompanyName = analysis?.companyName || analysis?.company_name || watchlistItem?.watchlist_item?.company_name || ticker;
+            
+            const resultDiv = document.getElementById('frontend-result');
+            
+            if (finalCompanyName === 'BELL EQUIPMENT LTD') {
+                resultDiv.innerHTML = `
+                    <div class="result success">
+                        ✅ <strong>SUCCESS:</strong> Frontend logic produces correct result<br>
+                        Final Display Name: ${finalCompanyName}<br>
+                        Data Source: ${analysis?.companyName ? 'Analysis API (highest priority)' : 
+                                     watchlistItem?.watchlist_item?.company_name ? 'Watchlist Data' : 
+                                     'Ticker Fallback'}<br>
+                        <br>
+                        <strong>Priority Chain:</strong><br>
+                        1. Analysis Company Name: ${analysis?.companyName || 'N/A'}<br>
+                        2. Watchlist Company Name: ${watchlistItem?.watchlist_item?.company_name || 'N/A'}<br>
+                        3. Ticker Fallback: ${ticker}
+                    </div>
+                `;
+                return { success: true, companyName: finalCompanyName };
+            } else {
+                resultDiv.innerHTML = `
+                    <div class="result error">
+                        ❌ <strong>FAILED:</strong> Frontend logic produces wrong result<br>
+                        Expected: BELL EQUIPMENT LTD<br>
+                        Got: ${finalCompanyName}<br>
+                        Analysis: ${JSON.stringify(analysis)}<br>
+                        Watchlist: ${JSON.stringify(watchlistItem)}
+                    </div>
+                `;
+                return { success: false };
+            }
+        }
+
+        async function runAllTests() {
+            console.log('🔍 Starting Final Verification Tests...');
+            
+            // Test 1: Main watchlist
+            const watchlistResult = await testMainWatchlist();
+            
+            // Test 2: Individual stock page
+            const individualResult = await testIndividualStock();
+            
+            // Test 3: Analysis data
+            const analysisResult = await testAnalysisData();
+            
+            // Test 4: Frontend logic simulation
+            const frontendResult = testFrontendLogic(watchlistResult, individualResult, analysisResult);
+            
+            // Final summary
+            const summaryDiv = document.getElementById('summary-result');
+            const allPassed = watchlistResult.success && individualResult.success && analysisResult.success && frontendResult.success;
+            
+            if (allPassed) {
+                summaryDiv.innerHTML = `
+                    <div class="result success">
+                        🎉 <strong>ALL TESTS PASSED!</strong><br><br>
+                        <strong>Bell Equipment Company Name Issue: COMPLETELY RESOLVED</strong><br><br>
+                        
+                        ✅ Main Watchlist: Shows "BELL EQUIPMENT LTD"<br>
+                        ✅ Individual Stock Page: Shows "BELL EQUIPMENT LTD"<br>
+                        ✅ Analysis Data: Returns "BELL EQUIPMENT LTD"<br>
+                        ✅ Frontend Logic: Displays "BELL EQUIPMENT LTD"<br><br>
+                        
+                        <strong>What was fixed:</strong><br>
+                        • Lambda function import errors resolved<br>
+                        • MarketStack API integration working correctly<br>
+                        • BEL.XJSE added to default watchlist<br>
+                        • Company name extraction from API working<br>
+                        • Frontend prioritizes API names over stored names<br><br>
+                        
+                        <strong>User Experience:</strong><br>
+                        Users will now see "BELL EQUIPMENT LTD" instead of "BEL.XJSE Corporation" 
+                        in both the main watchlist and individual stock pages.
+                    </div>
+                `;
+            } else {
+                summaryDiv.innerHTML = `
+                    <div class="result error">
+                        ❌ <strong>SOME TESTS FAILED</strong><br><br>
+                        Main Watchlist: ${watchlistResult.success ? '✅' : '❌'}<br>
+                        Individual Stock: ${individualResult.success ? '✅' : '❌'}<br>
+                        Analysis Data: ${analysisResult.success ? '✅' : '❌'}<br>
+                        Frontend Logic: ${frontendResult.success ? '✅' : '❌'}<br><br>
+                        
+                        Please check the failed tests above for details.
+                    </div>
+                `;
+            }
+        }
+
+        // Run tests when page loads
+        runAllTests();
+    </script>
+</body>
+</html>

@@ -2,6 +2,7 @@
 Enhanced AWS Lambda handler for Stock Analysis API with MarketStack integration
 Provides real stock data using MarketStack API - NO FAKE PRICES VERSION
 Updated with proper fundamental analysis - v1.2
+Enhanced with PDF processing for large documents (160+ pages)
 """
 
 import json
@@ -12,8 +13,13 @@ import urllib.error
 import logging
 import boto3
 import time
+import sys
 from typing import Dict, Any, Optional
 from decimal import Decimal
+
+# Add the backend directory to Python path for imports
+sys.path.append('/opt/python/lib/python3.9/site-packages')
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 # Set up logging
 logger = logging.getLogger()
@@ -1128,6 +1134,448 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         },
                         'suggestions': suggestions,
                         'rateLimitInfo': rate_limit_info
+                    })
+                }
+        
+        # PDF Upload endpoint - Enhanced for large documents (160+ pages)
+        if path == '/api/upload-pdf':
+            if http_method != 'POST':
+                return {
+                    'statusCode': 405,
+                    'headers': headers,
+                    'body': json.dumps({'error': 'Method Not Allowed', 'message': 'Only POST method is allowed'})
+                }
+            
+            # Get ticker from query parameters
+            ticker = query_params.get('ticker')
+            if not ticker:
+                return {
+                    'statusCode': 400,
+                    'headers': headers,
+                    'body': json.dumps({'error': 'Missing ticker parameter'})
+                }
+            
+            ticker = ticker.upper()
+            
+            try:
+                # Parse multipart form data from Lambda event
+                import base64
+                import email
+                from email.message import EmailMessage
+                
+                # Get the body and decode if base64 encoded
+                body = event.get('body', '')
+                is_base64 = event.get('isBase64Encoded', False)
+                
+                if is_base64:
+                    body = base64.b64decode(body)
+                else:
+                    body = body.encode('utf-8') if isinstance(body, str) else body
+                
+                # Parse multipart data
+                content_type = event.get('headers', {}).get('content-type', '') or event.get('headers', {}).get('Content-Type', '')
+                
+                if 'multipart/form-data' not in content_type:
+                    return {
+                        'statusCode': 400,
+                        'headers': headers,
+                        'body': json.dumps({'error': 'Content-Type must be multipart/form-data'})
+                    }
+                
+                # Extract boundary from content-type
+                boundary = None
+                for part in content_type.split(';'):
+                    if 'boundary=' in part:
+                        boundary = part.split('boundary=')[1].strip()
+                        break
+                
+                if not boundary:
+                    return {
+                        'statusCode': 400,
+                        'headers': headers,
+                        'body': json.dumps({'error': 'Missing boundary in multipart data'})
+                    }
+                
+                # Parse multipart data manually
+                parts = body.split(f'--{boundary}'.encode())
+                pdf_data = None
+                filename = None
+                
+                for part in parts:
+                    if b'Content-Disposition: form-data' in part and b'filename=' in part:
+                        # Extract filename
+                        lines = part.split(b'\r\n')
+                        for line in lines:
+                            if b'filename=' in line:
+                                filename = line.decode().split('filename=')[1].strip('"')
+                                break
+                        
+                        # Extract file data (after double CRLF)
+                        if b'\r\n\r\n' in part:
+                            pdf_data = part.split(b'\r\n\r\n', 1)[1]
+                            # Remove trailing boundary markers
+                            if pdf_data.endswith(b'\r\n'):
+                                pdf_data = pdf_data[:-2]
+                            break
+                
+                if not pdf_data or not filename:
+                    return {
+                        'statusCode': 400,
+                        'headers': headers,
+                        'body': json.dumps({'error': 'No PDF file found in request'})
+                    }
+                
+                # Validate file type
+                if not filename.lower().endswith('.pdf'):
+                    return {
+                        'statusCode': 400,
+                        'headers': headers,
+                        'body': json.dumps({'error': 'Only PDF files are supported'})
+                    }
+                
+                # Check file size (50MB limit for Lambda)
+                if len(pdf_data) > 50 * 1024 * 1024:
+                    return {
+                        'statusCode': 400,
+                        'headers': headers,
+                        'body': json.dumps({'error': 'File size must be less than 50MB'})
+                    }
+                
+                logger.info(f"Processing PDF upload for {ticker}: {filename}, {len(pdf_data)} bytes")
+                
+                # Initialize simplified PDF processor for Lambda
+                # Import locally to avoid issues if module is not available
+                try:
+                    import sys
+                    import os
+                    
+                    # Add current directory to path
+                    current_dir = os.path.dirname(os.path.abspath(__file__))
+                    if current_dir not in sys.path:
+                        sys.path.insert(0, current_dir)
+                    
+                    from simple_pdf_processor import SimplePDFProcessor
+                    processor = SimplePDFProcessor()
+                    
+                    # Process the PDF with progress tracking
+                    progress_updates = []
+                    
+                    def progress_callback(current_step: int, total_steps: int, status_message: str):
+                        progress_updates.append({
+                            'step': current_step,
+                            'total': total_steps,
+                            'message': status_message,
+                            'progress_pct': int((current_step / total_steps) * 100)
+                        })
+                        logger.info(f"PDF Processing Progress: {status_message} ({current_step}/{total_steps})")
+                    
+                    # Process the PDF (sync version for Lambda)
+                    try:
+                        # Create a simple sync wrapper since Lambda doesn't handle async well
+                        structured_data, processing_summary = processor.process_pdf_sync(
+                            pdf_data, ticker, progress_callback
+                        )
+                    except AttributeError:
+                        # Fallback to basic processing if async method not available
+                        structured_data = {
+                            "income_statement": {},
+                            "balance_sheet": {},
+                            "cashflow": {},
+                            "key_metrics": {},
+                            "extraction_metadata": {
+                                "ticker": ticker,
+                                "extracted_at": time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+                                "extraction_method": "basic_fallback",
+                                "note": "PDF uploaded but requires manual data entry for accuracy"
+                            }
+                        }
+                        processing_summary = f"PDF received ({len(pdf_data)} bytes) - manual data entry recommended"
+                        progress_callback(8, 8, "PDF received - manual data entry recommended")
+                        
+                except ImportError as e:
+                    logger.warning(f"PDF processor not available: {e}")
+                    # Fallback - just acknowledge the upload
+                    structured_data = {
+                        "income_statement": {},
+                        "balance_sheet": {},
+                        "cashflow": {},
+                        "key_metrics": {},
+                        "extraction_metadata": {
+                            "ticker": ticker,
+                            "extracted_at": time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+                            "extraction_method": "upload_only",
+                            "note": "PDF uploaded successfully - use manual data entry to add financial data"
+                        }
+                    }
+                    processing_summary = f"PDF uploaded ({len(pdf_data)} bytes) - manual data entry required"
+                    progress_updates = [
+                        {'step': 1, 'total': 2, 'message': 'PDF uploaded successfully', 'progress_pct': 50},
+                        {'step': 2, 'total': 2, 'message': 'Ready for manual data entry', 'progress_pct': 100}
+                    ]
+                    
+                    # Save extracted data to DynamoDB
+                    periods_saved = 0
+                    if structured_data:
+                        try:
+                            dynamodb = boto3.resource('dynamodb')
+                            table = dynamodb.Table(TABLE_NAME)
+                            
+                            # Save financial data with proper structure
+                            financial_item = {
+                                'PK': f'FINANCIAL#{ticker}',
+                                'SK': 'EXTRACTED_DATA',
+                                'ticker': ticker,
+                                'data_source': 'PDF_UPLOAD',
+                                'extracted_at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+                                'filename': filename,
+                                'processing_summary': processing_summary,
+                                'financial_data': convert_floats_to_decimal(structured_data),
+                                'ttl': int(time.time()) + (365 * 24 * 60 * 60)  # 1 year TTL
+                            }
+                            
+                            table.put_item(Item=financial_item)
+                            
+                            # Count periods saved
+                            for statement_type in ['income_statement', 'balance_sheet', 'cashflow']:
+                                if statement_type in structured_data:
+                                    periods_saved += len(structured_data[statement_type])
+                            
+                            logger.info(f"Saved extracted financial data for {ticker}: {periods_saved} periods")
+                            
+                        except Exception as e:
+                            logger.error(f"Error saving extracted data to DynamoDB: {e}")
+                            # Continue anyway - we still have the extracted data
+                    
+                    return {
+                        'statusCode': 200,
+                        'headers': headers,
+                        'body': json.dumps({
+                            'success': True,
+                            'message': f'Successfully processed PDF for {ticker}',
+                            'ticker': ticker,
+                            'filename': filename,
+                            'updated_periods': periods_saved,
+                            'processing_summary': processing_summary,
+                            'progress_updates': progress_updates,
+                            'extracted_data': structured_data,
+                            'extraction_details': {
+                                'file_size_mb': round(len(pdf_data) / (1024 * 1024), 2),
+                                'processing_time_steps': len(progress_updates),
+                                'data_types_extracted': list(structured_data.keys()) if structured_data else []
+                            }
+                        })
+                    }
+                    
+                except Exception as e:
+                    logger.error(f"Error processing PDF for {ticker}: {e}")
+                    return {
+                        'statusCode': 500,
+                        'headers': headers,
+                        'body': json.dumps({
+                            'success': False,
+                            'error': f'PDF processing failed: {str(e)}',
+                            'ticker': ticker,
+                            'filename': filename,
+                            'progress_updates': progress_updates
+                        })
+                    }
+                    
+            except Exception as e:
+                logger.error(f"Error handling PDF upload: {e}")
+                return {
+                    'statusCode': 500,
+                    'headers': headers,
+                    'body': json.dumps({
+                        'success': False,
+                        'error': f'Upload failed: {str(e)}',
+                        'ticker': ticker if 'ticker' in locals() else 'unknown'
+                    })
+                }
+        
+        # Manual Data endpoints - GET and POST
+        if path.startswith('/api/manual-data'):
+            if path == '/api/manual-data' and http_method == 'POST':
+                # Add manual financial data
+                try:
+                    # Parse JSON body
+                    body = event.get('body', '{}')
+                    if isinstance(body, str):
+                        data = json.loads(body)
+                    else:
+                        data = body
+                    
+                    ticker = data.get('ticker', '').upper()
+                    data_type = data.get('data_type', '')
+                    period = data.get('period', '')
+                    financial_data = data.get('data', {})
+                    
+                    if not ticker or not data_type or not period or not financial_data:
+                        return {
+                            'statusCode': 400,
+                            'headers': headers,
+                            'body': json.dumps({
+                                'success': False,
+                                'error': 'Missing required fields: ticker, data_type, period, data'
+                            })
+                        }
+                    
+                    # Save to DynamoDB
+                    try:
+                        dynamodb = boto3.resource('dynamodb')
+                        table = dynamodb.Table(TABLE_NAME)
+                        
+                        # Get existing financial data or create new
+                        response = table.get_item(
+                            Key={
+                                'PK': f'FINANCIAL#{ticker}',
+                                'SK': 'MANUAL_DATA'
+                            }
+                        )
+                        
+                        if 'Item' in response:
+                            existing_item = response['Item']
+                            financial_structure = convert_decimals_to_float(existing_item.get('financial_data', {}))
+                        else:
+                            financial_structure = {
+                                'income_statement': {},
+                                'balance_sheet': {},
+                                'cashflow': {},
+                                'key_metrics': {}
+                            }
+                        
+                        # Add new data to appropriate section
+                        if data_type in financial_structure:
+                            if data_type == 'key_metrics':
+                                # Key metrics are not period-based
+                                financial_structure[data_type].update(financial_data)
+                            else:
+                                # Period-based data
+                                if period not in financial_structure[data_type]:
+                                    financial_structure[data_type][period] = {}
+                                financial_structure[data_type][period].update(financial_data)
+                        
+                        # Save updated data
+                        item = {
+                            'PK': f'FINANCIAL#{ticker}',
+                            'SK': 'MANUAL_DATA',
+                            'ticker': ticker,
+                            'data_source': 'MANUAL_ENTRY',
+                            'updated_at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+                            'financial_data': convert_floats_to_decimal(financial_structure),
+                            'ttl': int(time.time()) + (365 * 24 * 60 * 60)  # 1 year TTL
+                        }
+                        
+                        table.put_item(Item=item)
+                        
+                        logger.info(f"Saved manual financial data for {ticker}: {data_type} - {period}")
+                        
+                        return {
+                            'statusCode': 200,
+                            'headers': headers,
+                            'body': json.dumps({
+                                'success': True,
+                                'message': f'Successfully saved {data_type.replace("_", " ")} data for {ticker}',
+                                'ticker': ticker,
+                                'data_type': data_type,
+                                'period': period,
+                                'fields_saved': len(financial_data)
+                            })
+                        }
+                        
+                    except Exception as e:
+                        logger.error(f"Error saving manual data to DynamoDB: {e}")
+                        return {
+                            'statusCode': 500,
+                            'headers': headers,
+                            'body': json.dumps({
+                                'success': False,
+                                'error': f'Database error: {str(e)}'
+                            })
+                        }
+                        
+                except Exception as e:
+                    logger.error(f"Error processing manual data request: {e}")
+                    return {
+                        'statusCode': 400,
+                        'headers': headers,
+                        'body': json.dumps({
+                            'success': False,
+                            'error': f'Invalid request: {str(e)}'
+                        })
+                    }
+            
+            elif path.startswith('/api/manual-data/') and http_method == 'GET':
+                # Get financial data for a ticker
+                ticker = path.split('/')[-1].upper()
+                
+                try:
+                    dynamodb = boto3.resource('dynamodb')
+                    table = dynamodb.Table(TABLE_NAME)
+                    
+                    # Try to get manual data first
+                    response = table.get_item(
+                        Key={
+                            'PK': f'FINANCIAL#{ticker}',
+                            'SK': 'MANUAL_DATA'
+                        }
+                    )
+                    
+                    financial_data = {}
+                    data_source = 'none'
+                    
+                    if 'Item' in response:
+                        financial_data = convert_decimals_to_float(response['Item'].get('financial_data', {}))
+                        data_source = 'manual'
+                    else:
+                        # Try to get extracted data from PDF
+                        response = table.get_item(
+                            Key={
+                                'PK': f'FINANCIAL#{ticker}',
+                                'SK': 'EXTRACTED_DATA'
+                            }
+                        )
+                        
+                        if 'Item' in response:
+                            financial_data = convert_decimals_to_float(response['Item'].get('financial_data', {}))
+                            data_source = 'pdf_extracted'
+                    
+                    has_data = bool(financial_data and any(
+                        financial_data.get(key) for key in ['income_statement', 'balance_sheet', 'cashflow', 'key_metrics']
+                    ))
+                    
+                    return {
+                        'statusCode': 200,
+                        'headers': headers,
+                        'body': json.dumps({
+                            'ticker': ticker,
+                            'financial_data': financial_data,
+                            'has_data': has_data,
+                            'data_source': data_source,
+                            'last_updated': response.get('Item', {}).get('updated_at') if 'Item' in response else None
+                        })
+                    }
+                    
+                except Exception as e:
+                    logger.error(f"Error retrieving financial data for {ticker}: {e}")
+                    return {
+                        'statusCode': 500,
+                        'headers': headers,
+                        'body': json.dumps({
+                            'ticker': ticker,
+                            'financial_data': {},
+                            'has_data': False,
+                            'error': f'Database error: {str(e)}'
+                        })
+                    }
+            
+            else:
+                return {
+                    'statusCode': 405,
+                    'headers': headers,
+                    'body': json.dumps({
+                        'error': 'Method Not Allowed',
+                        'message': f'Method {http_method} not allowed for {path}',
+                        'allowed_methods': ['GET', 'POST']
                     })
                 }
         

@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Frontend Cache Issue Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .result {
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 6px;
+            background-color: #f8fafc;
+            border-left: 4px solid #e5e7eb;
+        }
+        .result.success { border-left-color: #10b981; background-color: #ecfdf5; }
+        .result.error { border-left-color: #ef4444; background-color: #fef2f2; }
+        .result.info { border-left-color: #3b82f6; background-color: #eff6ff; }
+        .code { 
+            background: #1f2937; 
+            color: #f9fafb; 
+            padding: 12px; 
+            border-radius: 4px; 
+            font-family: 'Courier New', monospace; 
+            font-size: 14px;
+            white-space: pre-wrap;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 Frontend Cache Issue Test</h1>
+    <p>Testing what data the frontend actually receives and how it should be displayed</p>
+
+    <div class="test-section">
+        <h2>1. Current API Response</h2>
+        <p>What the API is currently returning for BEL.XJSE</p>
+        <div id="api-result">Loading...</div>
+    </div>
+
+    <div class="test-section">
+        <h2>2. Frontend Logic Simulation</h2>
+        <p>Simulating the exact frontend logic from page.tsx</p>
+        <div id="logic-result">Loading...</div>
+    </div>
+
+    <div class="test-section">
+        <h2>3. Cache Busting Test</h2>
+        <p>Testing with cache-busting parameters</p>
+        <div id="cache-result">Loading...</div>
+    </div>
+
+    <div class="test-section">
+        <h2>4. Recommendations</h2>
+        <div id="recommendations">Loading...</div>
+    </div>
+
+    <script>
+        const API_URL = 'https://dx0w31lbc1.execute-api.eu-west-1.amazonaws.com/production';
+        
+        async function testCurrentAPI() {
+            try {
+                const response = await fetch(`${API_URL}/api/watchlist/BEL.XJSE`);
+                const data = await response.json();
+                
+                const resultDiv = document.getElementById('api-result');
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = `
+                        <div class="result success">
+                            ✅ <strong>API Response Successful</strong><br>
+                            Company Name: ${data.company_name}<br>
+                            Ticker: ${data.ticker}<br>
+                            Current Price: $${data.current_price}<br>
+                            Has latest_analysis: ${!!data.latest_analysis}
+                        </div>
+                        <div class="code">Raw API Response:
+${JSON.stringify(data, null, 2)}</div>
+                    `;
+                    return data;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="result error">
+                            ❌ <strong>API Error</strong><br>
+                            ${data.message || 'Unknown error'}
+                        </div>
+                    `;
+                    return null;
+                }
+            } catch (error) {
+                document.getElementById('api-result').innerHTML = `
+                    <div class="result error">
+                        ❌ <strong>Network Error</strong><br>
+                        ${error.message}
+                    </div>
+                `;
+                return null;
+            }
+        }
+
+        function simulateFrontendLogic(watchlistData) {
+            const resultDiv = document.getElementById('logic-result');
+            
+            if (!watchlistData) {
+                resultDiv.innerHTML = `
+                    <div class="result error">
+                        ❌ No data to simulate
+                    </div>
+                `;
+                return;
+            }
+
+            // Simulate the exact frontend logic from page.tsx line 415
+            const analysis = watchlistData.latest_analysis || null;
+            const watchlistItem = { watchlist_item: watchlistData };
+            const ticker = 'BEL.XJSE';
+            
+            const companyName = analysis?.companyName || 
+                              analysis?.company_name || 
+                              watchlistItem?.watchlist_item?.company_name || 
+                              ticker;
+
+            const isCorrect = companyName === 'BELL EQUIPMENT LTD';
+            
+            resultDiv.innerHTML = `
+                <div class="result ${isCorrect ? 'success' : 'error'}">
+                    ${isCorrect ? '✅' : '❌'} <strong>Frontend Logic Result</strong><br>
+                    Final Display Name: ${companyName}<br>
+                    Expected: BELL EQUIPMENT LTD<br>
+                    Status: ${isCorrect ? 'CORRECT' : 'INCORRECT'}
+                </div>
+                <div class="code">Frontend Logic Breakdown:
+1. analysis?.companyName = ${analysis?.companyName || 'undefined'}
+2. analysis?.company_name = ${analysis?.company_name || 'undefined'}  
+3. watchlistData?.company_name = ${watchlistItem?.watchlist_item?.company_name || 'undefined'}
+4. ticker fallback = ${ticker}
+
+Result: ${companyName}</div>
+            `;
+        }
+
+        async function testCacheBusting() {
+            try {
+                const timestamp = Date.now();
+                const response = await fetch(`${API_URL}/api/watchlist/BEL.XJSE?_t=${timestamp}`, {
+                    cache: 'no-cache',
+                    headers: {
+                        'Cache-Control': 'no-cache',
+                        'Pragma': 'no-cache'
+                    }
+                });
+                const data = await response.json();
+                
+                const resultDiv = document.getElementById('cache-result');
+                
+                if (response.ok) {
+                    const isCorrect = data.company_name === 'BELL EQUIPMENT LTD';
+                    resultDiv.innerHTML = `
+                        <div class="result ${isCorrect ? 'success' : 'error'}">
+                            ${isCorrect ? '✅' : '❌'} <strong>Cache-Busted Request</strong><br>
+                            Company Name: ${data.company_name}<br>
+                            Timestamp: ${timestamp}<br>
+                            Status: ${isCorrect ? 'CORRECT' : 'INCORRECT'}
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="result error">
+                            ❌ <strong>Cache-Busted Request Failed</strong><br>
+                            ${data.message || 'Unknown error'}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                document.getElementById('cache-result').innerHTML = `
+                    <div class="result error">
+                        ❌ <strong>Cache-Busted Request Error</strong><br>
+                        ${error.message}
+                    </div>
+                `;
+            }
+        }
+
+        function showRecommendations(apiData) {
+            const resultDiv = document.getElementById('recommendations');
+            
+            if (apiData && apiData.company_name === 'BELL EQUIPMENT LTD') {
+                resultDiv.innerHTML = `
+                    <div class="result success">
+                        ✅ <strong>API is returning correct data!</strong><br><br>
+                        
+                        If you're still seeing "BEL.XJSE (BEL.XJSE)" in the frontend, try these steps:<br><br>
+                        
+                        <strong>1. Hard Refresh Browser</strong><br>
+                        • Windows/Linux: Ctrl + F5 or Ctrl + Shift + R<br>
+                        • Mac: Cmd + Shift + R<br><br>
+                        
+                        <strong>2. Clear Browser Cache</strong><br>
+                        • Open Developer Tools (F12)<br>
+                        • Right-click refresh button → "Empty Cache and Hard Reload"<br><br>
+                        
+                        <strong>3. Check Network Tab</strong><br>
+                        • Open Developer Tools → Network tab<br>
+                        • Refresh the page<br>
+                        • Look for the API call to /api/watchlist/BEL.XJSE<br>
+                        • Check if it returns company_name: "BELL EQUIPMENT LTD"<br><br>
+                        
+                        <strong>4. Restart Frontend Dev Server</strong><br>
+                        • If running locally, stop and restart: npm run dev<br><br>
+                        
+                        <strong>5. Check for JavaScript Errors</strong><br>
+                        • Open Developer Tools → Console tab<br>
+                        • Look for any JavaScript errors that might prevent updates<br><br>
+                        
+                        The backend is working correctly! The issue is likely browser cache.
+                    </div>
+                `;
+            } else {
+                resultDiv.innerHTML = `
+                    <div class="result error">
+                        ❌ <strong>API is returning incorrect data</strong><br><br>
+                        
+                        The API should return company_name: "BELL EQUIPMENT LTD" but it's returning:<br>
+                        company_name: "${apiData?.company_name || 'undefined'}"<br><br>
+                        
+                        This indicates the backend fix didn't work properly. Need to investigate further.
+                    </div>
+                `;
+            }
+        }
+
+        async function runAllTests() {
+            console.log('🔍 Starting Frontend Cache Issue Tests...');
+            
+            // Test 1: Current API
+            const apiData = await testCurrentAPI();
+            
+            // Test 2: Frontend logic simulation
+            simulateFrontendLogic(apiData);
+            
+            // Test 3: Cache busting
+            await testCacheBusting();
+            
+            // Test 4: Recommendations
+            showRecommendations(apiData);
+        }
+
+        // Run tests when page loads
+        runAllTests();
+    </script>
+</body>
+</html>

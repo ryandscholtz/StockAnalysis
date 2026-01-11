@@ -334,7 +334,21 @@ export const stockApi = {
                       }
                     } catch (parseError) {
                       // If that fails, try to parse as streaming format
-                      const lines = buffer.split('\n')
+                      // Split by actual LF characters (code 10) to handle all newline types
+                      const lines = []
+                      let start = 0
+                      for (let i = 0; i < buffer.length; i++) {
+                        if (buffer.charCodeAt(i) === 10) { // LF character
+                          lines.push(buffer.substring(start, i))
+                          start = i + 1
+                        }
+                      }
+                      if (start < buffer.length) {
+                        lines.push(buffer.substring(start))
+                      }
+                      
+                      console.log(`Found ${lines.length} lines in buffer`)
+                      
                       for (const line of lines) {
                         const trimmed = line.trim()
                         if (trimmed.startsWith('data: ')) {
@@ -342,7 +356,7 @@ export const stockApi = {
                             const data = trimmed.slice(6).trim()
                             if (data) {
                               const update: ProgressUpdate = JSON.parse(data)
-                              console.log('Final update from buffer:', update)
+                              console.log('Final update from buffer:', update.type)
                               if (update.type === 'complete' && update.data) {
                                 console.log('Analysis complete from buffer!')
                                 if (timeoutId) {
@@ -367,9 +381,18 @@ export const stockApi = {
                 const chunk = decoder.decode(value, { stream: true })
                 buffer += chunk
                 
-                // Process complete lines
-                const lines = buffer.split('\n')
-                buffer = lines.pop() || ''
+                // Process complete lines - handle different newline types
+                // Split by LF characters to ensure proper parsing
+                const lines = []
+                let start = 0
+                for (let i = 0; i < buffer.length; i++) {
+                  if (buffer.charCodeAt(i) === 10) { // LF character
+                    lines.push(buffer.substring(start, i))
+                    start = i + 1
+                  }
+                }
+                // Keep the remaining part in buffer
+                buffer = buffer.substring(start)
 
                 for (const line of lines) {
                   const trimmed = line.trim()
