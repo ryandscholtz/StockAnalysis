@@ -25,8 +25,7 @@ api.interceptors.request.use(
       type: 'request',
       method: config.method?.toUpperCase(),
       url: `${config.baseURL}${config.url}`,
-      data: config.data,
-      authenticated: !!token
+      data: config.data
     })
     return config
   },
@@ -976,16 +975,6 @@ export const stockApi = {
         : `/api/watchlist/${ticker}`
     
     const response = await api.put<{ success: boolean; message: string }>(url)
-    return response.data
-  },
-
-  async addManualData(ticker: string, dataType: string, period: string, data: Record<string, number>): Promise<{ success: boolean; message: string }> {
-    const response = await api.post('/api/manual-data', {
-      ticker,
-      data_type: dataType,
-      period,
-      data
-    })
     return response.data
   },
 

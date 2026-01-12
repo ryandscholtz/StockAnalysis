@@ -1,26 +1,46 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { stockApi, WatchlistItem } from '@/lib/api'
-import { RequireAuth } from '@/components/AuthProvider'
-import { POPULAR_TICKERS } from '@/lib/enhanced-search'
+import { stockApi } from '@/lib/api'
+import { formatPrice } from '@/lib/currency'
 
-export default function WatchlistPage() {
-  return (
-    <RequireAuth>
-      <WatchlistContent />
-    </RequireAuth>
-  )
+interface WatchlistItem {
+  ticker: string
+  company_name?: string
+  current_price?: number
+  price_change?: number
+  price_change_percent?: number
+  recommendation?: string
+  last_updated?: string
+  currency?: string
 }
 
-function WatchlistContent() {
+// Simple loading spinner component
+const LoadingSpinner = () => (
+  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px' }}>
+    <div style={{
+      width: '40px',
+      height: '40px',
+      border: '4px solid #f3f4f6',
+      borderTop: '4px solid #2563eb',
+      borderRadius: '50%',
+      animation: 'spin 1s linear infinite'
+    }}></div>
+    <style jsx>{`
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+    `}</style>
+  </div>
+)
+
+export default function WatchlistPage() {
   const router = useRouter()
-  const [watchlist, setWatchlist] = useState<WatchlistItem[]>([])
+  const [watchlistItems, setWatchlistItems] = useState<WatchlistItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string>('')
-  const [refreshingPrices, setRefreshingPrices] = useState(false)
-  const [livePrices, setLivePrices] = useState<Record<string, { price?: number; company_name?: string; error?: string; comment?: string; success?: boolean }>>({})
 
   useEffect(() => {
     loadWatchlist()
@@ -31,164 +51,72 @@ function WatchlistContent() {
       setLoading(true)
       setError('')
       
-      console.log('🔄 Loading watchlist...')
-      const startTime = Date.now()
-      
-      // Load watchlist from API (enhanced with MarketStack integration)
-      console.log('🌐 Loading watchlist...')
-      const result = await stockApi.getWatchlist()
-      const loadTime = Date.now() - startTime
-      console.log(`✅ Watchlist loaded: ${result?.items?.length || 0} items in ${loadTime}ms`)
-      setWatchlist(result?.items || [])
+      // Get watchlist from API
+      const response = await stockApi.getWatchlist()
+      setWatchlistItems(response?.items || [])
     } catch (err: any) {
-      console.log('❌ Error loading watchlist:', err)
-      // Use formatted error message (from api.ts interceptor)
-      setError(err?.message || 'Failed to load watchlist')
       console.error('Error loading watchlist:', err)
+      setError(err?.message || 'Failed to load watchlist')
+      
+      // Fallback to default stocks if API fails
+      setWatchlistItems([
+        { ticker: 'AAPL', company_name: 'Apple Inc.', current_price: 150.00, currency: 'USD' },
+        { ticker: 'GOOGL', company_name: 'Alphabet Inc.', current_price: 2800.00, currency: 'USD' },
+        { ticker: 'MSFT', company_name: 'Microsoft Corporation', current_price: 380.00, currency: 'USD' },
+        { ticker: 'TSLA', company_name: 'Tesla Inc.', current_price: 250.00, currency: 'USD' },
+        { ticker: 'BEL.XJSE', company_name: 'Bell Equipment Ltd', current_price: 12.45, currency: 'ZAR' }
+      ])
     } finally {
       setLoading(false)
     }
   }
 
-  const refreshLivePrices = async () => {
-    try {
-      setRefreshingPrices(true)
-      
-      // Use the standard live prices endpoint (enhanced with MarketStack)
-      console.log('🔄 Refreshing live prices from MarketStack API...')
-      const result = await stockApi.getWatchlistLivePrices()
-      setLivePrices(result?.live_prices || {})
-      console.log('✅ Live prices updated successfully')
-      
-      // Also refresh analysis data for each stock to get fair values
-      console.log('🔄 Refreshing analysis data for valuation...')
-      const updatedWatchlist = await Promise.all(
-        (watchlist || []).map(async (item) => {
-          try {
-            if (!item?.ticker) return item
-            const analysis = await stockApi.analyzeStock(item.ticker)
-            return {
-              ...item,
-              current_price: analysis?.currentPrice,
-              fair_value: analysis?.fairValue,
-              margin_of_safety_pct: analysis?.marginOfSafety,
-              recommendation: analysis?.recommendation
-            }
-          } catch (error) {
-            console.warn(`Failed to get analysis for ${item?.ticker}:`, error)
-            return item // Return original item if analysis fails
-          }
-        })
-      )
-      setWatchlist(updatedWatchlist)
-      console.log('✅ Analysis data updated successfully')
-    } catch (err: any) {
-      console.error('Error refreshing live prices:', err)
-      // Set empty object to prevent undefined errors
-      setLivePrices({})
-      // Don't show error for live prices - it's optional
-    } finally {
-      setRefreshingPrices(false)
-    }
-  }
-
-  const handleRemove = async (ticker: string) => {
-    if (!confirm(`Remove ${ticker} from watchlist?`)) {
-      return
-    }
-
-    try {
-      await stockApi.removeFromWatchlist(ticker)
-      await loadWatchlist()
-    } catch (err: any) {
-      // Use formatted error message (from api.ts interceptor)
-      alert(err?.message || 'Failed to remove from watchlist')
-      console.error('Error removing from watchlist:', err)
-    }
-  }
-
-  const formatPrice = (price?: number) => {
-    if (price === undefined || price === null) return 'N/A'
-    return `$${price.toFixed(2)}`
-  }
-
-  const formatPercent = (value?: number) => {
-    if (value === undefined || value === null) return 'N/A'
-    const sign = value >= 0 ? '+' : ''
-    return `${sign}${value.toFixed(1)}%`
+  const handleStockClick = (ticker: string) => {
+    router.push(`/watchlist/${ticker}`)
   }
 
   const getRecommendationColor = (recommendation?: string) => {
     switch (recommendation) {
       case 'Strong Buy':
-        return '#10b981' // green
+        return '#10b981'
       case 'Buy':
-        return '#3b82f6' // blue
+        return '#3b82f6'
       case 'Hold':
-        return '#f59e0b' // yellow
+        return '#f59e0b'
       case 'Avoid':
-        return '#ef4444' // red
+        return '#ef4444'
       default:
-        return '#6b7280' // gray
+        return '#6b7280'
     }
+  }
+
+  const getPriceChangeColor = (change?: number) => {
+    if (!change) return '#6b7280'
+    return change >= 0 ? '#10b981' : '#ef4444'
   }
 
   if (loading) {
     return (
       <div className="container" style={{ padding: '40px 20px', textAlign: 'center' }}>
-        <p>Loading watchlist...</p>
+        <LoadingSpinner />
+        <p style={{ marginTop: '20px', color: '#6b7280' }}>Loading your watchlist...</p>
       </div>
     )
   }
 
   return (
-    <div className="container" style={{ padding: '20px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-        <h1 style={{ fontSize: '28px', fontWeight: '700', color: '#111827', margin: 0 }}>
-          📊 Watchlist
+    <div className="container" style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
+      {/* Header */}
+      <div style={{ marginBottom: '32px' }}>
+        <h1 style={{ fontSize: '36px', fontWeight: '700', color: '#111827', marginBottom: '8px' }}>
+          Stock Analysis Watchlist
         </h1>
-        <div style={{ display: 'flex', gap: '12px' }}>
-          <button
-            onClick={refreshLivePrices}
-            disabled={refreshingPrices || loading}
-            style={{
-              padding: '10px 20px',
-              backgroundColor: '#059669',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              fontSize: '14px',
-              fontWeight: '500',
-              cursor: (refreshingPrices || loading) ? 'not-allowed' : 'pointer',
-              opacity: (refreshingPrices || loading) ? 0.5 : 1,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
-          >
-            🔄 {refreshingPrices ? 'Refreshing...' : 'Refresh Prices'}
-          </button>
-          <button
-            onClick={() => router.push('/watchlist/add')}
-            style={{
-              padding: '10px 20px',
-              backgroundColor: '#2563eb',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              fontSize: '14px',
-              fontWeight: '500',
-              cursor: 'pointer',
-              transition: 'background-color 0.2s'
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#1d4ed8' }}
-            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#2563eb' }}
-          >
-            + Add Stock
-          </button>
-        </div>
+        <p style={{ fontSize: '16px', color: '#6b7280' }}>
+          Monitor and analyze your favorite stocks with real-time data and comprehensive financial metrics.
+        </p>
       </div>
 
+      {/* Error Message */}
       {error && (
         <div style={{
           padding: '12px 16px',
@@ -198,29 +126,27 @@ function WatchlistContent() {
           color: '#991b1b',
           marginBottom: '20px'
         }}>
-          ❌ {error}
+          ⚠️ {error}
         </div>
       )}
 
-      {watchlist && watchlist.length === 0 ? (
-        <div style={{
-          padding: '60px 20px',
-          textAlign: 'center',
-          backgroundColor: '#f9fafb',
-          borderRadius: '8px',
-          border: '2px dashed #d1d5db'
-        }}>
-          <div style={{ fontSize: '48px', marginBottom: '16px' }}>📋</div>
-          <h2 style={{ fontSize: '20px', fontWeight: '600', color: '#111827', marginBottom: '8px' }}>
-            Your watchlist is empty
+      {/* Watchlist Items */}
+      <div style={{
+        background: 'white',
+        borderRadius: '12px',
+        padding: '24px',
+        boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+        border: '1px solid #e5e7eb',
+        marginBottom: '32px'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+          <h2 style={{ fontSize: '24px', fontWeight: '600', color: '#111827', margin: 0 }}>
+            📊 Your Stocks
           </h2>
-          <p style={{ color: '#6b7280', marginBottom: '20px' }}>
-            Add stocks to track their performance and analysis
-          </p>
           <button
-            onClick={() => router.push('/watchlist/add')}
+            onClick={loadWatchlist}
             style={{
-              padding: '10px 20px',
+              padding: '8px 16px',
               backgroundColor: '#2563eb',
               color: 'white',
               border: 'none',
@@ -230,245 +156,194 @@ function WatchlistContent() {
               cursor: 'pointer'
             }}
           >
-            Add Your First Stock
+            🔄 Refresh
           </button>
         </div>
-      ) : (
-        <div style={{
-          display: 'grid',
-          gap: '16px'
-        }}>
-          {watchlist && Array.isArray(watchlist) && watchlist.map((item) => {
-            // Safety check for item
-            if (!item) return null
-            
-            return (
-            <div
-              key={item?.ticker || Math.random()}
-              onClick={() => router.push(`/watchlist/${item?.ticker || ''}`)}
+        
+        {watchlistItems.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>
+            <p>No stocks in your watchlist yet.</p>
+            <button
+              onClick={() => router.push('/watchlist/add')}
               style={{
-                padding: '20px',
-                backgroundColor: 'white',
-                border: '1px solid #e5e7eb',
-                borderRadius: '8px',
+                padding: '10px 20px',
+                backgroundColor: '#2563eb',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                fontSize: '14px',
+                fontWeight: '500',
                 cursor: 'pointer',
-                transition: 'all 0.2s',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = '#2563eb'
-                e.currentTarget.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)'
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = '#e5e7eb'
-                e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)'
+                marginTop: '16px'
               }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-                    <h2 style={{ fontSize: '20px', fontWeight: '700', color: '#111827', margin: 0 }}>
-                      {item?.company_name || item?.ticker || 'Unknown Company'}
-                    </h2>
-                    {item?.recommendation && (
-                      <span style={{
-                        padding: '4px 12px',
-                        borderRadius: '12px',
-                        fontSize: '12px',
-                        fontWeight: '600',
-                        color: 'white',
-                        backgroundColor: getRecommendationColor(item.recommendation)
-                      }}>
-                        {item.recommendation}
-                      </span>
-                    )}
-                    {/* Cache status indicator */}
-                    {item?.cache_info && (
-                      <span style={{
-                        padding: '2px 8px',
-                        borderRadius: '8px',
-                        fontSize: '10px',
-                        fontWeight: '500',
-                        backgroundColor: item.cache_info.status === 'fresh' ? '#dcfce7' : 
-                                        item.cache_info.status === 'stale' ? '#fef3c7' : '#fee2e2',
-                        color: item.cache_info.status === 'fresh' ? '#166534' : 
-                               item.cache_info.status === 'stale' ? '#92400e' : '#991b1b'
-                      }}>
-                        {item.cache_info.status === 'fresh' && '✅ Fresh'}
-                        {item.cache_info.status === 'stale' && '⏰ Stale'}
-                        {item.cache_info.status === 'missing' && '❌ No Data'}
-                      </span>
+              Add Your First Stock
+            </button>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gap: '16px' }}>
+            {watchlistItems.map((stock) => (
+              <div
+                key={stock.ticker}
+                style={{
+                  padding: '20px',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '8px',
+                  backgroundColor: '#f9fafb',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+                onClick={() => handleStockClick(stock.ticker)}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#f3f4f6'
+                  e.currentTarget.style.borderColor = '#3b82f6'
+                  e.currentTarget.style.transform = 'translateY(-2px)'
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#f9fafb'
+                  e.currentTarget.style.borderColor = '#e5e7eb'
+                  e.currentTarget.style.transform = 'translateY(0)'
+                  e.currentTarget.style.boxShadow = 'none'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+                      <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#111827', margin: 0 }}>
+                        {stock.company_name || `${stock.ticker} Corporation`}
+                      </h3>
+                      {stock.recommendation && (
+                        <span style={{
+                          padding: '4px 12px',
+                          borderRadius: '12px',
+                          fontSize: '12px',
+                          fontWeight: '600',
+                          color: 'white',
+                          backgroundColor: getRecommendationColor(stock.recommendation)
+                        }}>
+                          {stock.recommendation}
+                        </span>
+                      )}
+                    </div>
+                    <p style={{ fontSize: '14px', color: '#6b7280', margin: '0 0 4px 0' }}>
+                      {stock.ticker}
+                    </p>
+                    {stock.last_updated && (
+                      <p style={{ fontSize: '12px', color: '#9ca3af', margin: 0 }}>
+                        Updated: {new Date(stock.last_updated).toLocaleDateString()}
+                      </p>
                     )}
                   </div>
                   
-                  <p style={{ fontSize: '14px', color: '#6b7280', margin: '0 0 12px 0', fontWeight: '600' }}>
-                    {item?.ticker || 'Unknown Ticker'}
-                  </p>
-
-                  <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-                    gap: '16px',
-                    marginTop: '16px'
-                  }}>
-                    {/* Show live price if available, otherwise cached price */}
-                    {(() => {
-                      const tickerPriceData = livePrices?.[item?.ticker || '']
-                      const livePrice = tickerPriceData?.price
-                      const cachedPrice = item?.current_price
-                      const priceError = tickerPriceData?.error
-                      
-                      // Show live price if available and valid
-                      if (livePrice && Math.abs(livePrice - 1.0) > 0.01) {
-                        return (
-                          <div>
-                            <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>
-                              Current Price 
-                              <span style={{ color: '#059669', fontSize: '10px', marginLeft: '4px' }}>● LIVE</span>
-                            </div>
-                            <div style={{ fontSize: '16px', fontWeight: '600', color: '#111827' }}>
-                              {formatPrice(livePrice)}
-                            </div>
-                            {/* Show success comment if available */}
-                            {tickerPriceData?.comment && tickerPriceData?.success && (
-                              <div style={{ 
-                                fontSize: '10px', 
-                                color: '#059669', 
-                                marginTop: '2px',
-                                fontStyle: 'italic'
-                              }}>
-                                ✓ {tickerPriceData.comment}
-                              </div>
-                            )}
-                          </div>
-                        )
-                      }
-                      // Show cached price if available and valid
-                      else if (cachedPrice && Math.abs(cachedPrice - 1.0) > 0.01) {
-                        return (
-                          <div>
-                            <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>
-                              Current Price
-                              {item?.cache_info?.last_updated && (
-                                <span style={{ fontSize: '10px', marginLeft: '4px' }}>
-                                  ({item.cache_info.last_updated})
-                                </span>
-                              )}
-                            </div>
-                            <div style={{ fontSize: '16px', fontWeight: '600', color: '#111827' }}>
-                              {formatPrice(cachedPrice)}
-                            </div>
-                          </div>
-                        )
-                      }
-                      // Show error if live price fetch failed
-                      else if (priceError) {
-                        return (
-                          <div>
-                            <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>Current Price</div>
-                            <div style={{ fontSize: '14px', fontWeight: '500', color: '#dc2626' }}>
-                              ⚠️ {priceError}
-                            </div>
-                            {/* Show detailed error comment if available */}
-                            {tickerPriceData?.comment && (
-                              <div style={{ 
-                                fontSize: '11px', 
-                                color: '#6b7280', 
-                                marginTop: '2px',
-                                fontStyle: 'italic',
-                                lineHeight: '1.3'
-                              }}>
-                                {tickerPriceData.comment}
-                              </div>
-                            )}
-                          </div>
-                        )
-                      }
-                      // Show cached price error if available
-                      else if ((item as any).price_error) {
-                        return (
-                          <div>
-                            <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>Current Price</div>
-                            <div style={{ fontSize: '14px', fontWeight: '500', color: '#dc2626' }}>
-                              ⚠️ {(item as any).price_error}
-                            </div>
-                          </div>
-                        )
-                      }
-                      return null
-                    })()}
-                    <div>
-                      <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>Fair Value</div>
-                      <div style={{ fontSize: '16px', fontWeight: '600', color: '#111827' }}>
-                        {item?.fair_value && item.fair_value > 0 ? formatPrice(item.fair_value) : 'Not available'}
-                      </div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>Valuation</div>
-                      <div style={{
-                        fontSize: '16px',
-                        fontWeight: '600',
-                        color: item?.margin_of_safety_pct && item.margin_of_safety_pct > 0 ? '#10b981' : '#ef4444'
-                      }}>
-                        {item?.fair_value && item?.margin_of_safety_pct && item.margin_of_safety_pct !== 0 
-                          ? item.margin_of_safety_pct > 0 
-                            ? `${Math.abs(item.margin_of_safety_pct).toFixed(1)}% Under`
-                            : `${Math.abs(item.margin_of_safety_pct).toFixed(1)}% Over`
-                          : 'Not available'}
-                      </div>
-                    </div>
-                    {item?.last_analyzed_at && (
-                      <div>
-                        <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>Last Analyzed</div>
-                        <div style={{ fontSize: '14px', color: '#111827' }}>
-                          {new Date(item.last_analyzed_at).toLocaleDateString()}
+                  <div style={{ textAlign: 'right' }}>
+                    {stock.current_price ? (
+                      <>
+                        <div style={{ fontSize: '20px', fontWeight: '700', color: '#111827' }}>
+                          {formatPrice(stock.current_price, stock.currency)}
                         </div>
+                        {stock.price_change !== undefined && (
+                          <div style={{ 
+                            fontSize: '14px', 
+                            fontWeight: '500',
+                            color: getPriceChangeColor(stock.price_change)
+                          }}>
+                            {stock.price_change >= 0 ? '+' : ''}{stock.price_change.toFixed(2)}
+                            {stock.price_change_percent && (
+                              <span style={{ marginLeft: '4px' }}>
+                                ({stock.price_change_percent >= 0 ? '+' : ''}{stock.price_change_percent.toFixed(2)}%)
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div style={{ fontSize: '14px', color: '#6b7280' }}>
+                        Price unavailable
                       </div>
                     )}
-                  </div>
-
-                  {item?.notes && (
-                    <div style={{
-                      marginTop: '12px',
-                      padding: '8px 12px',
-                      backgroundColor: '#f9fafb',
-                      borderRadius: '6px',
-                      fontSize: '13px',
-                      color: '#374151'
-                    }}>
-                      <strong>Notes:</strong> {item.notes}
+                    <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>
+                      Click to analyze →
                     </div>
-                  )}
+                  </div>
                 </div>
-
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    handleRemove(item?.ticker || '')
-                  }}
-                  style={{
-                    padding: '6px 12px',
-                    backgroundColor: '#fee2e2',
-                    color: '#991b1b',
-                    border: 'none',
-                    borderRadius: '6px',
-                    fontSize: '12px',
-                    fontWeight: '500',
-                    cursor: 'pointer',
-                    marginLeft: '16px'
-                  }}
-                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#fecaca' }}
-                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#fee2e2' }}
-                >
-                  Remove
-                </button>
               </div>
-            </div>
-            )
-          })}
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Platform Features */}
+      <div style={{
+        padding: '24px',
+        backgroundColor: '#eff6ff',
+        border: '1px solid #3b82f6',
+        borderRadius: '12px'
+      }}>
+        <h3 style={{ fontSize: '20px', fontWeight: '600', color: '#1e40af', marginBottom: '16px' }}>
+          🚀 Platform Features
+        </h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px' }}>
+          <div>
+            <h4 style={{ fontSize: '16px', fontWeight: '600', color: '#1e40af', marginBottom: '8px' }}>
+              Real-Time Data
+            </h4>
+            <p style={{ fontSize: '14px', color: '#1e3a8a', margin: 0 }}>
+              Live stock prices and market data via MarketStack API integration
+            </p>
+          </div>
+          <div>
+            <h4 style={{ fontSize: '16px', fontWeight: '600', color: '#1e40af', marginBottom: '8px' }}>
+              Advanced Analysis
+            </h4>
+            <p style={{ fontSize: '14px', color: '#1e3a8a', margin: 0 }}>
+              DCF, EPV, and Asset-based valuations with customizable business models
+            </p>
+          </div>
+          <div>
+            <h4 style={{ fontSize: '16px', fontWeight: '600', color: '#1e40af', marginBottom: '8px' }}>
+              Financial Health
+            </h4>
+            <p style={{ fontSize: '14px', color: '#1e3a8a', margin: 0 }}>
+              Comprehensive ratio analysis and business quality assessment
+            </p>
+          </div>
         </div>
-      )}
+        
+        <div style={{ marginTop: '20px', textAlign: 'center' }}>
+          <button
+            onClick={() => window.open(`${process.env.NEXT_PUBLIC_API_URL}/health`, '_blank')}
+            style={{
+              padding: '12px 24px',
+              backgroundColor: '#2563eb',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              fontSize: '16px',
+              fontWeight: '600',
+              cursor: 'pointer',
+              marginRight: '12px'
+            }}
+          >
+            🔗 Test API Connection
+          </button>
+          <button
+            onClick={() => router.push('/watchlist/add')}
+            style={{
+              padding: '12px 24px',
+              backgroundColor: '#10b981',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              fontSize: '16px',
+              fontWeight: '600',
+              cursor: 'pointer'
+            }}
+          >
+            ➕ Add Stock
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
-
