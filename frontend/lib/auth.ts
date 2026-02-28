@@ -86,6 +86,11 @@ class AuthService {
    * Load stored tokens from localStorage
    */
   private loadStoredTokens() {
+    // Only access localStorage on the client side
+    if (typeof window === 'undefined') {
+      return
+    }
+    
     try {
       const stored = localStorage.getItem('auth_tokens')
       if (stored) {
@@ -102,7 +107,9 @@ class AuthService {
       }
     } catch (error) {
       console.error('Error loading stored tokens:', error)
-      localStorage.removeItem('auth_tokens')
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('auth_tokens')
+      }
     }
   }
 
@@ -110,6 +117,12 @@ class AuthService {
    * Store tokens in localStorage
    */
   private storeTokens(tokenData: TokenData) {
+    // Only access localStorage on the client side
+    if (typeof window === 'undefined') {
+      this.tokenData = tokenData
+      return
+    }
+    
     try {
       localStorage.setItem('auth_tokens', JSON.stringify(tokenData))
       this.tokenData = tokenData
@@ -341,7 +354,9 @@ class AuthService {
    */
   signOut(): void {
     this.tokenData = null
-    localStorage.removeItem('auth_tokens')
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('auth_tokens')
+    }
     this.notifyAuthStateChange()
   }
 

@@ -11,7 +11,6 @@ interface ManualDataEntryProps {
 export default function ManualDataEntry({ ticker, onDataAdded }: ManualDataEntryProps) {
   console.log('🔧 ManualDataEntry component rendered for ticker:', ticker);
   
-  const [isOpen, setIsOpen] = useState(false)
   const [selectedDataType, setSelectedDataType] = useState('income_statement')
   const [period, setPeriod] = useState('2023-12-31')
   const [formData, setFormData] = useState<Record<string, string>>({})
@@ -98,7 +97,6 @@ export default function ManualDataEntry({ ticker, onDataAdded }: ManualDataEntry
       if (result.success) {
         alert(`Successfully added ${selectedDataType.replace('_', ' ')} data for ${ticker}`)
         setFormData({})
-        setIsOpen(false)
         if (onDataAdded) {
           onDataAdded()
         }
@@ -114,58 +112,12 @@ export default function ManualDataEntry({ ticker, onDataAdded }: ManualDataEntry
 
   const currentFields = fieldTemplates[selectedDataType as keyof typeof fieldTemplates] || []
 
-  if (!isOpen) {
-    return (
-      <div className="card" style={{ marginBottom: '24px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <h3 style={{ margin: '0 0 8px 0', fontSize: '18px', fontWeight: '600' }}>
-              📝 Manual Data Entry
-            </h3>
-            <p style={{ margin: 0, fontSize: '14px', color: '#6b7280' }}>
-              Add financial statement data to enable fair value calculations
-            </p>
-          </div>
-          <button
-            onClick={() => setIsOpen(true)}
-            style={{
-              padding: '10px 20px',
-              backgroundColor: '#2563eb',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              fontSize: '14px',
-              fontWeight: '500',
-              cursor: 'pointer'
-            }}
-          >
-            Add Data
-          </button>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="card" style={{ marginBottom: '24px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+      <div style={{ marginBottom: '24px' }}>
         <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '600' }}>
           📝 Add Financial Data for {ticker}
         </h3>
-        <button
-          onClick={() => setIsOpen(false)}
-          style={{
-            padding: '6px 12px',
-            backgroundColor: '#f3f4f6',
-            color: '#6b7280',
-            border: '1px solid #d1d5db',
-            borderRadius: '6px',
-            fontSize: '14px',
-            cursor: 'pointer'
-          }}
-        >
-          Cancel
-        </button>
       </div>
 
       <form onSubmit={handleSubmit}>
@@ -247,22 +199,6 @@ export default function ManualDataEntry({ ticker, onDataAdded }: ManualDataEntry
         </div>
 
         <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-          <button
-            type="button"
-            onClick={() => setIsOpen(false)}
-            style={{
-              padding: '10px 20px',
-              backgroundColor: '#f3f4f6',
-              color: '#374151',
-              border: '1px solid #d1d5db',
-              borderRadius: '6px',
-              fontSize: '14px',
-              fontWeight: '500',
-              cursor: 'pointer'
-            }}
-          >
-            Cancel
-          </button>
           <button
             type="submit"
             disabled={saving}

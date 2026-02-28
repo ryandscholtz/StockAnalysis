@@ -596,10 +596,15 @@ export const stockApi = {
       url: `${API_BASE_URL}/api/search`,
       message: `Searching for tickers: ${query}`
     })
-    const response = await api.get<SearchResponse>(`/api/search`, {
+    const response = await api.get<any>(`/api/search`, {
       params: { q: query }
     })
-    return response.data.results
+    const results: any[] = response.data.results || []
+    return results.map((item: any) => ({
+      ticker: item.ticker || item.symbol,
+      companyName: item.companyName || item.name || item.company_name || '',
+      exchange: item.exchange || ''
+    }))
   },
 
   async addManualData(ticker: string, dataType: string, period: string, data: Record<string, number>): Promise<{ success: boolean; message: string }> {
@@ -723,12 +728,16 @@ export const stockApi = {
       const clientWatchlist = WatchlistSimulation.getWatchlist()
       console.log('Client-side watchlist:', clientWatchlist)
       
-      const apiItems = response.data.items || []
+      // Normalize API items: Lambda returns camelCase (companyName), frontend expects snake_case (company_name)
+      const apiItems = (response.data.items || []).map((item: any) => ({
+        ...item,
+        company_name: item.company_name || item.companyName || undefined
+      }))
       console.log('API items:', apiItems)
       console.log('API items count:', apiItems.length)
-      
+
       // Debug: Check what company names the API is returning
-      apiItems.forEach((item, index) => {
+      apiItems.forEach((item: any, index: number) => {
         console.log(`API item ${index}:`, {
           ticker: item.ticker,
           company_name: item.company_name,
@@ -882,19 +891,31 @@ export const stockApi = {
         }
       } else if (response.data.watchlist_item) {
         // Old format: { watchlist_item: {...}, latest_analysis: {...} }
-        // This means the API processed the request but returned the wrong format
-        // Since the API is mock and doesn't actually save, also save to client-side
         console.log('API returned old format, also saving to client-side as backup')
         WatchlistSimulation.addToWatchlist(
-          ticker, 
-          companyName || `${ticker} Corporation`, 
-          exchange || 'NASDAQ', 
+          ticker,
+          companyName || `${ticker} Corporation`,
+          exchange || 'NASDAQ',
           notes
         )
-        
+
         return {
           success: true,
           message: `Successfully added ${ticker} to watchlist (API processed + client-side backup)`
+        }
+      } else if (response.data.item || (response.data.message && response.data.message.toLowerCase().includes('added'))) {
+        // Lambda format: { message: 'Added to watchlist', item: {...} }
+        console.log('API returned Lambda format, saving to client-side as backup')
+        WatchlistSimulation.addToWatchlist(
+          ticker,
+          companyName || `${ticker} Corporation`,
+          exchange || 'NASDAQ',
+          notes
+        )
+
+        return {
+          success: true,
+          message: `Successfully added ${ticker} to watchlist`
         }
       } else {
         // Unknown format
@@ -950,8 +971,28 @@ export const stockApi = {
 
   async getWatchlistItem(ticker: string, forceRefresh: boolean = false): Promise<WatchlistItemDetail> {
     const params = forceRefresh ? { force_refresh: true } : {}
-    const response = await api.get<WatchlistItemDetail>(`/api/watchlist/${ticker}`, { params })
-    return response.data
+    try {
+      const response = await api.get<WatchlistItemDetail>(`/api/watchlist/${ticker}`, { params })
+      return response.data
+    } catch (error: any) {
+      // On 404, fall back to client-side WatchlistSimulation
+      if (error?.response?.status === 404) {
+        const clientItems = WatchlistSimulation.getWatchlist()
+        const found = clientItems.find(item => item.ticker.toUpperCase() === ticker.toUpperCase())
+        if (found) {
+          return {
+            watchlist_item: {
+              ticker: found.ticker,
+              company_name: found.companyName,
+              exchange: found.exchange,
+              added_at: found.addedAt,
+              notes: found.notes,
+            }
+          }
+        }
+      }
+      throw error
+    }
   },
 
   async getAnalysisPresets(): Promise<{ presets: Record<string, AnalysisWeights>; business_types: string[] }> {
@@ -980,33 +1021,17 @@ export const stockApi = {
 
   async getFinancialData(ticker: string): Promise<{
     ticker: string
-    financial_data: {
-      income_statement?: Record<string, Record<string, number>>
-      balance_sheet?: Record<string, Record<string, number>>
-      cashflow?: Record<string, Record<string, number>>
-      key_metrics?: Record<string, Record<string, number>>
-    }
+    financial_data: Record<string, Record<string, Record<string, number>>>
+    metadata: Record<string, { last_updated: string | null; source: string; period_count: number }>
     has_data: boolean
   }> {
     try {
       const response = await api.get(`/api/manual-data/${ticker}`)
       return response.data
     } catch (error) {
-      // Return mock data for development when using mock auth
+      // Return empty result on error — no mock data
       console.log('Using mock financial data for development')
-      return {
-        ticker: ticker.toUpperCase(),
-        financial_data: {
-          income_statement: {
-            '2023-12-31': {
-              revenue: 100000000,
-              net_income: 15000000,
-              earnings_per_share: 1.50
-            }
-          }
-        },
-        has_data: true
-      }
+      return { ticker: ticker.toUpperCase(), financial_data: {}, metadata: {}, has_data: false }
     }
   },
 }

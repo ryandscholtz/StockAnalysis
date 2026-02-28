@@ -72,7 +72,7 @@ export default function WatchlistPage() {
   }
 
   const handleStockClick = (ticker: string) => {
-    router.push(`/watchlist/${ticker}`)
+    router.push(`/ticker?ticker=${ticker}`)
   }
 
   const getRecommendationColor = (recommendation?: string) => {
@@ -143,21 +143,38 @@ export default function WatchlistPage() {
           <h2 style={{ fontSize: '24px', fontWeight: '600', color: '#111827', margin: 0 }}>
             📊 Your Stocks
           </h2>
-          <button
-            onClick={loadWatchlist}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: '#2563eb',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              fontSize: '14px',
-              fontWeight: '500',
-              cursor: 'pointer'
-            }}
-          >
-            🔄 Refresh
-          </button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              onClick={loadWatchlist}
+              style={{
+                padding: '8px 16px',
+                backgroundColor: '#2563eb',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                fontSize: '14px',
+                fontWeight: '500',
+                cursor: 'pointer'
+              }}
+            >
+              🔄 Refresh
+            </button>
+            <button
+              onClick={() => router.push('/watchlist/add')}
+              style={{
+                padding: '8px 16px',
+                backgroundColor: '#10b981',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                fontSize: '14px',
+                fontWeight: '500',
+                cursor: 'pointer'
+              }}
+            >
+              ➕ Add Stock
+            </button>
+          </div>
         </div>
         
         {watchlistItems.length === 0 ? (
@@ -273,77 +290,6 @@ export default function WatchlistPage() {
         )}
       </div>
 
-      {/* Platform Features */}
-      <div style={{
-        padding: '24px',
-        backgroundColor: '#eff6ff',
-        border: '1px solid #3b82f6',
-        borderRadius: '12px'
-      }}>
-        <h3 style={{ fontSize: '20px', fontWeight: '600', color: '#1e40af', marginBottom: '16px' }}>
-          🚀 Platform Features
-        </h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px' }}>
-          <div>
-            <h4 style={{ fontSize: '16px', fontWeight: '600', color: '#1e40af', marginBottom: '8px' }}>
-              Real-Time Data
-            </h4>
-            <p style={{ fontSize: '14px', color: '#1e3a8a', margin: 0 }}>
-              Live stock prices and market data via MarketStack API integration
-            </p>
-          </div>
-          <div>
-            <h4 style={{ fontSize: '16px', fontWeight: '600', color: '#1e40af', marginBottom: '8px' }}>
-              Advanced Analysis
-            </h4>
-            <p style={{ fontSize: '14px', color: '#1e3a8a', margin: 0 }}>
-              DCF, EPV, and Asset-based valuations with customizable business models
-            </p>
-          </div>
-          <div>
-            <h4 style={{ fontSize: '16px', fontWeight: '600', color: '#1e40af', marginBottom: '8px' }}>
-              Financial Health
-            </h4>
-            <p style={{ fontSize: '14px', color: '#1e3a8a', margin: 0 }}>
-              Comprehensive ratio analysis and business quality assessment
-            </p>
-          </div>
-        </div>
-        
-        <div style={{ marginTop: '20px', textAlign: 'center' }}>
-          <button
-            onClick={() => window.open(`${process.env.NEXT_PUBLIC_API_URL}/health`, '_blank')}
-            style={{
-              padding: '12px 24px',
-              backgroundColor: '#2563eb',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              fontSize: '16px',
-              fontWeight: '600',
-              cursor: 'pointer',
-              marginRight: '12px'
-            }}
-          >
-            🔗 Test API Connection
-          </button>
-          <button
-            onClick={() => router.push('/watchlist/add')}
-            style={{
-              padding: '12px 24px',
-              backgroundColor: '#10b981',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              fontSize: '16px',
-              fontWeight: '600',
-              cursor: 'pointer'
-            }}
-          >
-            ➕ Add Stock
-          </button>
-        </div>
-      </div>
     </div>
   )
 }

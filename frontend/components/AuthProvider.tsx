@@ -1,7 +1,7 @@
 'use client'
 
 import React, { createContext, useContext, useEffect, useState } from 'react'
-import { authService, AuthState, UserInfo } from '@/lib/auth-mock' // Use mock auth for development
+import { authService, AuthState, UserInfo } from '@/lib/auth' // Use real Cognito auth
 
 interface AuthContextType extends AuthState {
   signIn: (username: string, password: string) => Promise<UserInfo>
