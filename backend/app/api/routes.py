@@ -302,6 +302,26 @@ async def _analyze_stock_with_progress(ticker: str, progress_tracker: ProgressTr
             logger.info(f"Key metrics in AI data: {ai_data['key_metrics']}")
         logger.info(f"AFTER applying: shares_outstanding={company_data.shares_outstanding}, market_cap={company_data.market_cap}")
 
+    # If financial statements are still missing, use Claude AI to retrieve them
+    if not company_data.income_statement and not company_data.balance_sheet and not company_data.cashflow:
+        await progress_tracker.update(1, "Financial statements not found — retrieving with AI...")
+        logger.info(f"No financial statements for {ticker} after Yahoo/DB fetch. Calling Claude AI to retrieve data.")
+        ai_fetched = _fetch_ai_financial_data(ticker, company_data.company_name)
+        if ai_fetched:
+            _apply_ai_extracted_data(company_data, ai_fetched)
+            logger.info(f"Applied AI-fetched financial data for {ticker}")
+            await progress_tracker.update(1, "AI financial data applied successfully")
+            # Persist to DB so subsequent analyses reuse it without calling Claude again
+            try:
+                from app.database.db_service import DatabaseService
+                db_service = DatabaseService(db_path="stock_analysis.db")
+                db_service.save_ai_extracted_data(ticker, ai_fetched)
+                logger.info(f"Saved AI-fetched financial data to DB for {ticker}")
+            except Exception as db_err:
+                logger.warning(f"Could not save AI-fetched data to DB: {db_err}")
+        else:
+            logger.warning(f"Claude AI returned no financial data for {ticker}")
+
     # Log data availability for debugging
     await progress_tracker.update(1, "Data preparation complete, starting analysis...")
     logger.info(f"\n=== Data Availability for {ticker} ===")
@@ -612,6 +632,137 @@ async def _analyze_stock_with_progress(ticker: str, progress_tracker: ProgressTr
     )
 
     return analysis
+
+
+def _fetch_ai_financial_data(ticker: str, company_name: str) -> dict:
+    """
+    Use Claude (via AWS Bedrock) to retrieve the most recent publicly known
+    annual financial data for a stock.
+
+    Returns a dict in the format expected by _apply_ai_extracted_data:
+      {
+        "income_statement": {"YYYY-MM-DD": {field: value, ...}},
+        "balance_sheet":    {"YYYY-MM-DD": {field: value, ...}},
+        "cashflow":         {"YYYY-MM-DD": {field: value, ...}},
+        "key_metrics":      {"latest":     {field: value, ...}},
+      }
+    Returns {} on failure.
+    """
+    try:
+        import boto3
+        bedrock = boto3.client('bedrock-runtime', region_name='us-east-1')
+    except Exception as e:
+        logger.warning(f"Could not create Bedrock client: {e}")
+        return {}
+
+    prompt = f"""You are a financial data provider. Return the most recent annual financial data you know about for {company_name} ({ticker}).
+
+Use the exact field names listed below. Use full absolute numbers (no thousands/millions abbreviations).
+Use null for any value you are not confident about. Do NOT fabricate values.
+
+Return ONLY valid JSON with this exact structure (no explanation, no markdown fences):
+{{
+  "fiscal_year_end": "<YYYY-MM-DD of the most recent fiscal year end you have data for>",
+  "currency": "<ISO currency code, e.g. USD, ZAR, GBP>",
+  "income_statement": {{
+    "Total Revenue": <number or null>,
+    "Gross Profit": <number or null>,
+    "Operating Income": <number or null>,
+    "Income Before Tax": <number or null>,
+    "Net Income": <number or null>,
+    "Diluted EPS": <number or null>,
+    "Basic EPS": <number or null>
+  }},
+  "balance_sheet": {{
+    "Total Assets": <number or null>,
+    "Current Assets": <number or null>,
+    "Cash And Cash Equivalents": <number or null>,
+    "Total Liabilities Net Minority Interest": <number or null>,
+    "Current Liabilities": <number or null>,
+    "Long Term Debt": <number or null>,
+    "Total Stockholder Equity": <number or null>,
+    "Retained Earnings": <number or null>
+  }},
+  "cashflow": {{
+    "Operating Cash Flow": <number or null>,
+    "Free Cash Flow": <number or null>,
+    "Capital Expenditure": <number or null>,
+    "Common Stock Dividends Paid": <number or null>
+  }},
+  "key_metrics": {{
+    "shares_outstanding": <total shares (not millions) or null>,
+    "market_cap": <number or null>,
+    "pe_ratio": <number or null>
+  }},
+  "data_confidence": "<high|medium|low>"
+}}"""
+
+    try:
+        response = bedrock.invoke_model(
+            modelId='anthropic.claude-3-sonnet-20240229-v1:0',
+            body=json.dumps({
+                'anthropic_version': 'bedrock-2023-05-31',
+                'max_tokens': 2000,
+                'messages': [{'role': 'user', 'content': prompt}]
+            })
+        )
+        body = json.loads(response['body'].read())
+        ai_text = body['content'][0]['text']
+
+        # Strip markdown code fences then parse JSON
+        import re as _re
+        ai_text = _re.sub(r'```(?:json)?\s*', '', ai_text).strip()
+        try:
+            raw = json.loads(ai_text)
+        except json.JSONDecodeError:
+            start = ai_text.find('{')
+            end = ai_text.rfind('}') + 1
+            if start < 0 or end <= start:
+                logger.warning(f"No JSON found in Claude response for {ticker}")
+                return {}
+            try:
+                raw = json.loads(ai_text[start:end])
+            except json.JSONDecodeError as exc:
+                logger.warning(f"Could not parse Claude JSON for {ticker}: {exc}")
+                return {}
+        fiscal_year = raw.get('fiscal_year_end', '')
+        confidence = raw.get('data_confidence', 'low')
+        logger.info(f"AI financial data for {ticker}: fiscal_year={fiscal_year}, confidence={confidence}")
+
+        if not fiscal_year:
+            from datetime import date
+            fiscal_year = f"{date.today().year - 1}-12-31"
+
+        def _clean(d: dict) -> dict:
+            """Remove null values from a dict."""
+            return {k: v for k, v in (d or {}).items() if v is not None}
+
+        inc = _clean(raw.get('income_statement', {}))
+        bal = _clean(raw.get('balance_sheet', {}))
+        cf  = _clean(raw.get('cashflow', {}))
+        km  = _clean(raw.get('key_metrics', {}))
+
+        # Only include sections that actually have data — empty period dicts cause false positives
+        structured = {}
+        if inc:
+            structured['income_statement'] = {fiscal_year: inc}
+        if bal:
+            structured['balance_sheet'] = {fiscal_year: bal}
+        if cf:
+            structured['cashflow'] = {fiscal_year: cf}
+        if km:
+            structured['key_metrics'] = {'latest': km}
+
+        if not structured:
+            logger.warning(f"Claude returned no usable financial data for {ticker} (all nulls)")
+            return {}
+
+        logger.info(f"AI fetched data for {ticker}: sections={list(structured.keys())}, confidence={confidence}")
+        return structured
+
+    except Exception as e:
+        logger.warning(f"AI financial data fetch failed for {ticker}: {e}")
+        return {}
 
 
 def _apply_manual_data(company_data, manual_data: dict):
@@ -1013,6 +1164,26 @@ async def add_manual_data(entry: ManualDataEntry):
         logger.error(f"Error adding manual data: {e}")
         import traceback
         logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/manual-data/{ticker}")
+async def get_manual_data(ticker: str):
+    """
+    Get all stored financial data for a ticker, including timestamps and source info.
+    """
+    try:
+        from app.database.db_service import DatabaseService
+        db_service = DatabaseService(db_path="stock_analysis.db")
+        result = db_service.get_financial_data_with_metadata(ticker.upper())
+        return {
+            "ticker": ticker.upper(),
+            "financial_data": result["financial_data"],
+            "metadata": result["metadata"],
+            "has_data": result["has_data"],
+        }
+    except Exception as e:
+        logger.error(f"Error getting financial data for {ticker}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

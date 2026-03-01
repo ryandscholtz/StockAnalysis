@@ -2,17 +2,17 @@
 
 A web-based stock analysis tool that uses value investing principles to analyze stocks, focusing on calculating intrinsic value (fair value per share) and comparing it to current market price (cost per share) to determine margin of safety.
 
-## 📊 **NEW: Enhanced Financial Ratios System**
+## 📊 Enhanced Financial Ratios System
 
-The tool now features a comprehensive financial ratios system that displays key metrics prominently on stock pages:
+The tool features a comprehensive financial ratios system that displays key metrics prominently on stock pages:
 
 - **P/E, P/B, P/S Ratios** - Essential valuation metrics
-- **ROE, Debt-to-Equity, Current Ratio** - Financial health indicators  
+- **ROE, Debt-to-Equity, Current Ratio** - Financial health indicators
 - **Market Cap, Enterprise Value** - Market data
 - **Color-coded indicators** for quick assessment
 - **Real-time calculations** from financial statements
 
-**📖 [View Complete Financial Ratios Documentation](FINANCIAL_RATIOS_SYSTEM.md)**
+**📖 [View Complete Financial Ratios Documentation](docs/features/financial-ratios.md)**
 
 ## Architecture
 
@@ -50,12 +50,6 @@ cd frontend
 npm install
 npm run dev
 ```
-
-### Available Stock Data
-- **AAPL**: Apple Inc. (P/E: 23.4, ROE: 196.9%)
-- **GOOGL**: Alphabet Inc. (P/E: 48.6, ROE: 26.0%)  
-- **MSFT**: Microsoft Corp. (P/E: 35.5, ROE: 42.7%)
-- **TSLA**: Tesla Inc. (P/E: 39.1, ROE: 23.9%)
 
 ### Key Endpoints
 - `GET /api/watchlist` - Watchlist with financial ratios
@@ -108,8 +102,14 @@ Frontend will be available at `http://localhost:3000`
 
 ## Documentation
 
-- **User Documentation**: Available in the frontend at `/docs` or see `ANALYSIS_WEIGHTS_GUIDE.md` for detailed analysis weights and presets
-- **Analysis Weights Guide**: `ANALYSIS_WEIGHTS_GUIDE.md` - Comprehensive guide to all 15 business type presets and custom weight configuration
+All documentation lives in the [docs/](docs/) directory:
+
+- **[Documentation Index](docs/README.md)** - Full table of contents
+- **[Development Guide](docs/development/guide.md)** - Setup, testing, and contributing
+- **[Deployment Guide](docs/deployment/deployment.md)** - Environments, CI/CD, and rollback
+- **[Lambda Deployment](docs/deployment/lambda-deployment.md)** - Hands-on Lambda deployment steps
+- **[Analysis Weights Guide](docs/features/analysis-weights.md)** - Business type presets and weight configuration
+- **[Financial Ratios System](docs/features/financial-ratios.md)** - Financial ratios documentation
 - **Backend API docs**: `http://localhost:8000/docs` (Swagger UI)
 - **Backend API docs**: `http://localhost:8000/redoc` (ReDoc)
 

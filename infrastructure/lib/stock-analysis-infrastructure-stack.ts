@@ -18,6 +18,8 @@ export interface StockAnalysisInfrastructureStackProps extends cdk.StackProps {
   domainName?: string;
   alertEmail?: string;
   slackWebhookUrl?: string;
+  /** Base URLs for frontend (e.g. Amplify: https://main.xxx.amplifyapp.com). Used for Cognito callback/logout URLs. */
+  frontendCallbackBaseUrls?: string[];
 }
 
 export class StockAnalysisInfrastructureStack extends cdk.Stack {
@@ -34,7 +36,7 @@ export class StockAnalysisInfrastructureStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: StockAnalysisInfrastructureStackProps) {
     super(scope, id, props);
 
-    const { environment, alertEmail, slackWebhookUrl } = props;
+    const { environment, alertEmail, slackWebhookUrl, frontendCallbackBaseUrls = [] } = props;
 
     // S3 Bucket for large PDF processing with AWS Textract
     this.textractBucket = new s3.Bucket(this, 'TextractProcessingBucket', {
@@ -175,11 +177,13 @@ export class StockAnalysisInfrastructureStack extends cdk.Stack {
         callbackUrls: [
           'http://localhost:3000/auth/callback',
           'https://localhost:3000/auth/callback',
+          ...frontendCallbackBaseUrls.map((base) => `${base.replace(/\/$/, '')}/auth/callback`),
           ...(environment === 'production' ? ['https://your-domain.com/auth/callback'] : [])
         ],
         logoutUrls: [
           'http://localhost:3000/auth/logout',
           'https://localhost:3000/auth/logout',
+          ...frontendCallbackBaseUrls.map((base) => `${base.replace(/\/$/, '')}/auth/logout`),
           ...(environment === 'production' ? ['https://your-domain.com/auth/logout'] : [])
         ]
       },

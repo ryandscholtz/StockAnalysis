@@ -728,10 +728,16 @@ export const stockApi = {
       const clientWatchlist = WatchlistSimulation.getWatchlist()
       console.log('Client-side watchlist:', clientWatchlist)
       
-      // Normalize API items: Lambda returns camelCase (companyName), frontend expects snake_case (company_name)
+      // Normalize API items: Lambda returns camelCase, frontend expects snake_case; include analysis fields
       const apiItems = (response.data.items || []).map((item: any) => ({
         ...item,
-        company_name: item.company_name || item.companyName || undefined
+        company_name: item.company_name || item.companyName || undefined,
+        current_price: item.current_price ?? item.currentPrice ?? undefined,
+        fair_value: item.fair_value ?? item.fairValue ?? undefined,
+        margin_of_safety_pct: item.margin_of_safety_pct ?? item.marginOfSafety ?? undefined,
+        recommendation: item.recommendation ?? undefined,
+        last_analyzed_at: item.last_analyzed_at ?? item.last_updated ?? undefined,
+        pe_ratio: item.pe_ratio ?? item.priceToEarnings ?? undefined
       }))
       console.log('API items:', apiItems)
       console.log('API items count:', apiItems.length)
@@ -770,38 +776,39 @@ export const stockApi = {
         })
       })
       
-      // Merge and deduplicate - prioritize client-side data when it has better company names
+      // Merge and deduplicate: keep API item (first) so we preserve price/valuation/PE; only improve company_name from client if better
       const allItems = [...apiItems, ...clientItems]
       console.log('All items before deduplication:', allItems)
       console.log('All items count before dedup:', allItems.length)
       
-      // Smart deduplication: prefer client-side data if it has better company names
+      const hasAnalysisData = (i: WatchlistItem) =>
+        i.current_price != null || i.fair_value != null || i.margin_of_safety_pct != null || i.recommendation != null
+
       const uniqueItems = allItems.filter((item, index, self) => {
         const firstIndex = self.findIndex(i => i.ticker === item.ticker)
         if (firstIndex === index) {
           return true // First occurrence, keep it
         }
-        
-        // This is a duplicate - check if current item has better company name
         const firstItem = self[firstIndex]
-        const currentHasBetterName = item.company_name && 
-          !item.company_name.includes('Corporation') && 
+        const currentHasBetterName = item.company_name &&
+          !item.company_name.includes('Corporation') &&
           !item.company_name.includes('Inc.') &&
           item.company_name !== `${item.ticker} Corporation`
-        
-        const firstHasBetterName = firstItem.company_name && 
-          !firstItem.company_name.includes('Corporation') && 
+        const firstHasBetterName = firstItem.company_name &&
+          !firstItem.company_name.includes('Corporation') &&
           !firstItem.company_name.includes('Inc.') &&
           firstItem.company_name !== `${firstItem.ticker} Corporation`
-        
-        // If current has better name and first doesn't, replace first with current
-        if (currentHasBetterName && !firstHasBetterName) {
-          // Replace the first occurrence with current item
-          self[firstIndex] = item
-          console.log(`Replaced ${item.ticker}: "${firstItem.company_name}" → "${item.company_name}"`)
+        // Never replace an item that has analysis data with one that doesn't
+        if (hasAnalysisData(firstItem) && !hasAnalysisData(item)) {
+          if (currentHasBetterName && !firstHasBetterName) {
+            self[firstIndex] = { ...firstItem, company_name: item.company_name }
+          }
+          return false
         }
-        
-        return false // Always remove duplicates
+        if (currentHasBetterName && !firstHasBetterName) {
+          self[firstIndex] = { ...firstItem, company_name: item.company_name }
+        }
+        return false
       })
       console.log('Unique items after deduplication:', uniqueItems)
       console.log('Unique items count after dedup:', uniqueItems.length)
@@ -1024,6 +1031,7 @@ export const stockApi = {
     financial_data: Record<string, Record<string, Record<string, number>>>
     metadata: Record<string, { last_updated: string | null; source: string; period_count: number }>
     has_data: boolean
+    latest_analysis?: StockAnalysis
   }> {
     try {
       const response = await api.get(`/api/manual-data/${ticker}`)
@@ -1049,6 +1057,9 @@ export interface WatchlistItem {
   recommendation?: string
   last_analyzed_at?: string
   analysis_date?: string
+  financial_health_score?: number
+  business_quality_score?: number
+  pe_ratio?: number
   live_price?: number
   price_error?: string
   cache_info?: {

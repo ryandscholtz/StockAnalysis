@@ -29,6 +29,10 @@ const envConfig = {
 
 const config = envConfig[environment as keyof typeof envConfig] || envConfig.development;
 
+// Optional: Amplify (or other frontend) base URLs for Cognito callback/logout (e.g. ["https://main.xxx.amplifyapp.com"])
+const frontendCallbackBaseUrls = (app.node.tryGetContext('frontendCallbackBaseUrls') as string[] | undefined)
+  ?? (process.env.FRONTEND_CALLBACK_BASE_URLS ? process.env.FRONTEND_CALLBACK_BASE_URLS.split(',').map((s) => s.trim()).filter(Boolean) : undefined);
+
 if (environment === 'production' || environment === 'staging') {
   // Use comprehensive infrastructure stack for production and staging
   new StockAnalysisInfrastructureStack(app, `StockAnalysisInfrastructure-${environment}`, {
@@ -36,6 +40,7 @@ if (environment === 'production' || environment === 'staging') {
     domainName: config.domainName,
     alertEmail: process.env.ALERT_EMAIL,
     slackWebhookUrl: process.env.SLACK_WEBHOOK_URL,
+    frontendCallbackBaseUrls,
     env: {
       account,
       region,

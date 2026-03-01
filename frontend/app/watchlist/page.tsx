@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
@@ -8,12 +8,20 @@ import { formatPrice } from '@/lib/currency'
 interface WatchlistItem {
   ticker: string
   company_name?: string
+  exchange?: string
   current_price?: number
   price_change?: number
   price_change_percent?: number
   recommendation?: string
   last_updated?: string
   currency?: string
+  fair_value?: number
+  margin_of_safety_pct?: number
+  financial_health_score?: number
+  business_quality_score?: number
+  last_analyzed_at?: string
+  analysis_date?: string
+  pe_ratio?: number
 }
 
 // Simple loading spinner component
@@ -41,6 +49,8 @@ export default function WatchlistPage() {
   const [watchlistItems, setWatchlistItems] = useState<WatchlistItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string>('')
+  const [bulkAnalyzing, setBulkAnalyzing] = useState(false)
+  const [bulkResult, setBulkResult] = useState<{ success: boolean; message: string } | null>(null)
 
   useEffect(() => {
     loadWatchlist()
@@ -50,10 +60,41 @@ export default function WatchlistPage() {
     try {
       setLoading(true)
       setError('')
-      
+
       // Get watchlist from API
       const response = await stockApi.getWatchlist()
-      setWatchlistItems(response?.items || [])
+      let items = response?.items || []
+
+      // Fallback: for items without analysis data (recommendation missing = backend enrichment
+      // didn't run), fetch latest_analysis directly from the manual-data endpoint
+      const needsEnrichment = items.filter(item => !item.recommendation)
+      if (needsEnrichment.length > 0) {
+        const enriched = await Promise.all(
+          needsEnrichment.map(async (item) => {
+            try {
+              const data = await stockApi.getFinancialData(item.ticker)
+              const la = (data?.latest_analysis as any)
+              if (!la) return item
+              return {
+                ...item,
+                current_price: la.currentPrice ?? la.current_price ?? item.current_price,
+                currency: la.currency ?? item.currency,
+                fair_value: la.fairValue ?? la.fair_value ?? item.fair_value,
+                margin_of_safety_pct: la.marginOfSafety ?? la.margin_of_safety_pct ?? item.margin_of_safety_pct,
+                recommendation: la.recommendation ?? item.recommendation,
+                pe_ratio: la.aiFinancialData?.keyMetrics?.pe_ratio ?? la.pe_ratio ?? item.pe_ratio,
+                last_analyzed_at: la.timestamp ?? item.last_analyzed_at,
+              }
+            } catch {
+              return item
+            }
+          })
+        )
+        const enrichedByTicker = new Map(enriched.map(item => [item.ticker, item]))
+        items = items.map(item => enrichedByTicker.get(item.ticker) ?? item)
+      }
+
+      setWatchlistItems(items)
     } catch (err: any) {
       console.error('Error loading watchlist:', err)
       setError(err?.message || 'Failed to load watchlist')
@@ -93,6 +134,45 @@ export default function WatchlistPage() {
   const getPriceChangeColor = (change?: number) => {
     if (!change) return '#6b7280'
     return change >= 0 ? '#10b981' : '#ef4444'
+  }
+
+  const runBulkAnalysis = async () => {
+    if (watchlistItems.length === 0) {
+      setBulkResult({ success: false, message: 'No stocks in watchlist to analyze.' })
+      return
+    }
+    try {
+      setBulkAnalyzing(true)
+      setBulkResult(null)
+      setError('')
+      const tickers = watchlistItems.map((item) => item.ticker)
+      const exchangeName = watchlistItems[0]?.exchange || 'Custom'
+      const result = await stockApi.batchAnalyze(tickers, exchangeName, true)
+      setBulkResult({
+        success: result.success,
+        message: result.message || (result.summary ? `Processed ${result.summary.successful ?? 0} successfully, ${result.summary.failed ?? 0} failed.` : 'Done.')
+      })
+      if (result.success) await loadWatchlist()
+    } catch (err: any) {
+      setBulkResult({
+        success: false,
+        message: err?.response?.data?.detail || err?.message || 'Bulk analysis failed.'
+      })
+    } finally {
+      setBulkAnalyzing(false)
+    }
+  }
+
+  const getValuationDisplay = (stock: WatchlistItem): { text: string; color: string } | null => {
+    const margin = stock.margin_of_safety_pct
+    if (margin == null || margin === undefined || (typeof margin === 'number' && isNaN(margin))) return null
+    const absMargin = Math.abs(margin)
+    if (margin > 0) {
+      if (absMargin > 30) return { text: `${absMargin.toFixed(0)}% Undervalued`, color: '#059669' }
+      if (absMargin > 10) return { text: `${absMargin.toFixed(0)}% Undervalued`, color: '#0d9488' }
+      return { text: `${absMargin.toFixed(0)}% Undervalued`, color: '#10b981' }
+    }
+    return { text: `${absMargin.toFixed(0)}% Overvalued`, color: '#dc2626' }
   }
 
   if (loading) {
@@ -139,11 +219,27 @@ export default function WatchlistPage() {
         border: '1px solid #e5e7eb',
         marginBottom: '32px'
       }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
           <h2 style={{ fontSize: '24px', fontWeight: '600', color: '#111827', margin: 0 }}>
             📊 Your Stocks
           </h2>
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <button
+              onClick={runBulkAnalysis}
+              disabled={bulkAnalyzing || watchlistItems.length === 0}
+              style={{
+                padding: '8px 16px',
+                backgroundColor: bulkAnalyzing ? '#9ca3af' : '#7c3aed',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                fontSize: '14px',
+                fontWeight: '500',
+                cursor: bulkAnalyzing ? 'not-allowed' : 'pointer'
+              }}
+            >
+              {bulkAnalyzing ? '⏳ Analyzing…' : '📈 Run bulk analysis'}
+            </button>
             <button
               onClick={loadWatchlist}
               style={{
@@ -176,6 +272,19 @@ export default function WatchlistPage() {
             </button>
           </div>
         </div>
+
+        {bulkResult && (
+          <div style={{
+            padding: '12px 16px',
+            marginBottom: '16px',
+            backgroundColor: bulkResult.success ? '#d1fae5' : '#fee2e2',
+            border: `1px solid ${bulkResult.success ? '#10b981' : '#ef4444'}`,
+            borderRadius: '6px',
+            color: bulkResult.success ? '#065f46' : '#991b1b'
+          }}>
+            {bulkResult.success ? '✅' : '⚠️'} {bulkResult.message}
+          </div>
+        )}
         
         {watchlistItems.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>
@@ -199,7 +308,9 @@ export default function WatchlistPage() {
           </div>
         ) : (
           <div style={{ display: 'grid', gap: '16px' }}>
-            {watchlistItems.map((stock) => (
+            {watchlistItems.map((stock) => {
+              const valuation = getValuationDisplay(stock)
+              return (
               <div
                 key={stock.ticker}
                 style={{
@@ -224,9 +335,9 @@ export default function WatchlistPage() {
                   e.currentTarget.style.boxShadow = 'none'
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px', flexWrap: 'wrap' }}>
                       <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#111827', margin: 0 }}>
                         {stock.company_name || `${stock.ticker} Corporation`}
                       </h3>
@@ -242,18 +353,49 @@ export default function WatchlistPage() {
                           {stock.recommendation}
                         </span>
                       )}
+                      {valuation && (
+                        <span style={{
+                          padding: '4px 10px',
+                          borderRadius: '8px',
+                          fontSize: '12px',
+                          fontWeight: '600',
+                          color: 'white',
+                          backgroundColor: valuation.color
+                        }}>
+                          {valuation.text}
+                        </span>
+                      )}
                     </div>
                     <p style={{ fontSize: '14px', color: '#6b7280', margin: '0 0 4px 0' }}>
                       {stock.ticker}
                     </p>
-                    {stock.last_updated && (
-                      <p style={{ fontSize: '12px', color: '#9ca3af', margin: 0 }}>
-                        Updated: {new Date(stock.last_updated).toLocaleDateString()}
+                    <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginTop: '6px', alignItems: 'center' }}>
+                      {stock.fair_value != null && !isNaN(stock.fair_value) && (
+                        <span style={{ fontSize: '12px', color: '#4b5563' }}>
+                          Fair value: {formatPrice(stock.fair_value, stock.currency)}
+                        </span>
+                      )}
+                      {stock.pe_ratio != null && !isNaN(stock.pe_ratio) && (
+                        <span style={{ fontSize: '12px', color: '#4b5563' }}>
+                          P/E: {stock.pe_ratio.toFixed(1)}
+                        </span>
+                      )}
+                      {(stock.financial_health_score != null || stock.business_quality_score != null) && (
+                        <span style={{ fontSize: '12px', color: '#6b7280' }}>
+                          {stock.financial_health_score != null && `Health ${Math.round(stock.financial_health_score)}`}
+                          {stock.financial_health_score != null && stock.business_quality_score != null && ' · '}
+                          {stock.business_quality_score != null && `Quality ${Math.round(stock.business_quality_score)}`}
+                        </span>
+                      )}
+                    </div>
+                    {(stock.last_updated || stock.last_analyzed_at) && (
+                      <p style={{ fontSize: '12px', color: '#9ca3af', margin: '4px 0 0 0' }}>
+                        Updated: {new Date(stock.last_analyzed_at || stock.last_updated!).toLocaleDateString()}
                       </p>
                     )}
                   </div>
                   
-                  <div style={{ textAlign: 'right' }}>
+                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
                     {stock.current_price ? (
                       <>
                         <div style={{ fontSize: '20px', fontWeight: '700', color: '#111827' }}>
@@ -285,7 +427,8 @@ export default function WatchlistPage() {
                   </div>
                 </div>
               </div>
-            ))}
+            )
+            })}
           </div>
         )}
       </div>

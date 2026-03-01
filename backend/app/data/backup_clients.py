@@ -77,11 +77,11 @@ class IEXCloudClient:
 
 
 class MarketStackClient:
-    """MarketStack API client - Free tier: 1,000 requests/month"""
+    """MarketStack API client (paid plan - HTTPS)"""
 
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or os.getenv("MARKETSTACK_API_KEY")
-        self.base_url = "http://api.marketstack.com/v1"
+        self.base_url = "https://api.marketstack.com/v1"
 
     def _make_request(self, endpoint: str, params: Optional[Dict] = None) -> Optional[Dict]:
         """Make API request"""

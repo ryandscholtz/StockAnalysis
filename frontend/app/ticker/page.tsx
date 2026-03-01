@@ -128,18 +128,16 @@ export default function TickerPage() {
   }
 
   const loadFinancialData = async () => {
-    console.log('🔄 loadFinancialData called for ticker:', ticker);
     try {
       const normalizedTicker = normalizeTicker(ticker)
-      console.log('📡 Attempting to load financial data for:', normalizedTicker);
       const result = await stockApi.getFinancialData(normalizedTicker)
-      console.log('✅ Financial data loaded successfully:', result);
       setFinancialData(result)
+      // Hydrate the analysis panel from the cached result if not already set
+      if (result.latest_analysis && !analyzing) {
+        setAnalysis(result.latest_analysis)
+      }
     } catch (err: any) {
-      // Silently fail - financial data is optional for display
       console.debug('Could not load financial data:', err)
-      console.log('🔄 Setting fallback financial data structure');
-      // Set empty financial data so components still render
       setFinancialData({
         ticker: normalizeTicker(ticker),
         financial_data: {},
