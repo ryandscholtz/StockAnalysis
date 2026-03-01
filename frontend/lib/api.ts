@@ -1004,6 +1004,7 @@ export interface WatchlistItem {
   financial_health_score?: number
   business_quality_score?: number
   pe_ratio?: number
+  currency?: string
   live_price?: number
   price_error?: string
   cache_info?: {

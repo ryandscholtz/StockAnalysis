@@ -35,6 +35,7 @@ export interface StockAnalysis {
   dataQualityWarnings?: DataQualityWarning[]
   analysisWeights?: AnalysisWeights
   businessType?: string
+  recommendedPreset?: string
   dataSource?: {
     price_source: string
     has_real_price: boolean
