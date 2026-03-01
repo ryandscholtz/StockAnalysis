@@ -45,8 +45,9 @@ export interface StockAnalysis {
 
 export interface ValuationBreakdown {
   dcf: number
+  peValue: number
   earningsPower: number
-  assetBased: number
+  bookValue: number
   weightedAverage: number
 }
 

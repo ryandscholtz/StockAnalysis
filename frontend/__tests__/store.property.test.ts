@@ -29,8 +29,9 @@ const stockAnalysisArbitrary = fc.record({
   recommendationReasoning: fc.string({ minLength: 10, maxLength: 200 }),
   valuation: fc.record({
     dcf: priceArbitrary,
+    peValue: priceArbitrary,
     earningsPower: priceArbitrary,
-    assetBased: priceArbitrary,
+    bookValue: priceArbitrary,
     weightedAverage: priceArbitrary,
   }),
   financialHealth: fc.record({

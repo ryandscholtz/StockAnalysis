@@ -27,7 +27,7 @@ export default function AnalysisCard({ analysis }: AnalysisCardProps) {
       
       <div className="metric">
         <span className="metric-label">Fair Value Per Share</span>
-        <span className="metric-value" style={{ color: analysis.fairValue && analysis.fairValue > 0 ? '#059669' : '#6b7280', fontSize: '28px' }}>
+        <span className="metric-value" style={{ color: analysis.fairValue && analysis.fairValue > 0 ? (analysis.marginOfSafety && analysis.marginOfSafety > 0 ? '#059669' : '#dc2626') : '#6b7280', fontSize: '28px' }}>
           {analysis.fairValue && analysis.fairValue > 0 
             ? formatPrice(analysis.fairValue, analysis.currency)
             : 'Not available'}
@@ -45,6 +45,15 @@ export default function AnalysisCard({ analysis }: AnalysisCardProps) {
           <span className="metric-label">Current Price Per Share</span>
           <span className="metric-value">
             {formatPrice(analysis.currentPrice, analysis.currency)}
+          </span>
+        </div>
+      )}
+
+      {analysis.priceRatios?.priceToEarnings != null && !isNaN(analysis.priceRatios.priceToEarnings) && (
+        <div className="metric">
+          <span className="metric-label">P/E Ratio</span>
+          <span className="metric-value">
+            {analysis.priceRatios.priceToEarnings.toFixed(1)}x
           </span>
         </div>
       )}
@@ -79,7 +88,14 @@ export default function AnalysisCard({ analysis }: AnalysisCardProps) {
           {showMultiplier ? 'Intrinsic Value to Price' : 'Price to Intrinsic Value'}
           <span style={{ fontSize: '11px', color: '#9ca3af', fontWeight: 400 }}>⇄</span>
         </span>
-        <span className="metric-value" style={{ color: showMultiplier && analysis.fairValue && analysis.priceToIntrinsicValue > 0 ? '#059669' : undefined }}>
+        <span className="metric-value" style={{ color: (() => {
+            if (!analysis.fairValue || !analysis.priceToIntrinsicValue || analysis.priceToIntrinsicValue <= 0) return undefined
+            // IV/P > 1 = undervalued (green), < 1 = overvalued (red); P/IV flips
+            const ivToP = 1 / analysis.priceToIntrinsicValue
+            return showMultiplier
+              ? ivToP > 1 ? '#059669' : '#dc2626'
+              : analysis.priceToIntrinsicValue < 1 ? '#059669' : '#dc2626'
+          })() }}>
           {analysis.fairValue && analysis.priceToIntrinsicValue !== null && analysis.priceToIntrinsicValue !== undefined && !isNaN(analysis.priceToIntrinsicValue) && analysis.priceToIntrinsicValue > 0
             ? showMultiplier
               ? `${(1 / analysis.priceToIntrinsicValue).toFixed(2)}x`

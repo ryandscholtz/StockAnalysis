@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { getCurrencySymbol } from '@/lib/currency'
+import { stockApi } from '@/lib/api'
 
 interface SectionMeta {
   last_updated: string | null
@@ -14,6 +15,7 @@ interface FinancialDataDisplayProps {
   financialData: Record<string, Record<string, Record<string, number>>>
   metadata: Record<string, SectionMeta>
   financialCurrency?: string
+  onPeriodDeleted?: () => void
 }
 
 // Human-readable labels for common field names (both snake_case and title case)
@@ -142,11 +144,30 @@ function formatDate(iso: string | null): string {
   }
 }
 
-export default function FinancialDataDisplay({ ticker, financialData, metadata, financialCurrency }: FinancialDataDisplayProps) {
+export default function FinancialDataDisplay({ ticker, financialData, metadata, financialCurrency, onPeriodDeleted }: FinancialDataDisplayProps) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  const [deleting, setDeleting] = useState<string | null>(null) // "section:period"
+  // Local overrides: sections/periods hidden after optimistic delete
+  const [deleted, setDeleted] = useState<Set<string>>(new Set()) // "section:period"
   const currencySymbol = getCurrencySymbol(financialCurrency)
 
   const toggle = (key: string) => setExpanded(prev => ({ ...prev, [key]: !prev[key] }))
+
+  const handleDeletePeriod = async (e: React.MouseEvent, section: string, period: string) => {
+    e.stopPropagation()
+    const key = `${section}:${period}`
+    if (!confirm(`Remove ${period} from ${section.replace(/_/g, ' ')}?`)) return
+    setDeleting(key)
+    try {
+      await stockApi.deleteFinancialPeriod(ticker, section, period)
+      setDeleted(prev => new Set([...prev, key]))
+      onPeriodDeleted?.()
+    } catch (err: any) {
+      alert(`Failed to delete: ${err?.message || 'Unknown error'}`)
+    } finally {
+      setDeleting(null)
+    }
+  }
 
   // Determine which sections to show — always show all four in order
   const sectionKeys = ['income_statement', 'balance_sheet', 'cashflow', 'key_metrics']
@@ -215,7 +236,9 @@ export default function FinancialDataDisplay({ ticker, financialData, metadata, 
         const cfg = SECTION_CONFIG[sectionKey]
         const sectionData = financialData[sectionKey] || {}
         const meta = metadata[sectionKey]
-        const periods = Object.keys(sectionData).sort().reverse()
+        const periods = Object.keys(sectionData)
+          .sort().reverse()
+          .filter(p => !deleted.has(`${sectionKey}:${p}`))
         const hasData = periods.length > 0
         const isOpen = expanded[sectionKey] ?? false
 
@@ -321,15 +344,36 @@ export default function FinancialDataDisplay({ ticker, financialData, metadata, 
                             }}>
                               Field
                             </th>
-                            {periods.map(p => (
-                              <th key={p} style={{
-                                textAlign: 'right', padding: '8px 12px',
-                                fontWeight: '600', color: '#374151',
-                                borderBottom: '1px solid #e5e7eb', minWidth: '120px'
-                              }}>
-                                {p}
-                              </th>
-                            ))}
+                            {periods.map(p => {
+                              const dk = `${sectionKey}:${p}`
+                              const isDeleting = deleting === dk
+                              return (
+                                <th key={p} style={{
+                                  textAlign: 'right', padding: '8px 12px',
+                                  fontWeight: '600', color: '#374151',
+                                  borderBottom: '1px solid #e5e7eb', minWidth: '120px'
+                                }}>
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                                    {p}
+                                    <button
+                                      onClick={e => handleDeletePeriod(e, sectionKey, p)}
+                                      disabled={isDeleting}
+                                      title={`Remove ${p}`}
+                                      style={{
+                                        background: 'none', border: 'none', cursor: 'pointer',
+                                        color: '#9ca3af', fontSize: '14px', lineHeight: 1,
+                                        padding: '1px 3px', borderRadius: '3px',
+                                        opacity: isDeleting ? 0.4 : 1,
+                                      }}
+                                      onMouseEnter={e => (e.currentTarget.style.color = '#ef4444')}
+                                      onMouseLeave={e => (e.currentTarget.style.color = '#9ca3af')}
+                                    >
+                                      ×
+                                    </button>
+                                  </span>
+                                </th>
+                              )
+                            })}
                           </tr>
                         </thead>
                         <tbody>

@@ -559,8 +559,9 @@ export const stockApi = {
             recommendationReasoning: error.response.data.message || 'Price data temporarily unavailable',
             valuation: {
               dcf: null,
+              peValue: null,
               earningsPower: null,
-              assetBased: null,
+              bookValue: null,
               weightedAverage: null
             },
             financialHealth: { score: null, metrics: {} },
@@ -961,6 +962,12 @@ export const stockApi = {
     
     const response = await api.put<{ success: boolean; message: string }>(url)
     return response.data
+  },
+
+  async deleteFinancialPeriod(ticker: string, section: string, period: string): Promise<void> {
+    await api.delete(`/api/financial-data/period`, {
+      params: { ticker, section, period }
+    })
   },
 
   async getFinancialData(ticker: string): Promise<{

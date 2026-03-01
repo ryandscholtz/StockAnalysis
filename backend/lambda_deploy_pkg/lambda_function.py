@@ -685,87 +685,6 @@ def _extract_json(text: str) -> dict:
     return {}
 
 
-# ---------------------------------------------------------------------------
-# Valuation preset weights (match frontend fallbackPresets in ticker/page.tsx)
-# P/E weight = 1 - dcf - epv - asset
-# ---------------------------------------------------------------------------
-PRESET_WEIGHTS = {
-    'default':            {'dcf': 0.40, 'pe': 0.30, 'epv': 0.20, 'asset': 0.10},
-    'high_growth':        {'dcf': 0.60, 'pe': 0.15, 'epv': 0.20, 'asset': 0.05},
-    'growth_company':     {'dcf': 0.50, 'pe': 0.25, 'epv': 0.15, 'asset': 0.10},
-    'mature_company':     {'dcf': 0.35, 'pe': 0.35, 'epv': 0.20, 'asset': 0.10},
-    'cyclical':           {'dcf': 0.25, 'pe': 0.25, 'epv': 0.35, 'asset': 0.15},
-    'asset_heavy':        {'dcf': 0.20, 'pe': 0.10, 'epv': 0.25, 'asset': 0.45},
-    'distressed_company': {'dcf': 0.10, 'pe': 0.05, 'epv': 0.15, 'asset': 0.70},
-    'bank':               {'dcf': 0.20, 'pe': 0.30, 'epv': 0.35, 'asset': 0.15},
-    'reit':               {'dcf': 0.30, 'pe': 0.10, 'epv': 0.15, 'asset': 0.45},
-    'insurance':          {'dcf': 0.20, 'pe': 0.25, 'epv': 0.40, 'asset': 0.15},
-    'utility':            {'dcf': 0.40, 'pe': 0.20, 'epv': 0.30, 'asset': 0.10},
-    'technology':         {'dcf': 0.50, 'pe': 0.25, 'epv': 0.20, 'asset': 0.05},
-    'healthcare':         {'dcf': 0.45, 'pe': 0.25, 'epv': 0.25, 'asset': 0.05},
-    'retail':             {'dcf': 0.40, 'pe': 0.30, 'epv': 0.20, 'asset': 0.10},
-    'energy':             {'dcf': 0.25, 'pe': 0.15, 'epv': 0.40, 'asset': 0.20},
-}
-
-PRESET_DESCRIPTIONS = {
-    'high_growth':        'Technology startups, high-growth SaaS, biotech',
-    'growth_company':     'Established growth companies, expanding businesses',
-    'mature_company':     'Stable blue-chips, dividend payers',
-    'technology':         'Software, internet, semiconductors',
-    'healthcare':         'Pharma, biotech, medical devices, healthcare services',
-    'retail':             'Retail stores, consumer goods, e-commerce',
-    'utility':            'Electric, water, gas utilities',
-    'cyclical':           'Industrials, manufacturing, materials',
-    'energy':             'Oil & gas, mining, energy exploration',
-    'bank':               'Banks, financial services, credit institutions',
-    'insurance':          'Insurance companies, reinsurance',
-    'asset_heavy':        'Infrastructure, capital-intensive businesses',
-    'reit':               'Real Estate Investment Trusts',
-    'distressed_company': 'Companies in financial difficulty, turnaround situations',
-    'default':            'General purpose, balanced approach',
-}
-
-
-def _recommend_preset(ticker: str, company_name: str, sector: str = '', industry: str = '') -> str:
-    """Use Bedrock to recommend the most appropriate valuation preset for a company."""
-    preset_list = '\n'.join(f'- {k}: {v}' for k, v in PRESET_DESCRIPTIONS.items())
-    prompt = (
-        f"You are a valuation analyst. Select the single most appropriate valuation preset for:\n"
-        f"Company: {company_name} ({ticker})\n"
-        f"Sector: {sector or 'Unknown'}\n"
-        f"Industry: {industry or 'Unknown'}\n\n"
-        f"Available presets:\n{preset_list}\n\n"
-        f"Respond with ONLY the preset key (e.g. \"technology\", \"bank\"). Nothing else."
-    )
-    try:
-        bedrock = boto3.client('bedrock-runtime', region_name='us-east-1')
-        body = json.dumps({
-            'anthropic_version': 'bedrock-2023-05-31',
-            'max_tokens': 20,
-            'messages': [{'role': 'user', 'content': prompt}]
-        })
-        response = bedrock.invoke_model(
-            modelId='us.anthropic.claude-haiku-4-5-20251001-v1:0',
-            contentType='application/json',
-            accept='application/json',
-            body=body
-        )
-        raw = json.loads(response['body'].read())['content'][0]['text'].strip().lower()
-        # Accept the key verbatim or with spaces→underscores
-        preset = raw.replace(' ', '_')
-        if preset in PRESET_WEIGHTS:
-            print(f"[Preset] LLM recommended '{preset}' for {ticker}")
-            return preset
-        # Partial match fallback
-        for key in PRESET_WEIGHTS:
-            if key in preset or preset in key:
-                print(f"[Preset] LLM partial match '{preset}' → '{key}' for {ticker}")
-                return key
-    except Exception as exc:
-        print(f"[WARN] Preset recommendation failed for {ticker}: {exc}")
-    return 'default'
-
-
 def get_financial_data_with_ai(ticker: str, company_name: str) -> dict:
     """
     Use Claude (via AWS Bedrock) to retrieve the most recent known annual
@@ -1086,44 +1005,8 @@ def analyze_stock_get(ticker: str, stream: bool, params: dict) -> dict:
             stock_body.get('companyName') or stock_body.get('name') or company_name
         )
         currency = stock_body.get('currency', 'USD')
-        sector   = stock_body.get('sector', '')
-        industry = stock_body.get('industry', '')
     except Exception:
-        sector = ''
-        industry = ''
-
-    # ------------------------------------------------------------------
-    # Resolve valuation weights: explicit preset > custom JSON > auto-LLM
-    # ------------------------------------------------------------------
-    requested_preset = (params.get('business_type') or '').strip().lower().replace(' ', '_')
-    custom_weights_json = params.get('weights', '')
-
-    resolved_preset = None  # will be set below
-
-    if requested_preset and requested_preset != 'automatic' and requested_preset in PRESET_WEIGHTS:
-        # Caller specified a known preset
-        w = PRESET_WEIGHTS[requested_preset]
-        resolved_preset = requested_preset
-        print(f"[Preset] Using requested preset '{resolved_preset}' for {ticker}")
-    elif custom_weights_json:
-        # Caller passed raw JSON weights (legacy / manual config)
-        try:
-            cw = json.loads(custom_weights_json)
-            w = {
-                'dcf':   float(cw.get('dcf_weight', 0.40)),
-                'pe':    float(cw.get('pe_weight',  0.30)),
-                'epv':   float(cw.get('epv_weight', 0.20)),
-                'asset': float(cw.get('asset_weight', 0.10)),
-            }
-            resolved_preset = requested_preset or None
-        except Exception:
-            w = PRESET_WEIGHTS['default']
-            resolved_preset = 'default'
-    else:
-        # No preset specified or 'automatic' — ask LLM
-        progress_events.append(progress(1, total_steps, 'Auto-selecting valuation preset...'))
-        resolved_preset = _recommend_preset(ticker, company_name, sector, industry)
-        w = PRESET_WEIGHTS.get(resolved_preset, PRESET_WEIGHTS['default'])
+        pass
 
     # ------------------------------------------------------------------
     # Step 2: Retrieve financial data (cache → SEC EDGAR → Yahoo Finance → Claude AI)
@@ -1278,12 +1161,12 @@ def analyze_stock_get(ticker: str, stream: bool, params: dict) -> dict:
     # ------------------------------------------------------------------
     progress_events.append(progress(6, total_steps, 'Calculating weighted fair value...'))
 
-    # Use preset weights (resolved above from business_type param or LLM auto-selection)
+    # Weights: DCF=40%, P/E=30%, Earnings Power=20%, Book Value=10%
     fair_value = weighted_fair_value([
-        (dcf_value,      w['dcf']),
-        (pe_value,       w['pe']),
-        (earnings_power, w['epv']),
-        (book_value,     w['asset']),
+        (dcf_value, 0.40),
+        (pe_value, 0.30),
+        (earnings_power, 0.20),
+        (book_value, 0.10),
     ])
 
     # Round values
@@ -1395,15 +1278,7 @@ def analyze_stock_get(ticker: str, stream: bool, params: dict) -> dict:
             'keyMetrics': km if km else None,
         },
         'timestamp': datetime.now().isoformat(),
-        'dataSource': 'ai-bedrock-claude',
-        # Preset / weight info so the frontend can sync its dropdown
-        'businessType': resolved_preset,
-        'recommendedPreset': resolved_preset,
-        'analysisWeights': {
-            'dcf_weight':   w['dcf'],
-            'epv_weight':   w['epv'],
-            'asset_weight': w['asset'],
-        },
+        'dataSource': 'ai-bedrock-claude'
     }
 
     # Persist the analysis result so the ticker page can display it on load
@@ -1429,8 +1304,6 @@ def analyze_stock_get(ticker: str, stream: bool, params: dict) -> dict:
             'pe_ratio': float(pe_from_km) if pe_from_km is not None else None,
             'timestamp': analysis['timestamp'],
             'dataSource': analysis['dataSource'],
-            'businessType': analysis.get('businessType'),
-            'analysisWeights': analysis.get('analysisWeights'),
         }
         dynamodb_res = boto3.resource('dynamodb', region_name='eu-west-1')
         table = dynamodb_res.Table(MANUAL_DATA_TABLE)

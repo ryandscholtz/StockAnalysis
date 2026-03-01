@@ -203,7 +203,7 @@ export default function WatchlistPage() {
       {/* Header */}
       <div style={{ marginBottom: '32px' }}>
         <h1 style={{ fontSize: '36px', fontWeight: '700', color: '#111827', marginBottom: '8px' }}>
-          Stock Analysis Watchlist
+          Watchlist
         </h1>
         <p style={{ fontSize: '16px', color: '#6b7280' }}>
           Monitor and analyze your favorite stocks with real-time data and comprehensive financial metrics.
@@ -453,8 +453,8 @@ export default function WatchlistPage() {
                           {formatPrice(stock.current_price, stock.currency)}
                         </div>
                         {stock.price_change !== undefined && (
-                          <div style={{ 
-                            fontSize: '14px', 
+                          <div style={{
+                            fontSize: '14px',
                             fontWeight: '500',
                             color: getPriceChangeColor(stock.price_change)
                           }}>
@@ -472,6 +472,20 @@ export default function WatchlistPage() {
                         Price unavailable
                       </div>
                     )}
+                    {stock.fair_value && stock.current_price && stock.current_price > 0 && (() => {
+                      const multiplier = stock.fair_value / stock.current_price
+                      const isUndervalued = multiplier > 1
+                      return (
+                        <div style={{
+                          fontSize: '15px',
+                          fontWeight: '700',
+                          color: isUndervalued ? '#059669' : '#6b7280',
+                          marginTop: '4px',
+                        }}>
+                          V/P: {multiplier.toFixed(2)}x
+                        </div>
+                      )
+                    })()}
                     <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>
                       Click to analyze →
                     </div>

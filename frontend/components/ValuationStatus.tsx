@@ -20,9 +20,6 @@ export default function ValuationStatus({ analysis }: ValuationStatusProps) {
     
     if (margin > 0) {
       // Undervalued
-      if (absMargin > 50) return { text: `${absMargin.toFixed(1)}% Undervalued`, color: '#059669' }
-      if (absMargin > 30) return { text: `${absMargin.toFixed(1)}% Undervalued`, color: '#0d9488' }
-      if (absMargin > 10) return { text: `${absMargin.toFixed(1)}% Undervalued`, color: '#d97706' }
       return { text: `${absMargin.toFixed(1)}% Undervalued`, color: '#059669' }
     } else {
       // Overvalued
@@ -85,7 +82,7 @@ export default function ValuationStatus({ analysis }: ValuationStatusProps) {
           trade above their intrinsic worth.
         </p>
         {isValid && margin > 0 && margin < 30 && (
-          <p style={{ marginTop: '12px', color: '#d97706' }}>
+          <p style={{ marginTop: '12px', color: '#059669' }}>
             💡 Moderately undervalued. Consider additional analysis before investing.
           </p>
         )}

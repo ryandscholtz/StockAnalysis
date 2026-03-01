@@ -86,35 +86,59 @@ export default function TickerPage() {
   }, [showModelDropdown])
 
   const fetchAvailableModels = async () => {
+    // P/E weight is implicit: pe = 1 - dcf - epv - asset
+    const fallbackPresets = {
+      'default':            { dcf_weight: 0.40, epv_weight: 0.20, asset_weight: 0.10 }, // pe=0.30
+      'high_growth':        { dcf_weight: 0.60, epv_weight: 0.20, asset_weight: 0.05 }, // pe=0.15
+      'growth_company':     { dcf_weight: 0.50, epv_weight: 0.15, asset_weight: 0.10 }, // pe=0.25
+      'mature_company':     { dcf_weight: 0.35, epv_weight: 0.20, asset_weight: 0.10 }, // pe=0.35
+      'cyclical':           { dcf_weight: 0.25, epv_weight: 0.35, asset_weight: 0.15 }, // pe=0.25
+      'asset_heavy':        { dcf_weight: 0.20, epv_weight: 0.25, asset_weight: 0.45 }, // pe=0.10
+      'distressed_company': { dcf_weight: 0.10, epv_weight: 0.15, asset_weight: 0.70 }, // pe=0.05
+      'bank':               { dcf_weight: 0.20, epv_weight: 0.35, asset_weight: 0.15 }, // pe=0.30
+      'reit':               { dcf_weight: 0.30, epv_weight: 0.15, asset_weight: 0.45 }, // pe=0.10
+      'insurance':          { dcf_weight: 0.20, epv_weight: 0.40, asset_weight: 0.15 }, // pe=0.25
+      'utility':            { dcf_weight: 0.40, epv_weight: 0.30, asset_weight: 0.10 }, // pe=0.20
+      'technology':         { dcf_weight: 0.50, epv_weight: 0.20, asset_weight: 0.05 }, // pe=0.25
+      'healthcare':         { dcf_weight: 0.45, epv_weight: 0.25, asset_weight: 0.05 }, // pe=0.25
+      'retail':             { dcf_weight: 0.40, epv_weight: 0.20, asset_weight: 0.10 }, // pe=0.30
+      'energy':             { dcf_weight: 0.25, epv_weight: 0.40, asset_weight: 0.20 }, // pe=0.15
+    }
+    const fallbackTypes = Object.keys(fallbackPresets)
+
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
       const response = await fetch(`${apiUrl}/api/analysis-presets`)
-      
       if (response.ok) {
         const data = await response.json()
         if (data && data.presets && data.business_types) {
           setAvailableModels(data.business_types)
           setModelPresets(data.presets)
+          return
         }
       }
     } catch (error) {
       console.error('Error fetching models:', error)
-      // Fallback models
-      setAvailableModels(['default', 'growth_company', 'mature_company', 'asset_heavy', 'distressed_company'])
     }
+    // API unavailable or returned unexpected shape — use hardcoded fallback
+    setAvailableModels(fallbackTypes)
+    setModelPresets(fallbackPresets)
   }
 
   const handleModelChange = async (newModel: string) => {
-    setBusinessType(newModel)
-    setShowModelDropdown(false)
-    
-    // Update analysis weights based on the selected model
-    if (modelPresets[newModel]) {
-      setAnalysisWeights(modelPresets[newModel])
+    if (newModel === 'automatic') {
+      // Let the backend auto-select the best preset (clears the override)
+      setBusinessType(null)
+      setAnalysisWeights(null)
+      await loadAnalysis(false, null, null)
+      return
     }
-    
-    // Re-run analysis with new model
-    await loadAnalysis(true)
+    const newWeights = modelPresets[newModel] ?? null
+    setBusinessType(newModel)
+    if (newWeights) setAnalysisWeights(newWeights)
+    // Use cached financial data (no force refresh) — only the weights change.
+    // Pass new values directly since React state updates aren't visible yet.
+    await loadAnalysis(false, newModel, newWeights)
   }
 
   const getModelDisplayName = (modelKey: string) => {
@@ -176,16 +200,20 @@ export default function TickerPage() {
     }
   }
 
-  const loadAnalysis = async (forceRefresh: boolean = false) => {
+  const loadAnalysis = async (
+    forceRefresh: boolean = false,
+    overrideBusinessType?: string | null,
+    overrideWeights?: AnalysisWeights | null
+  ) => {
     try {
       setLoading(true)
       setError('')
       setProgress(null)
-      
+
       // Try to get existing analysis first
       const normalizedTicker = normalizeTicker(ticker)
       const data = await stockApi.analyzeStock(
-        normalizedTicker, 
+        normalizedTicker,
         (update) => {
           if (update.type === 'progress') {
             setProgress({
@@ -194,20 +222,19 @@ export default function TickerPage() {
               task: update.task || ''
             })
           }
-        }, 
-        undefined, 
+        },
+        undefined,
         forceRefresh,
-        businessType,
-        analysisWeights
+        overrideBusinessType !== undefined ? overrideBusinessType : businessType,
+        overrideWeights !== undefined ? overrideWeights : analysisWeights
       )
       setAnalysis(data)
-      // Update weights and business type from response
-      if (data.analysisWeights) {
-        setAnalysisWeights(data.analysisWeights)
-      }
-      if (data.businessType) {
-        setBusinessType(data.businessType)
-      }
+      // Sync preset from the backend response — always resolve to a real preset so
+      // the dropdown never stays on "Automatic". Backend auto-selects when none given.
+      const resolvedPreset = data.businessType || data.recommendedPreset || 'default'
+      setBusinessType(resolvedPreset)
+      const resolvedWeights = data.analysisWeights || modelPresets[resolvedPreset] || null
+      if (resolvedWeights) setAnalysisWeights(resolvedWeights)
       
       // Update watchlist and stored financial data with latest analysis
       await Promise.all([loadWatchlistData(), loadFinancialData()])
@@ -626,19 +653,11 @@ export default function TickerPage() {
         />
       )}
 
-      {/* Stored financial data — always shown when data exists */}
-      <FinancialDataDisplay
-        ticker={ticker}
-        financialData={financialData.financial_data || {}}
-        metadata={financialData.metadata || {}}
-        financialCurrency={financialData.financial_currency}
-      />
-
       {analysis ? (
         <>
           {/* Data Quality Warnings */}
           <DataQualityWarnings warnings={analysis.dataQualityWarnings} />
-          
+
           {/* Show missing data prompt if needed */}
           {(!analysis.fairValue || analysis.fairValue === 0 || (analysis.missingData?.has_missing_data)) && (
             <MissingDataPrompt
@@ -661,7 +680,21 @@ export default function TickerPage() {
           {/* Analysis Components */}
           <AnalysisCard analysis={analysis} />
           <ValuationStatus analysis={analysis} />
-          <ValuationChart analysis={analysis} />
+          <ValuationChart
+            analysis={analysis}
+            availablePresets={availableModels}
+            currentPreset={businessType}
+            onPresetChange={handleModelChange}
+          />
+
+          {/* Stored financial data — below valuation breakdown */}
+          <FinancialDataDisplay
+            ticker={ticker}
+            financialData={financialData.financial_data || {}}
+            metadata={financialData.metadata || {}}
+            financialCurrency={financialData.financial_currency}
+            onPeriodDeleted={loadFinancialData}
+          />
           <PriceRatios priceRatios={analysis.priceRatios} />
           <GrowthMetrics growthMetrics={analysis.growthMetrics} currency={analysis.currency} />
           <FinancialHealth analysis={analysis} />

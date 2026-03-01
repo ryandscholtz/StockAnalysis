@@ -32,94 +32,149 @@ export default function DocsPage() {
           Valuation Models
         </h2>
         <p style={{ fontSize: '16px', lineHeight: '1.7', color: '#374151', marginBottom: '24px' }}>
-          The tool uses three primary valuation methods, then calculates a weighted average based on the business type:
+          The tool calculates intrinsic value using four complementary methods, then combines them into a single
+          weighted fair value estimate. Each model captures a different dimension of a company's worth, so using
+          all four together produces a more robust estimate than any single method alone.
         </p>
 
+        {/* Model 1: DCF */}
         <div style={{ marginBottom: '32px' }}>
-          <h3 style={{ fontSize: '22px', fontWeight: '600', marginBottom: '12px', color: '#111827' }}>
-            1. Discounted Cash Flow (DCF) Model
+          <h3 style={{ fontSize: '22px', fontWeight: '600', color: '#111827', marginBottom: '12px' }}>
+            1. Discounted Cash Flow (DCF)
           </h3>
           <p style={{ fontSize: '16px', lineHeight: '1.7', color: '#374151', marginBottom: '12px' }}>
-            <strong>Best for:</strong> Companies with predictable cash flows and growth patterns
+            <strong>Best for:</strong> Companies with predictable, growing free cash flows — technology, consumer staples, industrials.
           </p>
           <p style={{ fontSize: '16px', lineHeight: '1.7', color: '#374151', marginBottom: '12px' }}>
-            The DCF model estimates the present value of a company's future free cash flows. It projects cash flows 
-            into the future and discounts them back to today's value using a discount rate (typically the weighted 
-            average cost of capital or risk-free rate plus a risk premium).
+            DCF projects the company's future free cash flows over a multi-year period (typically 5–10 years), then
+            discounts them back to today's money using a required rate of return (discount rate). A terminal value
+            is added to capture cash flows beyond the projection window. The sum of all discounted cash flows,
+            divided by shares outstanding, gives the intrinsic value per share.
           </p>
-          <div style={{ backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px', borderLeft: '4px solid #3b82f6' }}>
+          <p style={{ fontSize: '16px', lineHeight: '1.7', color: '#374151', marginBottom: '12px' }}>
+            DCF is the gold standard of intrinsic value analysis because it is grounded in the fundamental
+            principle that an asset is worth the present value of all cash it will generate over its lifetime.
+            However, it is sensitive to growth rate and discount rate assumptions — small changes in inputs can
+            produce very different outputs.
+          </p>
+          <div style={{ backgroundColor: '#f0fdfa', padding: '16px', borderRadius: '8px', borderLeft: '4px solid #0d9488' }}>
             <p style={{ fontSize: '14px', lineHeight: '1.6', color: '#374151', margin: 0 }}>
-              <strong>Key Formula:</strong> Present Value = Σ (Free Cash Flow / (1 + Discount Rate)^n)
+              <strong>Formula:</strong> Intrinsic Value = Σ (FCF × (1 + g)ⁿ / (1 + r)ⁿ) + Terminal Value / (1 + r)ⁿ
+              <br />where FCF = free cash flow, g = growth rate, r = discount rate, n = year
             </p>
           </div>
         </div>
 
+        {/* Model 2: P/E */}
         <div style={{ marginBottom: '32px' }}>
-          <h3 style={{ fontSize: '22px', fontWeight: '600', marginBottom: '12px', color: '#111827' }}>
-            2. Earnings Power Value (EPV)
+          <h3 style={{ fontSize: '22px', fontWeight: '600', color: '#111827', marginBottom: '12px' }}>
+            2. P/E Model (Price-to-Earnings)
           </h3>
           <p style={{ fontSize: '16px', lineHeight: '1.7', color: '#374151', marginBottom: '12px' }}>
-            <strong>Best for:</strong> Mature, stable businesses with consistent earnings
+            <strong>Best for:</strong> Profitable companies across most sectors where earnings are the primary value driver.
           </p>
           <p style={{ fontSize: '16px', lineHeight: '1.7', color: '#374151', marginBottom: '12px' }}>
-            EPV assumes the company maintains its current earnings power indefinitely (no growth). This conservative 
-            approach values the business based on its ability to generate earnings in perpetuity, discounted to 
-            present value. It's useful for identifying the minimum value of a stable business.
+            The P/E model estimates intrinsic value by multiplying the company's earnings per share (EPS) by an
+            appropriate P/E ratio. The P/E ratio used is sourced from the company's own reported ratio or a
+            sector average — whichever better reflects a fair multiple for the business. This approach is simple,
+            widely understood, and directly comparable across companies in the same industry.
           </p>
-          <div style={{ backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px', borderLeft: '4px solid #10b981' }}>
+          <p style={{ fontSize: '16px', lineHeight: '1.7', color: '#374151', marginBottom: '12px' }}>
+            The P/E model anchors the valuation to actual reported earnings, which makes it less reliant on
+            long-range forecasts than DCF. It works best when earnings are stable and the chosen P/E multiple
+            reflects the company's growth prospects and risk profile accurately.
+          </p>
+          <div style={{ backgroundColor: '#f5f3ff', padding: '16px', borderRadius: '8px', borderLeft: '4px solid #7c3aed' }}>
             <p style={{ fontSize: '14px', lineHeight: '1.6', color: '#374151', margin: 0 }}>
-              <strong>Key Formula:</strong> EPV = Normalized Earnings / Discount Rate
+              <strong>Formula:</strong> Fair Value per Share = EPS × Industry P/E Ratio
+              <br />where EPS = net income / shares outstanding
             </p>
           </div>
         </div>
 
+        {/* Model 3: EPV */}
         <div style={{ marginBottom: '32px' }}>
-          <h3 style={{ fontSize: '22px', fontWeight: '600', marginBottom: '12px', color: '#111827' }}>
-            3. Asset-Based Valuation
+          <h3 style={{ fontSize: '22px', fontWeight: '600', color: '#111827', marginBottom: '12px' }}>
+            3. Earnings Power Value (EPV)
           </h3>
           <p style={{ fontSize: '16px', lineHeight: '1.7', color: '#374151', marginBottom: '12px' }}>
-            <strong>Best for:</strong> Asset-heavy businesses, liquidation scenarios, or companies with significant tangible assets
+            <strong>Best for:</strong> Mature, stable businesses where current earnings are a reliable indicator of future performance.
           </p>
           <p style={{ fontSize: '16px', lineHeight: '1.7', color: '#374151', marginBottom: '12px' }}>
-            This method values a company based on its net assets (assets minus liabilities). It's particularly useful 
-            for companies where the liquidation value or book value is meaningful, such as real estate companies, 
-            manufacturing firms, or financial institutions.
+            EPV, developed by Columbia Business School professor Bruce Greenwald, is a deliberately conservative
+            valuation. It assumes the company will maintain its current level of earnings indefinitely — zero
+            growth. This makes it a useful floor value: if the market price is below EPV, the stock is cheap
+            even under the most pessimistic assumption about future growth.
           </p>
-          <div style={{ backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px', borderLeft: '4px solid #f59e0b' }}>
+          <p style={{ fontSize: '16px', lineHeight: '1.7', color: '#374151', marginBottom: '12px' }}>
+            Unlike DCF, EPV requires no growth assumptions, which eliminates a major source of estimation error.
+            The trade-off is that it can significantly undervalue high-growth companies.
+          </p>
+          <div style={{ backgroundColor: '#ecfeff', padding: '16px', borderRadius: '8px', borderLeft: '4px solid #0891b2' }}>
             <p style={{ fontSize: '14px', lineHeight: '1.6', color: '#374151', margin: 0 }}>
-              <strong>Key Formula:</strong> Asset Value = Total Assets - Total Liabilities (adjusted for market values where applicable)
+              <strong>Formula:</strong> EPV per Share = (Operating Income × (1 − Tax Rate)) / Discount Rate / Shares Outstanding
             </p>
           </div>
         </div>
 
+        {/* Model 4: Book Value */}
+        <div style={{ marginBottom: '32px' }}>
+          <h3 style={{ fontSize: '22px', fontWeight: '600', color: '#111827', marginBottom: '12px' }}>
+            4. Book Value
+          </h3>
+          <p style={{ fontSize: '16px', lineHeight: '1.7', color: '#374151', marginBottom: '12px' }}>
+            <strong>Best for:</strong> Asset-heavy businesses — banks, insurance companies, manufacturers, and real estate firms where tangible assets are central to the business model.
+          </p>
+          <p style={{ fontSize: '16px', lineHeight: '1.7', color: '#374151', marginBottom: '12px' }}>
+            Book value per share is the accounting value of a company's equity divided by its shares outstanding.
+            It represents the amount shareholders would theoretically receive if the company were liquidated at
+            balance sheet values. While book value rarely equals true market value (due to unrecorded intangibles
+            like brand or intellectual property), it provides an important anchor for the downside — particularly
+            for financial companies where asset quality is the primary risk.
+          </p>
+          <p style={{ fontSize: '16px', lineHeight: '1.7', color: '#374151', marginBottom: '12px' }}>
+            Stocks trading below book value (price-to-book &lt; 1) are often considered statistically cheap and
+            have historically outperformed as a group, though this signal is less reliable for asset-light
+            businesses.
+          </p>
+          <div style={{ backgroundColor: '#eff6ff', padding: '16px', borderRadius: '8px', borderLeft: '4px solid #0284c7' }}>
+            <p style={{ fontSize: '14px', lineHeight: '1.6', color: '#374151', margin: 0 }}>
+              <strong>Formula:</strong> Book Value per Share = Total Stockholder Equity / Shares Outstanding
+            </p>
+          </div>
+        </div>
+
+        {/* Weighted Average */}
         <div style={{ backgroundColor: '#eff6ff', padding: '20px', borderRadius: '8px', border: '1px solid #bfdbfe', marginTop: '24px' }}>
           <h4 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '12px', color: '#1e40af' }}>
-            Weighted Average Calculation
+            Weighted Average — How the Models are Combined
           </h4>
           <p style={{ fontSize: '16px', lineHeight: '1.7', color: '#374151', marginBottom: '16px' }}>
-            The final intrinsic value is calculated as a <strong>weighted average</strong> of these three methods. 
-            The weights are dynamically determined based on the company's business characteristics, ensuring the most 
-            appropriate valuation method receives the highest weight.
+            The four model outputs are combined into a single fair value estimate using fixed weights:
           </p>
-          
-          <h5 style={{ fontSize: '16px', fontWeight: '600', marginTop: '20px', marginBottom: '12px', color: '#1e40af' }}>
-            How Business Type is Determined
-          </h5>
-          <p style={{ fontSize: '15px', lineHeight: '1.6', color: '#374151', marginBottom: '12px' }}>
-            The system analyzes multiple factors to classify each company:
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '16px' }}>
+            {[
+              { label: 'DCF', weight: '40%', color: '#0d9488' },
+              { label: 'P/E', weight: '30%', color: '#7c3aed' },
+              { label: 'EPV', weight: '20%', color: '#0891b2' },
+              { label: 'Book Value', weight: '10%', color: '#0284c7' },
+            ].map(({ label, weight, color }) => (
+              <div key={label} style={{ background: 'white', border: `2px solid ${color}`, borderRadius: '8px', padding: '12px', textAlign: 'center' }}>
+                <div style={{ fontSize: '22px', fontWeight: '700', color }}>{weight}</div>
+                <div style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>{label}</div>
+              </div>
+            ))}
+          </div>
+          <p style={{ fontSize: '15px', lineHeight: '1.6', color: '#374151', marginBottom: '0' }}>
+            DCF receives the highest weight because it is the most comprehensive model — it captures both current
+            earnings power and future growth. P/E grounds the valuation in reported earnings. EPV provides a
+            conservative floor. Book Value guards against overpaying for asset-light stories.
           </p>
-          <ul style={{ fontSize: '15px', lineHeight: '1.6', color: '#374151', paddingLeft: '24px', marginBottom: '20px' }}>
-            <li><strong>Revenue Growth Rate:</strong> Multi-year trend analysis</li>
-            <li><strong>Asset Intensity:</strong> Ratio of total assets to revenue</li>
-            <li><strong>Growth Volatility:</strong> Consistency of growth patterns</li>
-            <li><strong>Industry Characteristics:</strong> Asset-heavy vs. asset-light business models</li>
-          </ul>
-
-          <div style={{ backgroundColor: '#fef3c7', padding: '16px', borderRadius: '6px', marginTop: '20px', borderLeft: '4px solid #f59e0b' }}>
+          <div style={{ backgroundColor: '#fef3c7', padding: '16px', borderRadius: '6px', marginTop: '16px', borderLeft: '4px solid #f59e0b' }}>
             <p style={{ fontSize: '14px', lineHeight: '1.6', color: '#92400e', margin: 0 }}>
-              <strong>Note:</strong> If any valuation method returns an invalid value (zero or negative), its weight is 
-              automatically redistributed proportionally among the remaining valid methods. This ensures the final 
-              valuation always uses the best available data.
+              <strong>Note:</strong> If a model produces an invalid result (zero, negative, or missing data), its
+              weight is automatically redistributed proportionally across the remaining valid models, so the final
+              fair value always uses the best available data.
             </p>
           </div>
         </div>
@@ -131,152 +186,59 @@ export default function DocsPage() {
           Analysis Weights & Business Type Presets
         </h2>
         <p style={{ fontSize: '16px', lineHeight: '1.7', color: '#374151', marginBottom: '24px' }}>
-          The tool includes 20 pre-configured business type presets, each optimized for specific industries and business models 
+          The tool includes 15 pre-configured business type presets, each optimized for specific industries and business models
           based on industry-standard valuation practices. You can select a preset or manually configure weights to customize the analysis.
         </p>
-
 
         <h3 style={{ fontSize: '22px', fontWeight: '600', marginBottom: '16px', marginTop: '32px', color: '#111827' }}>
           All Available Presets
         </h3>
 
-        {/* High Growth */}
-        <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', marginBottom: '16px', border: '1px solid #e5e7eb', borderLeft: '4px solid #3b82f6' }}>
-          <h4 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px', color: '#111827' }}>1. High Growth</h4>
-          <p style={{ fontSize: '14px', color: '#6b7280', marginBottom: '12px' }}><strong>Best for:</strong> Technology startups, biotech, high-growth SaaS companies</p>
-          <div style={{ fontSize: '14px' }}>
-            <strong style={{ color: '#374151' }}>Valuation Weights:</strong> DCF 55% | EPV 25% | Asset 20%
-          </div>
+        <div style={{ overflowX: 'auto', marginBottom: '8px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+            <thead>
+              <tr style={{ background: '#f3f4f6' }}>
+                <th style={{ textAlign: 'left', padding: '10px 14px', fontWeight: '600', color: '#374151', borderBottom: '2px solid #e5e7eb', whiteSpace: 'nowrap' }}>Preset</th>
+                <th style={{ textAlign: 'left', padding: '10px 14px', fontWeight: '600', color: '#374151', borderBottom: '2px solid #e5e7eb' }}>Best For</th>
+                <th style={{ textAlign: 'center', padding: '10px 14px', fontWeight: '600', color: '#f59e0b', borderBottom: '2px solid #e5e7eb', whiteSpace: 'nowrap' }}>DCF</th>
+                <th style={{ textAlign: 'center', padding: '10px 14px', fontWeight: '600', color: '#7c3aed', borderBottom: '2px solid #e5e7eb', whiteSpace: 'nowrap' }}>P/E</th>
+                <th style={{ textAlign: 'center', padding: '10px 14px', fontWeight: '600', color: '#0891b2', borderBottom: '2px solid #e5e7eb', whiteSpace: 'nowrap' }}>EPV</th>
+                <th style={{ textAlign: 'center', padding: '10px 14px', fontWeight: '600', color: '#4f46e5', borderBottom: '2px solid #e5e7eb', whiteSpace: 'nowrap' }}>Book</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                { name: 'High Growth',        bestFor: 'Technology startups, high-growth SaaS, biotech',               dcf: 60, pe: 15, epv: 20, book:  5 },
+                { name: 'Growth Company',     bestFor: 'Established growth companies, expanding businesses',           dcf: 50, pe: 25, epv: 15, book: 10 },
+                { name: 'Mature Company',     bestFor: 'Stable blue-chips, dividend payers',                           dcf: 35, pe: 35, epv: 20, book: 10 },
+                { name: 'Technology',         bestFor: 'Software, internet, semiconductors',                           dcf: 50, pe: 25, epv: 20, book:  5 },
+                { name: 'Healthcare',         bestFor: 'Pharma, biotech, medical devices, healthcare services',        dcf: 45, pe: 25, epv: 25, book:  5 },
+                { name: 'Retail',             bestFor: 'Retail stores, consumer goods, e-commerce',                   dcf: 40, pe: 30, epv: 20, book: 10 },
+                { name: 'Utility',            bestFor: 'Electric, water, gas utilities',                               dcf: 40, pe: 20, epv: 30, book: 10 },
+                { name: 'Cyclical',           bestFor: 'Industrials, manufacturing, materials',                        dcf: 25, pe: 25, epv: 35, book: 15 },
+                { name: 'Energy',             bestFor: 'Oil & gas, mining, energy exploration',                        dcf: 25, pe: 15, epv: 40, book: 20 },
+                { name: 'Bank',               bestFor: 'Banks, financial services, credit institutions ★',             dcf: 20, pe: 30, epv: 35, book: 15 },
+                { name: 'Insurance',          bestFor: 'Insurance companies, reinsurance ★',                           dcf: 20, pe: 25, epv: 40, book: 15 },
+                { name: 'Asset Heavy',        bestFor: 'Infrastructure, capital-intensive businesses',                 dcf: 20, pe: 10, epv: 25, book: 45 },
+                { name: 'REIT',               bestFor: 'Real Estate Investment Trusts ★',                              dcf: 30, pe: 10, epv: 15, book: 45 },
+                { name: 'Distressed Company', bestFor: 'Companies in financial difficulty, turnaround situations',     dcf: 10, pe:  5, epv: 15, book: 70 },
+                { name: 'Default',            bestFor: 'General purpose, balanced approach',                           dcf: 40, pe: 30, epv: 20, book: 10 },
+              ].map((row, i) => (
+                <tr key={row.name} style={{ background: i % 2 === 0 ? 'white' : '#f9fafb', borderBottom: '1px solid #f3f4f6' }}>
+                  <td style={{ padding: '9px 14px', fontWeight: '600', color: '#111827', whiteSpace: 'nowrap' }}>{row.name}</td>
+                  <td style={{ padding: '9px 14px', color: '#6b7280' }}>{row.bestFor}</td>
+                  <td style={{ padding: '9px 14px', textAlign: 'center', color: '#92400e', fontWeight: '500' }}>{row.dcf}%</td>
+                  <td style={{ padding: '9px 14px', textAlign: 'center', color: '#5b21b6', fontWeight: '500' }}>{row.pe}%</td>
+                  <td style={{ padding: '9px 14px', textAlign: 'center', color: '#0e7490', fontWeight: '500' }}>{row.epv}%</td>
+                  <td style={{ padding: '9px 14px', textAlign: 'center', color: '#3730a3', fontWeight: '500' }}>{row.book}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-
-        {/* Growth */}
-        <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', marginBottom: '16px', border: '1px solid #e5e7eb', borderLeft: '4px solid #10b981' }}>
-          <h4 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px', color: '#111827' }}>2. Growth</h4>
-          <p style={{ fontSize: '14px', color: '#6b7280', marginBottom: '12px' }}><strong>Best for:</strong> Established growth companies, expanding businesses</p>
-          <div style={{ fontSize: '14px' }}>
-            <strong style={{ color: '#374151' }}>Valuation Weights:</strong> DCF 50% | EPV 30% | Asset 20%
-          </div>
-        </div>
-
-        {/* Mature */}
-        <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', marginBottom: '16px', border: '1px solid #e5e7eb', borderLeft: '4px solid #6b7280' }}>
-          <h4 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px', color: '#111827' }}>3. Mature</h4>
-          <p style={{ fontSize: '14px', color: '#6b7280', marginBottom: '12px' }}><strong>Best for:</strong> Stable, established companies, blue-chip stocks</p>
-          <div style={{ fontSize: '14px' }}>
-            <strong style={{ color: '#374151' }}>Valuation Weights:</strong> DCF 50% | EPV 35% | Asset 15%
-          </div>
-        </div>
-
-        {/* Cyclical */}
-        <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', marginBottom: '16px', border: '1px solid #e5e7eb', borderLeft: '4px solid #f59e0b' }}>
-          <h4 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px', color: '#111827' }}>4. Cyclical</h4>
-          <p style={{ fontSize: '14px', color: '#6b7280', marginBottom: '12px' }}><strong>Best for:</strong> Industrial, manufacturing, materials, energy companies</p>
-          <div style={{ fontSize: '14px' }}>
-            <strong style={{ color: '#374151' }}>Valuation Weights:</strong> DCF 25% | EPV 50% | Asset 25%
-          </div>
-        </div>
-
-        {/* Asset Heavy */}
-        <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', marginBottom: '16px', border: '1px solid #e5e7eb', borderLeft: '4px solid #8b5cf6' }}>
-          <h4 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px', color: '#111827' }}>5. Asset Heavy</h4>
-          <p style={{ fontSize: '14px', color: '#6b7280', marginBottom: '12px' }}><strong>Best for:</strong> Real estate, utilities, infrastructure, capital-intensive businesses</p>
-          <div style={{ fontSize: '14px' }}>
-            <strong style={{ color: '#374151' }}>Valuation Weights:</strong> DCF 20% | EPV 25% | Asset 55%
-          </div>
-        </div>
-
-        {/* Distressed */}
-        <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', marginBottom: '16px', border: '1px solid #e5e7eb', borderLeft: '4px solid #ef4444' }}>
-          <h4 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px', color: '#111827' }}>6. Distressed</h4>
-          <p style={{ fontSize: '14px', color: '#6b7280', marginBottom: '12px' }}><strong>Best for:</strong> Companies in financial difficulty, turnaround situations</p>
-          <div style={{ fontSize: '14px' }}>
-            <strong style={{ color: '#374151' }}>Valuation Weights:</strong> DCF 10% | EPV 10% | Asset 80%
-          </div>
-        </div>
-
-        {/* Bank */}
-        <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', marginBottom: '16px', border: '1px solid #e5e7eb', borderLeft: '4px solid #059669' }}>
-          <h4 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px', color: '#111827' }}>7. Bank</h4>
-          <p style={{ fontSize: '14px', color: '#6b7280', marginBottom: '12px' }}><strong>Best for:</strong> Banks, financial services, credit institutions</p>
-          <div style={{ fontSize: '14px', marginBottom: '8px' }}>
-            <strong style={{ color: '#374151' }}>Valuation Weights:</strong> DCF 25% | EPV 50% | Asset 25%
-          </div>
-          <p style={{ fontSize: '13px', color: '#059669', fontStyle: 'italic', margin: 0 }}>Includes: Net Interest Margin (NIM), Efficiency Ratio, Loan-to-Deposit Ratio</p>
-        </div>
-
-        {/* REIT */}
-        <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', marginBottom: '16px', border: '1px solid #e5e7eb', borderLeft: '4px solid #dc2626' }}>
-          <h4 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px', color: '#111827' }}>8. REIT</h4>
-          <p style={{ fontSize: '14px', color: '#6b7280', marginBottom: '12px' }}><strong>Best for:</strong> Real Estate Investment Trusts</p>
-          <div style={{ fontSize: '14px', marginBottom: '8px' }}>
-            <strong style={{ color: '#374151' }}>Valuation Weights:</strong> DCF 30% | EPV 20% | Asset 50%
-          </div>
-          <p style={{ fontSize: '13px', color: '#dc2626', fontStyle: 'italic', margin: 0 }}>Includes: FFO, AFFO, NAV, Dividend Yield, Payout Ratio</p>
-        </div>
-
-        {/* Insurance */}
-        <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', marginBottom: '16px', border: '1px solid #e5e7eb', borderLeft: '4px solid #0284c7' }}>
-          <h4 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px', color: '#111827' }}>9. Insurance</h4>
-          <p style={{ fontSize: '14px', color: '#6b7280', marginBottom: '12px' }}><strong>Best for:</strong> Insurance companies, reinsurance</p>
-          <div style={{ fontSize: '14px', marginBottom: '8px' }}>
-            <strong style={{ color: '#374151' }}>Valuation Weights:</strong> DCF 20% | EPV 50% | Asset 30%
-          </div>
-          <p style={{ fontSize: '13px', color: '#0284c7', fontStyle: 'italic', margin: 0 }}>Includes: Combined Ratio, Loss Ratio, Expense Ratio, Reserve Adequacy</p>
-        </div>
-
-        {/* Utility */}
-        <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', marginBottom: '16px', border: '1px solid #e5e7eb', borderLeft: '4px solid #0ea5e9' }}>
-          <h4 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px', color: '#111827' }}>10. Utility</h4>
-          <p style={{ fontSize: '14px', color: '#6b7280', marginBottom: '12px' }}><strong>Best for:</strong> Electric, water, gas utilities</p>
-          <div style={{ fontSize: '14px' }}>
-            <strong style={{ color: '#374151' }}>Valuation Weights:</strong> DCF 45% | EPV 35% | Asset 20%
-          </div>
-        </div>
-
-        {/* Technology */}
-        <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', marginBottom: '16px', border: '1px solid #e5e7eb', borderLeft: '4px solid #6366f1' }}>
-          <h4 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px', color: '#111827' }}>11. Technology</h4>
-          <p style={{ fontSize: '14px', color: '#6b7280', marginBottom: '12px' }}><strong>Best for:</strong> Software, internet, semiconductor, tech companies</p>
-          <div style={{ fontSize: '14px' }}>
-            <strong style={{ color: '#374151' }}>Valuation Weights:</strong> DCF 50% | EPV 35% | Asset 15%
-          </div>
-        </div>
-
-        {/* Healthcare */}
-        <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', marginBottom: '16px', border: '1px solid #e5e7eb', borderLeft: '4px solid #ec4899' }}>
-          <h4 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px', color: '#111827' }}>12. Healthcare</h4>
-          <p style={{ fontSize: '14px', color: '#6b7280', marginBottom: '12px' }}><strong>Best for:</strong> Pharmaceuticals, biotech, medical devices, healthcare services</p>
-          <div style={{ fontSize: '14px' }}>
-            <strong style={{ color: '#374151' }}>Valuation Weights:</strong> DCF 50% | EPV 35% | Asset 15%
-          </div>
-        </div>
-
-        {/* Retail */}
-        <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', marginBottom: '16px', border: '1px solid #e5e7eb', borderLeft: '4px solid #f97316' }}>
-          <h4 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px', color: '#111827' }}>13. Retail</h4>
-          <p style={{ fontSize: '14px', color: '#6b7280', marginBottom: '12px' }}><strong>Best for:</strong> Retail stores, consumer goods, e-commerce</p>
-          <div style={{ fontSize: '14px' }}>
-            <strong style={{ color: '#374151' }}>Valuation Weights:</strong> DCF 50% | EPV 35% | Asset 15%
-          </div>
-        </div>
-
-        {/* Energy */}
-        <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', marginBottom: '16px', border: '1px solid #e5e7eb', borderLeft: '4px solid #eab308' }}>
-          <h4 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px', color: '#111827' }}>14. Energy</h4>
-          <p style={{ fontSize: '14px', color: '#6b7280', marginBottom: '12px' }}><strong>Best for:</strong> Oil & gas, mining, energy exploration</p>
-          <div style={{ fontSize: '14px' }}>
-            <strong style={{ color: '#374151' }}>Valuation Weights:</strong> DCF 25% | EPV 40% | Asset 35%
-          </div>
-        </div>
-
-        {/* Default */}
-        <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', marginBottom: '16px', border: '1px solid #e5e7eb', borderLeft: '4px solid #6b7280' }}>
-          <h4 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px', color: '#111827' }}>15. Default</h4>
-          <p style={{ fontSize: '14px', color: '#6b7280', marginBottom: '12px' }}><strong>Best for:</strong> General purpose, unknown business types, balanced approach</p>
-          <div style={{ fontSize: '14px' }}>
-            <strong style={{ color: '#374151' }}>Valuation Weights:</strong> DCF 50% | EPV 35% | Asset 15%
-          </div>
-        </div>
+        <p style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '24px' }}>
+          ★ Includes additional industry-specific metrics (Bank: NIM, Efficiency Ratio; REIT: FFO, AFFO, NAV; Insurance: Combined Ratio, Loss Ratio)
+        </p>
 
         <div style={{ backgroundColor: '#f0fdf4', padding: '20px', borderRadius: '8px', marginTop: '24px', border: '1px solid #86efac' }}>
           <h4 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '12px', color: '#166534' }}>
