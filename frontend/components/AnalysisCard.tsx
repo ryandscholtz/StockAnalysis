@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { StockAnalysis } from '@/types/analysis'
 import { formatPrice } from '@/lib/currency'
 
@@ -8,6 +9,8 @@ interface AnalysisCardProps {
 }
 
 export default function AnalysisCard({ analysis }: AnalysisCardProps) {
+  const [showMultiplier, setShowMultiplier] = useState(true)
+
   const getRecommendationClass = (rec: string) => {
     const classes: Record<string, string> = {
       'Strong Buy': 'recommendation-strong-buy',
@@ -66,26 +69,44 @@ export default function AnalysisCard({ analysis }: AnalysisCardProps) {
         </span>
       </div>
 
-      <div className="metric">
-        <span className="metric-label">Price to Intrinsic Value</span>
-        <span className="metric-value">
-          {analysis.fairValue && analysis.priceToIntrinsicValue !== null && analysis.priceToIntrinsicValue !== undefined && !isNaN(analysis.priceToIntrinsicValue)
-            ? `${analysis.priceToIntrinsicValue.toFixed(2)}x`
+      <div
+        className="metric"
+        onClick={() => setShowMultiplier(v => !v)}
+        style={{ cursor: 'pointer', userSelect: 'none' }}
+        title={showMultiplier ? 'Switch to Price / Intrinsic Value' : 'Switch to Intrinsic Value / Price (money multiplier)'}
+      >
+        <span className="metric-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          {showMultiplier ? 'Intrinsic Value to Price' : 'Price to Intrinsic Value'}
+          <span style={{ fontSize: '11px', color: '#9ca3af', fontWeight: 400 }}>⇄</span>
+        </span>
+        <span className="metric-value" style={{ color: showMultiplier && analysis.fairValue && analysis.priceToIntrinsicValue > 0 ? '#059669' : undefined }}>
+          {analysis.fairValue && analysis.priceToIntrinsicValue !== null && analysis.priceToIntrinsicValue !== undefined && !isNaN(analysis.priceToIntrinsicValue) && analysis.priceToIntrinsicValue > 0
+            ? showMultiplier
+              ? `${(1 / analysis.priceToIntrinsicValue).toFixed(2)}x`
+              : `${analysis.priceToIntrinsicValue.toFixed(2)}x`
             : 'N/A'}
         </span>
       </div>
 
-      <div style={{ marginTop: '24px', padding: '16px', background: '#f9fafb', borderRadius: '6px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-          <span className="metric-label">Recommendation</span>
-          <span className={getRecommendationClass(analysis.recommendation)} style={{ fontSize: '20px' }}>
-            {analysis.recommendation}
-          </span>
+      {analysis.recommendation ? (
+        <div style={{ marginTop: '24px', padding: '16px', background: '#f9fafb', borderRadius: '6px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+            <span className="metric-label">Recommendation</span>
+            <span className={getRecommendationClass(analysis.recommendation)} style={{ fontSize: '20px' }}>
+              {analysis.recommendation}
+            </span>
+          </div>
+          <p style={{ fontSize: '14px', color: '#6b7280', lineHeight: '1.6' }}>
+            {analysis.recommendationReasoning}
+          </p>
         </div>
-        <p style={{ fontSize: '14px', color: '#6b7280', lineHeight: '1.6' }}>
-          {analysis.recommendationReasoning}
-        </p>
-      </div>
+      ) : (
+        <div style={{ marginTop: '24px', padding: '16px', background: '#f9fafb', borderRadius: '6px' }}>
+          <p style={{ fontSize: '14px', color: '#6b7280', lineHeight: '1.6', margin: 0 }}>
+            {analysis.recommendationReasoning}
+          </p>
+        </div>
+      )}
     </div>
   )
 }

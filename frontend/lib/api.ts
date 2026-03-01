@@ -626,25 +626,72 @@ export const stockApi = {
     }
   },
 
-  async uploadPDF(ticker: string, file: File): Promise<{ success: boolean; message: string; updated_periods: number; extracted_data?: any; extraction_details?: any }> {
-    const formData = new FormData()
-    formData.append('file', file)
-    
-    try {
-      console.log(`Uploading PDF for ticker: ${ticker}`)
-      const response = await api.post<{ success: boolean; message: string; updated_periods: number; extracted_data?: any; extraction_details?: any }>(`/api/upload-pdf?ticker=${ticker}`, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-        timeout: 600000, // 10 minute timeout for large PDFs
-      })
-      console.log('Upload response:', response.data)
-      return response.data
-    } catch (error: any) {
-      console.error('Upload PDF error:', error)
-      console.error('Error response:', error.response?.data)
-      throw error
+  async uploadPDF(
+    ticker: string,
+    file: File,
+    onProgress?: (status: string) => void,
+  ): Promise<{ success: boolean; message: string; updated_periods: number; extracted_data?: any; extraction_details?: any }> {
+    const sizeMB = (file.size / 1024 / 1024).toFixed(2)
+
+    // Step 1: Get a presigned S3 PUT URL (avoids API Gateway's 10 MB payload limit)
+    console.log(`[PDF Upload] Step 1/3 — Getting presigned S3 URL for ${ticker} (file: ${file.name}, ${sizeMB} MB)`)
+    onProgress?.(`🔗 Preparing secure upload for ${file.name} (${sizeMB} MB)...`)
+    const urlResponse = await api.get<{ upload_url: string; s3_key: string }>(`/api/upload-pdf?ticker=${ticker}`)
+    const { upload_url, s3_key } = urlResponse.data
+    console.log(`[PDF Upload] Got presigned URL. S3 key: ${s3_key}`)
+
+    // Step 2: Upload directly to S3 using fetch (not axios, to avoid adding auth headers to presigned URL)
+    console.log(`[PDF Upload] Step 2/3 — Uploading ${sizeMB} MB directly to S3...`)
+    onProgress?.(`⬆️ Uploading PDF to S3 (${sizeMB} MB)...`)
+    const s3Response = await fetch(upload_url, {
+      method: 'PUT',
+      body: file,
+      headers: { 'Content-Type': 'application/pdf' },
+    })
+    console.log(`[PDF Upload] S3 PUT response: ${s3Response.status} ${s3Response.statusText}`)
+    if (!s3Response.ok) {
+      throw new Error(`S3 upload failed: ${s3Response.status} ${s3Response.statusText}`)
     }
+
+    // Step 3: Kick off async AI extraction (returns immediately — API Gateway 29s limit)
+    console.log(`[PDF Upload] Step 3/3 — Queuing AI extraction: ${s3_key}`)
+    onProgress?.('🤖 Starting AI extraction...')
+    await api.post<{ status: string; ticker: string }>(
+      `/api/upload-pdf?ticker=${ticker}`,
+      { s3_key },
+      { timeout: 30000 },
+    )
+
+    // Step 4: Poll until extraction completes (Lambda runs async in background)
+    console.log('[PDF Upload] Polling for extraction result...')
+    const POLL_MS = 5000
+    const MAX_WAIT_MS = 3 * 60 * 1000  // 3 minutes
+    let elapsed = 0
+    while (elapsed < MAX_WAIT_MS) {
+      await new Promise(r => setTimeout(r, POLL_MS))
+      elapsed += POLL_MS
+      const mins = Math.floor(elapsed / 60000)
+      const secs = Math.floor((elapsed % 60000) / 1000)
+      const timeStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`
+      onProgress?.(`🤖 Extracting financial data with Claude AI... (${timeStr})`)
+
+      const statusResp = await api.get<{ status: string; has_data: boolean; error?: string }>(
+        `/api/upload-pdf/status?ticker=${ticker}`,
+      )
+      console.log(`[PDF Upload] Status at ${timeStr}:`, statusResp.data)
+
+      if (statusResp.data.status === 'complete') {
+        return {
+          success: true,
+          message: 'PDF processed successfully',
+          updated_periods: statusResp.data.has_data ? 1 : 0,
+        }
+      }
+      if (statusResp.data.status === 'error') {
+        throw new Error(statusResp.data.error || 'PDF processing failed on the server')
+      }
+    }
+    throw new Error('PDF processing timed out after 3 minutes')
   },
 
   async getPDFJobStatus(jobId: number): Promise<{
@@ -719,17 +766,11 @@ export const stockApi = {
 
   // Watchlist methods
   async getWatchlist(): Promise<{ items: WatchlistItem[]; total: number }> {
-    console.log('=== getWatchlist DEBUG ===')
     try {
       const response = await api.get<{ items: WatchlistItem[]; total: number }>('/api/watchlist')
-      console.log('API watchlist response:', response.data)
-      
-      // Merge with client-side watchlist
-      const clientWatchlist = WatchlistSimulation.getWatchlist()
-      console.log('Client-side watchlist:', clientWatchlist)
-      
-      // Normalize API items: Lambda returns camelCase, frontend expects snake_case; include analysis fields
-      const apiItems = (response.data.items || []).map((item: any) => ({
+
+      // Normalise camelCase fields from Lambda to snake_case expected by the frontend
+      const items: WatchlistItem[] = (response.data.items || []).map((item: any) => ({
         ...item,
         company_name: item.company_name || item.companyName || undefined,
         current_price: item.current_price ?? item.currentPrice ?? undefined,
@@ -737,125 +778,19 @@ export const stockApi = {
         margin_of_safety_pct: item.margin_of_safety_pct ?? item.marginOfSafety ?? undefined,
         recommendation: item.recommendation ?? undefined,
         last_analyzed_at: item.last_analyzed_at ?? item.last_updated ?? undefined,
-        pe_ratio: item.pe_ratio ?? item.priceToEarnings ?? undefined
+        pe_ratio: item.pe_ratio ?? item.priceToEarnings ?? undefined,
       }))
-      console.log('API items:', apiItems)
-      console.log('API items count:', apiItems.length)
 
-      // Debug: Check what company names the API is returning
-      apiItems.forEach((item: any, index: number) => {
-        console.log(`API item ${index}:`, {
-          ticker: item.ticker,
-          company_name: item.company_name,
-          hasCompanyName: !!item.company_name
-        })
-      })
-      
-      // Convert client-side items to API format
-      const clientItems: WatchlistItem[] = clientWatchlist.map(item => ({
-        ticker: item.ticker,
-        company_name: item.companyName,
-        exchange: item.exchange,
-        added_at: item.addedAt,
-        notes: item.notes,
-        // Use real data from API (no more mock data)
-        current_price: undefined,
-        fair_value: undefined,
-        margin_of_safety_pct: undefined,
-        recommendation: undefined
-      }))
-      console.log('Converted client items:', clientItems)
-      console.log('Client items count:', clientItems.length)
-      
-      // Debug: Check what company names are in client-side storage
-      clientItems.forEach((item, index) => {
-        console.log(`Client item ${index}:`, {
-          ticker: item.ticker,
-          company_name: item.company_name,
-          hasCompanyName: !!item.company_name
-        })
-      })
-      
-      // Merge and deduplicate: keep API item (first) so we preserve price/valuation/PE; only improve company_name from client if better
-      const allItems = [...apiItems, ...clientItems]
-      console.log('All items before deduplication:', allItems)
-      console.log('All items count before dedup:', allItems.length)
-      
-      const hasAnalysisData = (i: WatchlistItem) =>
-        i.current_price != null || i.fair_value != null || i.margin_of_safety_pct != null || i.recommendation != null
-
-      const uniqueItems = allItems.filter((item, index, self) => {
-        const firstIndex = self.findIndex(i => i.ticker === item.ticker)
-        if (firstIndex === index) {
-          return true // First occurrence, keep it
-        }
-        const firstItem = self[firstIndex]
-        const currentHasBetterName = item.company_name &&
-          !item.company_name.includes('Corporation') &&
-          !item.company_name.includes('Inc.') &&
-          item.company_name !== `${item.ticker} Corporation`
-        const firstHasBetterName = firstItem.company_name &&
-          !firstItem.company_name.includes('Corporation') &&
-          !firstItem.company_name.includes('Inc.') &&
-          firstItem.company_name !== `${firstItem.ticker} Corporation`
-        // Never replace an item that has analysis data with one that doesn't
-        if (hasAnalysisData(firstItem) && !hasAnalysisData(item)) {
-          if (currentHasBetterName && !firstHasBetterName) {
-            self[firstIndex] = { ...firstItem, company_name: item.company_name }
-          }
-          return false
-        }
-        if (currentHasBetterName && !firstHasBetterName) {
-          self[firstIndex] = { ...firstItem, company_name: item.company_name }
-        }
-        return false
-      })
-      console.log('Unique items after deduplication:', uniqueItems)
-      console.log('Unique items count after dedup:', uniqueItems.length)
-      
-      // Check specifically for AMZN
-      const amznInApi = apiItems.find(item => item.ticker === 'AMZN')
-      const amznInClient = clientItems.find(item => item.ticker === 'AMZN')
-      const amznInFinal = uniqueItems.find(item => item.ticker === 'AMZN')
-      console.log('🔍 AMZN DEBUG:')
-      console.log('  - In API items:', !!amznInApi, amznInApi)
-      console.log('  - In client items:', !!amznInClient, amznInClient)
-      console.log('  - In final result:', !!amznInFinal, amznInFinal)
-      
-      const result = {
-        items: uniqueItems.sort((a, b) => (a.company_name || a.ticker).localeCompare(b.company_name || b.ticker)),
-        total: uniqueItems.length
-      }
-      console.log('Final getWatchlist result:', result)
-      console.log('=== END getWatchlist DEBUG ===')
-      return result
-    } catch (error) {
-      // Fallback to client-side only
-      console.log('API watchlist not available, using client-side only')
-      const clientWatchlist = WatchlistSimulation.getWatchlist()
-      console.log('Client-side watchlist (fallback):', clientWatchlist)
-      
-      const items: WatchlistItem[] = clientWatchlist.map(item => ({
-        ticker: item.ticker,
-        company_name: item.companyName,
-        exchange: item.exchange,
-        added_at: item.addedAt,
-        notes: item.notes,
-        // Use real data from API (no more mock data)
-        current_price: undefined,
-        fair_value: undefined,
-        margin_of_safety_pct: undefined,
-        recommendation: undefined
-      }))
-      
-      const result = {
+      return {
         items: items.sort((a, b) => (a.company_name || a.ticker).localeCompare(b.company_name || b.ticker)),
-        total: items.length
+        total: items.length,
       }
-      console.log('Fallback result:', result)
-      console.log('=== END getWatchlist DEBUG ===')
-      return result
+    } catch (error) {
+      // API unavailable — return empty list (no client-side simulation)
+      console.error('Watchlist API unavailable:', error)
+      return { items: [], total: 0 }
     }
+
   },
 
   async getWatchlistLivePrices(): Promise<{ live_prices: Record<string, { price?: number; company_name?: string; error?: string; comment?: string; success?: boolean }> }> {
@@ -960,6 +895,8 @@ export const stockApi = {
   async removeFromWatchlist(ticker: string): Promise<{ success: boolean; message: string }> {
     try {
       const response = await api.delete<{ success: boolean; message: string }>(`/api/watchlist/${ticker}`)
+      // Always remove from client-side simulation so merged getWatchlist doesn't resurface the item
+      WatchlistSimulation.removeFromWatchlist(ticker)
       return response.data
     } catch (error: any) {
       // Fallback to client-side simulation if API doesn't support DELETE yet

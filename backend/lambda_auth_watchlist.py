@@ -160,7 +160,7 @@ def remove_from_watchlist(user_id: str, ticker: str) -> dict:
         
         return {
             'statusCode': 200,
-            'body': json.dumps({'message': 'Removed from watchlist'})
+            'body': json.dumps({'success': True, 'message': 'Removed from watchlist'})
         }
     
     except Exception as e:

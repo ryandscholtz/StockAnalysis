@@ -4,6 +4,7 @@ Uses Claude AI via Bedrock to fetch real financial data for each stock
 """
 import json
 import os
+import base64
 import boto3
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
@@ -42,15 +43,77 @@ def _convert_for_dynamo(obj):
     return obj
 
 
-def _save_ai_financial_data(ticker: str, inc: dict, bal: dict, cf: dict, km: dict, fiscal_year: str) -> None:
+def _has_real_values(d: dict) -> bool:
+    """Return True only if the dict contains at least one non-None value."""
+    return any(v is not None for v in d.values())
+
+
+def _cleanup_empty_financial_periods(ticker: str) -> None:
     """
-    Persist AI-fetched financial data to DynamoDB so it appears in the
+    Remove period stubs whose data is empty (all-null fields stripped by DynamoDB).
+    Called on every fresh analysis so leftover empty stubs are scrubbed from the UI.
+    Non-fatal.
+    """
+    try:
+        dynamodb = boto3.resource('dynamodb', region_name='eu-west-1')
+        table = dynamodb.Table(MANUAL_DATA_TABLE)
+        item = table.get_item(Key={'ticker': ticker}).get('Item')
+        if not item:
+            return
+
+        fin = item.get('financial_data', {})
+        meta = item.get('metadata', {})
+        changed = False
+
+        for section_key in list(fin.keys()):
+            section = fin[section_key]
+            if not isinstance(section, dict):
+                continue
+            empty_periods = [
+                period for period, data in section.items()
+                if not isinstance(data, dict) or not data
+            ]
+            for period in empty_periods:
+                del fin[section_key][period]
+                changed = True
+            if not fin[section_key]:
+                del fin[section_key]
+                meta.pop(section_key, None)
+                changed = True
+
+        if not changed:
+            return
+
+        table.update_item(
+            Key={'ticker': ticker},
+            UpdateExpression='SET financial_data = :fd, metadata = :md, has_data = :hd',
+            ExpressionAttributeValues={
+                ':fd': fin,
+                ':md': meta,
+                ':hd': bool(fin),
+            }
+        )
+        print(f"[Cleanup] Removed empty financial periods for {ticker}")
+    except Exception as exc:
+        print(f"[WARN] Could not cleanup empty periods for {ticker}: {exc}")
+
+
+def _save_ai_financial_data(ticker: str, inc: dict, bal: dict, cf: dict, km: dict,
+                             fiscal_year: str, fin_currency: str = 'USD',
+                             source: str = 'ai_bedrock',
+                             section_sources: dict | None = None) -> None:
+    """
+    Persist fetched financial data to DynamoDB so it appears in the
     'Stored Financial Data' panel on the ticker page.
+    section_sources: optional per-section source override, e.g.
+      {'income_statement': 'yahoo_finance', 'balance_sheet': 'ai_bedrock'}
+    Only saves sections that contain at least one non-None value.
     Non-fatal — a failure here does not block the analysis response.
     """
     try:
         period = fiscal_year or f"{datetime.now().year - 1}-12-31"
         now = datetime.now().isoformat()
+        section_sources = section_sources or {}
 
         financial_data: dict = {}
         metadata: dict = {}
@@ -60,23 +123,24 @@ def _save_ai_financial_data(ticker: str, inc: dict, bal: dict, cf: dict, km: dic
             ('balance_sheet', bal),
             ('cashflow', cf),
         ]:
-            if data:
+            if data and _has_real_values(data):
                 financial_data[section_key] = {period: data}
                 metadata[section_key] = {
                     'last_updated': now,
-                    'source': 'ai_bedrock',
+                    'source': section_sources.get(section_key, source),
                     'period_count': 1,
                 }
 
-        if km:
+        if km and _has_real_values(km):
             financial_data['key_metrics'] = {'latest': km}
             metadata['key_metrics'] = {
                 'last_updated': now,
-                'source': 'ai_bedrock',
+                'source': section_sources.get('key_metrics', source),
                 'period_count': 1,
             }
 
         if not financial_data:
+            print(f"[AI Data] No usable financial data to persist for {ticker} — all fields null")
             return
 
         item = _convert_for_dynamo({
@@ -84,6 +148,7 @@ def _save_ai_financial_data(ticker: str, inc: dict, bal: dict, cf: dict, km: dic
             'updatedAt': now,
             'financial_data': financial_data,
             'metadata': metadata,
+            'financial_currency': fin_currency,
             'has_data': True,
         })
 
@@ -268,6 +333,216 @@ def get_financial_data_from_sec(ticker: str) -> dict | None:
 
 
 # ---------------------------------------------------------------------------
+# Yahoo Finance quoteSummary — financial statements for non-US stocks
+# ---------------------------------------------------------------------------
+
+def _yahoo_symbol(ticker: str) -> str:
+    """Convert our ticker format to Yahoo Finance symbol format."""
+    if ticker.upper().endswith('.XJSE'):
+        return ticker[:-5] + '.JO'
+    return ticker
+
+
+def _yahoo_get_session():
+    """
+    Establish a Yahoo Finance session and return (opener, crumb).
+    The Yahoo Finance v10 quoteSummary API requires a valid session cookie
+    and crumb since 2023; without them it returns 401 Unauthorized.
+    Returns (None, None) on failure.
+    """
+    from urllib.request import Request, HTTPCookieProcessor, build_opener
+    from http.cookiejar import CookieJar
+
+    cj = CookieJar()
+    opener = build_opener(HTTPCookieProcessor(cj))
+    ua = (
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+        'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    )
+
+    # Establish a session — fc.yahoo.com is lightweight compared to the main page
+    for seed_url in ('https://fc.yahoo.com', 'https://finance.yahoo.com/'):
+        try:
+            opener.open(Request(seed_url, headers={'User-Agent': ua}), timeout=8)
+            break
+        except Exception:
+            continue
+
+    # Fetch the crumb that authenticates subsequent API calls
+    try:
+        with opener.open(
+            Request('https://query2.finance.yahoo.com/v1/test/getcrumb',
+                    headers={'User-Agent': ua}),
+            timeout=8
+        ) as resp:
+            crumb = resp.read().decode('utf-8').strip()
+            if crumb and len(crumb) >= 3:
+                return opener, crumb
+    except Exception as e:
+        print(f"[Yahoo Financials] Crumb fetch failed: {e}")
+
+    return None, None
+
+
+def get_financial_data_from_yahoo(ticker: str) -> dict | None:
+    """
+    Fetch the most recent annual financial statements from Yahoo Finance's
+    quoteSummary API using stdlib urllib only (no yfinance library required).
+    Returns data in the same format as get_financial_data_from_sec, or None on failure.
+    Used for non-US stocks where SEC EDGAR has no data (e.g. JSE .XJSE, LSE .L).
+    """
+    import gzip as _gzip
+    from urllib.request import Request
+
+    symbol = _yahoo_symbol(ticker)
+
+    opener, crumb = _yahoo_get_session()
+    if opener is None:
+        print(f"[Yahoo Financials] Could not establish session for {symbol}")
+        return None
+
+    modules = (
+        'incomeStatementHistory,balanceSheetHistory,'
+        'cashflowStatementHistory,defaultKeyStatistics,financialData'
+    )
+    url = (
+        f'https://query1.finance.yahoo.com/v10/finance/quoteSummary/{symbol}'
+        f'?modules={modules}&crumb={crumb}'
+    )
+
+    try:
+        req = Request(url, headers={
+            'User-Agent': (
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            ),
+            'Accept': 'application/json',
+            'Accept-Encoding': 'gzip',
+        })
+        with opener.open(req, timeout=15) as resp:
+            raw = resp.read()
+            if resp.info().get('Content-Encoding') == 'gzip':
+                raw = _gzip.decompress(raw)
+            data = json.loads(raw.decode('utf-8'))
+    except Exception as e:
+        print(f"[Yahoo Financials] HTTP error for {symbol}: {e}")
+        return None
+
+    result_list = (data.get('quoteSummary') or {}).get('result') or []
+    if not result_list:
+        err = (data.get('quoteSummary') or {}).get('error')
+        print(f"[Yahoo Financials] No result for {symbol}: {err}")
+        return None
+
+    r = result_list[0]
+
+    def _raw(obj) -> float | None:
+        """Extract numeric value from Yahoo's {raw: ..., fmt: ...} wrapper."""
+        if obj is None:
+            return None
+        if isinstance(obj, dict):
+            v = obj.get('raw')
+            return float(v) if v is not None else None
+        try:
+            return float(obj)
+        except (TypeError, ValueError):
+            return None
+
+    # Income statement — most recent annual period
+    inc_list = (r.get('incomeStatementHistory') or {}).get('incomeStatementHistory') or []
+    i = inc_list[0] if inc_list else {}
+    fiscal_year = (i.get('endDate') or {}).get('fmt', '')
+    inc = {
+        'Total Revenue':    _raw(i.get('totalRevenue')),
+        'Gross Profit':     _raw(i.get('grossProfit')),
+        'Operating Income': _raw(i.get('operatingIncome') or i.get('ebit')),
+        'Net Income':       _raw(i.get('netIncome')),
+        'Basic EPS':        _raw(i.get('basicEPS')),
+        'Diluted EPS':      _raw(i.get('dilutedEPS')),
+    }
+
+    # Balance sheet — most recent annual period
+    bal_list = (r.get('balanceSheetHistory') or {}).get('balanceSheetStatements') or []
+    b = bal_list[0] if bal_list else {}
+    bal = {
+        'Total Assets':     _raw(b.get('totalAssets')),
+        'Current Assets':   _raw(b.get('totalCurrentAssets')),
+        'Cash And Cash Equivalents': _raw(b.get('cash') or b.get('cashAndCashEquivalents')),
+        'Total Liabilities Net Minority Interest': _raw(b.get('totalLiab')),
+        'Current Liabilities': _raw(b.get('totalCurrentLiabilities')),
+        'Long Term Debt':   _raw(b.get('longTermDebt')),
+        'Total Stockholder Equity': _raw(b.get('totalStockholderEquity')),
+        'Retained Earnings': _raw(b.get('retainedEarnings')),
+    }
+
+    # Cash flow — most recent annual period
+    cf_list = (r.get('cashflowStatementHistory') or {}).get('cashflowStatements') or []
+    c = cf_list[0] if cf_list else {}
+    cf = {
+        'Operating Cash Flow': _raw(c.get('totalCashFromOperatingActivities')),
+        'Free Cash Flow':      _raw(c.get('freeCashFlow')),
+        'Capital Expenditure': _raw(c.get('capitalExpenditures')),
+        'Common Stock Dividends Paid': _raw(c.get('dividendsPaid')),
+    }
+    # Derive FCF if not provided directly
+    if cf['Free Cash Flow'] is None:
+        ocf   = cf.get('Operating Cash Flow')
+        capex = cf.get('Capital Expenditure')
+        if ocf is not None and capex is not None:
+            cf['Free Cash Flow'] = ocf - abs(capex)
+
+    # Key metrics from defaultKeyStatistics + financialData
+    ks = r.get('defaultKeyStatistics') or {}
+    fd = r.get('financialData') or {}
+    km = {
+        'shares_outstanding': _raw(ks.get('sharesOutstanding')),
+        'pb_ratio':           _raw(ks.get('priceToBook')),
+        'current_ratio':      _raw(fd.get('currentRatio')),
+        'roe':                _raw(fd.get('returnOnEquity')),
+        'roa':                _raw(fd.get('returnOnAssets')),
+        'debt_to_equity':     None,
+    }
+    # Yahoo reports debt/equity as a percentage-style number (170 = 1.70×) — normalise
+    de_raw = _raw(fd.get('debtToEquity'))
+    if de_raw is not None:
+        km['debt_to_equity'] = round(de_raw / 100, 4)
+
+    # Derive any missing ratios from balance sheet / income statement
+    net_income   = inc.get('Net Income')
+    equity       = bal.get('Total Stockholder Equity')
+    total_assets = bal.get('Total Assets')
+    cur_assets   = bal.get('Current Assets')
+    cur_liab     = bal.get('Current Liabilities')
+    debt         = bal.get('Long Term Debt')
+    if km['roe'] is None and net_income is not None and equity and equity != 0:
+        km['roe'] = round(net_income / equity, 4)
+    if km['roa'] is None and net_income is not None and total_assets and total_assets != 0:
+        km['roa'] = round(net_income / total_assets, 4)
+    if km['debt_to_equity'] is None and debt is not None and equity and equity != 0:
+        km['debt_to_equity'] = round(debt / equity, 4)
+    if km['current_ratio'] is None and cur_assets is not None and cur_liab and cur_liab != 0:
+        km['current_ratio'] = round(cur_assets / cur_liab, 4)
+
+    # Yahoo provides financialCurrency as a plain string in financialData
+    fin_currency = fd.get('financialCurrency') or 'USD'
+
+    if not any(_has_real_values(d) for d in [inc, bal, cf] if d):
+        print(f"[Yahoo Financials] No usable data for {symbol}")
+        return None
+
+    print(f"[Yahoo Financials] Fetched data for {symbol} (FY: {fiscal_year}, currency: {fin_currency})")
+    return {
+        'income_statement': inc,
+        'balance_sheet':    bal,
+        'cashflow':         cf,
+        'key_metrics':      km,
+        'fiscal_year':      fiscal_year,
+        'currency':         fin_currency,
+        'data_confidence':  'high',
+    }
+
+
+# ---------------------------------------------------------------------------
 # Bedrock / Claude helpers
 # ---------------------------------------------------------------------------
 
@@ -338,7 +613,7 @@ def _load_cached_financial_data(ticker: str, max_age_days: int = 90) -> dict | N
             'cashflow':         cf,
             'key_metrics':      km,
             'fiscal_year':      fiscal_year,
-            'currency':         'USD',
+            'currency':         item.get('financial_currency', 'USD'),
             'data_confidence':  'high',
         }
     except Exception as e:
@@ -691,7 +966,7 @@ def analyze_stock_get(ticker: str, stream: bool, params: dict) -> dict:
         pass
 
     # ------------------------------------------------------------------
-    # Step 2: Retrieve financial data (cache → SEC EDGAR → Claude AI)
+    # Step 2: Retrieve financial data (cache → SEC EDGAR → Yahoo Finance → Claude AI)
     # force_refresh=true bypasses the cache and always fetches the latest
     # ------------------------------------------------------------------
     force_refresh = str(params.get('force_refresh', 'false')).lower() == 'true'
@@ -699,6 +974,12 @@ def analyze_stock_get(ticker: str, stream: bool, params: dict) -> dict:
     fin = None if force_refresh else _load_cached_financial_data(ticker)
     from_cache = fin is not None
 
+    # On a fresh fetch, scrub any empty period stubs left by previous failed AI calls
+    if not from_cache:
+        _cleanup_empty_financial_periods(ticker)
+
+    fin_source = 'ai_bedrock'  # updated below based on which fetcher succeeds
+    section_sources: dict = {}  # per-section source when a hybrid fetch is used
     if from_cache:
         progress_events.append(progress(2, total_steps, 'Loading stored financial data...'))
     else:
@@ -707,10 +988,39 @@ def analyze_stock_get(ticker: str, stream: bool, params: dict) -> dict:
         if sec_fin:
             progress_events.append(progress(2, total_steps, 'Fetching latest SEC EDGAR filings...'))
             fin = sec_fin
+            fin_source = 'sec_edgar'
         else:
-            # Fallback: Claude AI (handles non-US stocks and SEC failures)
-            progress_events.append(progress(2, total_steps, 'Retrieving financial data with AI...'))
-            fin = get_financial_data_with_ai(ticker, company_name)
+            # Try Yahoo Finance for non-US stocks (JSE, LSE, etc.)
+            yf_fin = get_financial_data_from_yahoo(ticker)
+            if yf_fin:
+                progress_events.append(progress(2, total_steps, 'Fetching financial data from Yahoo Finance...'))
+                fin = dict(yf_fin)  # mutable copy so we can fill in gaps
+                fin_source = 'yahoo_finance'
+
+                # Identify sections Yahoo Finance could not provide
+                missing_sections = [
+                    s for s in ('income_statement', 'balance_sheet', 'cashflow')
+                    if not _has_real_values(fin.get(s) or {})
+                ]
+                if missing_sections:
+                    print(f"[Hybrid] Yahoo missing {missing_sections} for {ticker} — supplementing with AI")
+                    progress_events.append(progress(2, total_steps,
+                        f'Supplementing {len(missing_sections)} missing section(s) with AI...'))
+                    ai_supp = get_financial_data_with_ai(ticker, company_name)
+                    if ai_supp and not ai_supp.get('error'):
+                        for section in missing_sections:
+                            ai_data = ai_supp.get(section) or {}
+                            if _has_real_values(ai_data):
+                                fin[section] = ai_data
+                                section_sources[section] = 'ai_bedrock'
+                                print(f"[Hybrid] AI filled {section} for {ticker}")
+                            else:
+                                print(f"[Hybrid] AI also has no data for {section} ({ticker})")
+            else:
+                # Final fallback: Claude AI (last resort for unknown tickers)
+                progress_events.append(progress(2, total_steps, 'Retrieving financial data with AI...'))
+                fin = get_financial_data_with_ai(ticker, company_name)
+                fin_source = 'ai_bedrock'
 
     ai_error = fin.get('error')
     data_confidence = fin.get('data_confidence', 'low') if not ai_error else 'none'
@@ -720,10 +1030,33 @@ def analyze_stock_get(ticker: str, stream: bool, params: dict) -> dict:
     bal = fin.get('balance_sheet', {}) or {}
     cf  = fin.get('cashflow', {}) or {}
     km  = fin.get('key_metrics', {}) or {}
+    fin_currency = fin.get('currency', 'USD')
 
-    # Persist AI-fetched data only when freshly retrieved (not from cache)
-    if not from_cache and not ai_error and any([inc, bal, cf, km]):
-        _save_ai_financial_data(ticker, inc, bal, cf, km, fiscal_year)
+    # Persist freshly-fetched data in the original reporting currency (e.g. ZAR for JSE
+    # stocks) so the UI displays human-readable values. Scaling for valuation happens below.
+    if not from_cache and not ai_error and any(_has_real_values(d) for d in [inc, bal, cf, km] if d):
+        _save_ai_financial_data(ticker, inc, bal, cf, km, fiscal_year, fin_currency,
+                                fin_source, section_sources or None)
+
+    # ------------------------------------------------------------------
+    # Currency mismatch correction (valuation only — does NOT affect stored data)
+    # Financial statements are in their reporting currency (e.g. ZAR), but the
+    # price may be in a sub-unit (e.g. ZAC = 1/100 ZAR). Scale monetary values
+    # to match the price unit before running per-share valuation calculations.
+    # ------------------------------------------------------------------
+    _CURRENCY_SCALE: dict[tuple, float] = {
+        ('ZAR', 'ZAC'): 100.0,   # financials in Rands, price in cents → ×100
+        ('ZAC', 'ZAR'): 0.01,    # financials in cents, price in Rands  → ÷100
+    }
+    scale = _CURRENCY_SCALE.get((fin_currency.upper(), currency.upper()))
+    if scale is not None:
+        print(f"[Currency] Scaling financials ×{scale} ({fin_currency} → {currency}) for {ticker}")
+        def _scale(d: dict) -> dict:
+            return {k: v * scale if isinstance(v, (int, float)) else v for k, v in d.items()}
+        inc = _scale(inc)
+        bal = _scale(bal)
+        cf  = _scale(cf)
+        # key_metrics: shares_outstanding is a count; ratios are dimensionless — no scaling
 
     shares = _safe(km.get('shares_outstanding'))
 
@@ -793,10 +1126,6 @@ def analyze_stock_get(ticker: str, stream: bool, params: dict) -> dict:
         (book_value, 0.10),
     ])
 
-    # Fallback: if AI data insufficient, use simple price-based estimate
-    if fair_value is None and current_price:
-        fair_value = round(current_price * 1.1, 2)  # 10% premium as placeholder
-
     # Round values
     if fair_value is not None:
         fair_value = round(fair_value, 2)
@@ -828,7 +1157,7 @@ def analyze_stock_get(ticker: str, stream: bool, params: dict) -> dict:
         else:
             recommendation = 'Avoid'
     else:
-        recommendation = 'Hold'
+        recommendation = None  # No recommendation without financial data
 
     # Build reasoning string
     models_used = []
@@ -1010,11 +1339,379 @@ def handle_batch_analyze(event):
 
 
 # ---------------------------------------------------------------------------
+# PDF upload handler — presigned S3 URL flow + Claude text analysis
+# ---------------------------------------------------------------------------
+
+S3_PDF_BUCKET = os.environ.get('PDF_BUCKET', 'stock-analysis-pdfs')
+
+# Optional pypdf for text extraction (bundled in deployment package)
+try:
+    from pypdf import PdfReader as _PdfReader
+    PYPDF_AVAILABLE = True
+except ImportError:
+    PYPDF_AVAILABLE = False
+
+
+def _extract_pdf_text(pdf_bytes: bytes, start_page: int = 0, max_pages: int = 80) -> tuple:
+    """
+    Extract text from a page range of a PDF using pypdf.
+    Returns (text: str, total_page_count: int).
+    text is empty string on failure or when pypdf is unavailable.
+    """
+    if not PYPDF_AVAILABLE:
+        return '', 0
+    import io
+    try:
+        reader = _PdfReader(io.BytesIO(pdf_bytes))
+        total_pages = len(reader.pages)
+        end_page = min(start_page + max_pages, total_pages)
+        text_parts = []
+        for page in reader.pages[start_page:end_page]:
+            extracted = page.extract_text()
+            if extracted:
+                text_parts.append(extracted)
+        return '\n'.join(text_parts), total_pages
+    except Exception as e:
+        print(f"[PDF text extract] Error: {e}")
+        return '', 0
+
+
+def _call_claude_extraction(bedrock_client, ticker: str, currency_hint: str, text: str) -> tuple:
+    """
+    Send extracted PDF text to Claude and return (parsed_dict, raw_text).
+    Raises on Bedrock errors so the caller can handle them.
+    """
+    response = bedrock_client.invoke_model(
+        modelId='us.anthropic.claude-haiku-4-5-20251001-v1:0',
+        body=json.dumps({
+            'anthropic_version': 'bedrock-2023-05-31',
+            'max_tokens': 2000,
+            'temperature': 0,
+            'messages': [{
+                'role': 'user',
+                'content': [
+                    {'type': 'text', 'text': f"Here is financial statement text extracted from a PDF:\n\n{text}"},
+                    {'type': 'text', 'text': _build_extraction_prompt(ticker, currency_hint)}
+                ]
+            }]
+        })
+    )
+    ai_text = json.loads(response['body'].read())['content'][0]['text']
+    return _extract_json(ai_text), ai_text
+
+
+def _merge_extracted_data(d1: dict, d2: dict) -> dict:
+    """
+    Merge two Claude extraction dicts.
+    For scalar fields (fiscal_year, currency) prefer d1 unless empty.
+    For section dicts, prefer d1's field value unless it is None, then use d2's.
+    """
+    merged: dict = {}
+    for key in ('fiscal_year', 'currency'):
+        merged[key] = d1.get(key) or d2.get(key)
+    for section in ('income_statement', 'balance_sheet', 'cashflow', 'key_metrics'):
+        s1 = d1.get(section) or {}
+        s2 = d2.get(section) or {}
+        merged[section] = {
+            field: (s1[field] if s1.get(field) is not None else s2.get(field))
+            for field in set(list(s1) + list(s2))
+        }
+    return merged
+
+
+def handle_get_pdf_upload_url(event: dict) -> dict:
+    """
+    Step 1: Generate a presigned S3 PUT URL so the browser can upload
+    the PDF directly to S3 (bypasses API Gateway's 10 MB payload limit).
+    GET /api/upload-pdf?ticker=BEL.XJSE
+    Returns: { upload_url, s3_key }
+    """
+    params = event.get('queryStringParameters') or {}
+    ticker = params.get('ticker', '').strip().upper()
+    if not ticker:
+        return {'statusCode': 400, 'body': json.dumps({'error': 'ticker parameter required'})}
+
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    s3_key = f"uploads/{ticker}_{timestamp}.pdf"
+
+    try:
+        s3 = boto3.client('s3', region_name='eu-west-1')
+        upload_url = s3.generate_presigned_url(
+            'put_object',
+            Params={'Bucket': S3_PDF_BUCKET, 'Key': s3_key, 'ContentType': 'application/pdf'},
+            ExpiresIn=3600,
+        )
+        return {
+            'statusCode': 200,
+            'body': json.dumps({'upload_url': upload_url, 's3_key': s3_key})
+        }
+    except Exception as e:
+        print(f"[PDF Upload] Presigned URL error: {e}")
+        return {'statusCode': 500, 'body': json.dumps({'error': f'Could not generate upload URL: {e}'})}
+
+
+def _build_extraction_prompt(ticker: str, currency_hint: str) -> str:
+    return f"""Extract all financial data from this PDF financial statement for {ticker}.
+Return ONLY a JSON object with this exact structure (no markdown, no explanation):
+{{
+  "fiscal_year": "YYYY-MM-DD",
+  "currency": "ISO 3-letter currency code",
+  "income_statement": {{
+    "Total Revenue": <number or null>,
+    "Gross Profit": <number or null>,
+    "Operating Income": <number or null>,
+    "Net Income": <number or null>,
+    "Basic EPS": <number or null>,
+    "Diluted EPS": <number or null>
+  }},
+  "balance_sheet": {{
+    "Total Assets": <number or null>,
+    "Current Assets": <number or null>,
+    "Cash And Cash Equivalents": <number or null>,
+    "Total Liabilities Net Minority Interest": <number or null>,
+    "Current Liabilities": <number or null>,
+    "Long Term Debt": <number or null>,
+    "Total Stockholder Equity": <number or null>,
+    "Retained Earnings": <number or null>
+  }},
+  "cashflow": {{
+    "Operating Cash Flow": <number or null>,
+    "Free Cash Flow": <number or null>,
+    "Capital Expenditure": <number or null>,
+    "Common Stock Dividends Paid": <number or null>
+  }},
+  "key_metrics": {{
+    "shares_outstanding": <number or null>,
+    "pe_ratio": <number or null>,
+    "pb_ratio": <number or null>,
+    "debt_to_equity": <number or null>,
+    "current_ratio": <number or null>,
+    "roe": <number or null>,
+    "roa": <number or null>
+  }}
+}}
+RULES:
+- Use actual absolute numbers (not thousands/millions). E.g. 394328000000 not 394.3B.
+- Report values in the document's native reporting currency (do NOT convert).
+{f'- The currency is likely {currency_hint}.' if currency_hint else ''}
+- For fiscal_year, use the period end date in YYYY-MM-DD format.
+- Use null for any value not found in the document. Do NOT fabricate numbers."""
+
+
+def _process_pdf_from_s3(ticker: str, s3_key: str, currency_hint: str) -> dict:
+    """
+    Core extraction: read PDF from S3, extract text in up to 2 chunks,
+    call Claude for each, merge results, save to DynamoDB.
+    Returns a summary dict. Raises on error.
+    """
+    s3 = boto3.client('s3', region_name='eu-west-1')
+    pdf_bytes = s3.get_object(Bucket=S3_PDF_BUCKET, Key=s3_key)['Body'].read()
+    print(f"[PDF Upload] Read {len(pdf_bytes):,} bytes from s3://{S3_PDF_BUCKET}/{s3_key}")
+
+    CHUNK_SIZE = 80
+    chunk1_text, total_pages = _extract_pdf_text(pdf_bytes, start_page=0, max_pages=CHUNK_SIZE)
+    bedrock = boto3.client('bedrock-runtime', region_name='us-east-1')
+
+    if chunk1_text:
+        print(f"[PDF Upload] {total_pages} pages. Chunk 1: pp 1-{min(CHUNK_SIZE, total_pages)} ({len(chunk1_text):,} chars)")
+        data1, raw1 = _call_claude_extraction(bedrock, ticker, currency_hint, chunk1_text)
+        print(f"[PDF Upload] Chunk 1 response: {raw1[:200]}")
+        if total_pages > CHUNK_SIZE:
+            chunk2_text, _ = _extract_pdf_text(pdf_bytes, start_page=CHUNK_SIZE, max_pages=CHUNK_SIZE)
+            if chunk2_text:
+                print(f"[PDF Upload] Chunk 2: pp {CHUNK_SIZE+1}-{min(CHUNK_SIZE*2, total_pages)} ({len(chunk2_text):,} chars)")
+                data2, raw2 = _call_claude_extraction(bedrock, ticker, currency_hint, chunk2_text)
+                print(f"[PDF Upload] Chunk 2 response: {raw2[:200]}")
+                data = _merge_extracted_data(data1, data2)
+            else:
+                data = data1
+        else:
+            data = data1
+    else:
+        # pypdf unavailable — fall back to document block (100-page limit applies)
+        print(f"[PDF Upload] pypdf unavailable — using document block for {ticker}")
+        pdf_b64 = base64.b64encode(pdf_bytes).decode('utf-8')
+        resp = bedrock.invoke_model(
+            modelId='us.anthropic.claude-haiku-4-5-20251001-v1:0',
+            body=json.dumps({
+                'anthropic_version': 'bedrock-2023-05-31',
+                'max_tokens': 2000,
+                'temperature': 0,
+                'messages': [{'role': 'user', 'content': [
+                    {'type': 'document', 'source': {'type': 'base64', 'media_type': 'application/pdf', 'data': pdf_b64}},
+                    {'type': 'text', 'text': _build_extraction_prompt(ticker, currency_hint)},
+                ]}]
+            })
+        )
+        ai_text = json.loads(resp['body'].read())['content'][0]['text']
+        print(f"[PDF Upload] Document-block response: {ai_text[:200]}")
+        data = _extract_json(ai_text)
+
+    if not data:
+        raise ValueError('Could not parse Claude response')
+
+    inc = {k: v for k, v in data.get('income_statement', {}).items() if v is not None}
+    bal = {k: v for k, v in data.get('balance_sheet', {}).items() if v is not None}
+    cf  = {k: v for k, v in data.get('cashflow', {}).items() if v is not None}
+    km  = {k: v for k, v in data.get('key_metrics', {}).items() if v is not None}
+    fiscal_year = data.get('fiscal_year', f"{datetime.now().year - 1}-12-31")
+    currency = data.get('currency') or currency_hint or 'USD'
+
+    print(f"[PDF Upload] Merged extraction for {ticker}: "
+          f"inc={len(inc)} fields, bal={len(bal)} fields, cf={len(cf)} fields, "
+          f"km={len(km)} fields, year={fiscal_year}, currency={currency}")
+    if inc:
+        sample = list(inc.items())[:2]
+        print(f"[PDF Upload] inc sample: {sample}")
+    if bal:
+        sample = list(bal.items())[:2]
+        print(f"[PDF Upload] bal sample: {sample}")
+
+    _save_ai_financial_data(ticker, inc, bal, cf, km,
+                            fiscal_year=fiscal_year, fin_currency=currency, source='pdf_upload')
+    return {
+        'sections_with_data': sum(1 for s in [inc, bal, cf, km] if s),
+        'fiscal_year': fiscal_year,
+        'currency': currency,
+    }
+
+
+def _handle_pdf_upload_async(event: dict) -> None:
+    """
+    Called by async Lambda self-invocation. Does the actual PDF extraction
+    and writes the result / error status back to DynamoDB.
+    """
+    ticker = event.get('ticker', '')
+    s3_key = event.get('s3_key', '')
+    currency_hint = event.get('currency_hint', '')
+    table = boto3.resource('dynamodb', region_name='eu-west-1').Table(MANUAL_DATA_TABLE)
+    try:
+        result = _process_pdf_from_s3(ticker, s3_key, currency_hint)
+        table.update_item(
+            Key={'ticker': ticker},
+            UpdateExpression='SET pdf_status = :s, pdf_completed_at = :t',
+            ExpressionAttributeValues={':s': 'complete', ':t': datetime.now().isoformat()},
+        )
+        print(f"[PDF Async] Complete for {ticker}: {result['sections_with_data']} sections")
+    except Exception as e:
+        print(f"[PDF Async] Failed for {ticker}: {e}")
+        try:
+            table.update_item(
+                Key={'ticker': ticker},
+                UpdateExpression='SET pdf_status = :s, pdf_error = :e',
+                ExpressionAttributeValues={':s': 'error', ':e': str(e)},
+            )
+        except Exception:
+            pass
+
+
+def handle_pdf_upload(event: dict, context) -> dict:
+    """
+    POST /api/upload-pdf — marks status as 'processing', fires an async
+    self-invocation to do the actual work, and returns immediately so we
+    stay well within API Gateway's 29-second integration timeout.
+    Body: { "s3_key": "uploads/BEL.XJSE_20260301_120000.pdf", "currency": "ZAR" }
+    """
+    params = event.get('queryStringParameters') or {}
+    ticker = params.get('ticker', '').strip().upper()
+    if not ticker:
+        return {'statusCode': 400, 'body': json.dumps({'error': 'ticker parameter required'})}
+
+    body_raw = event.get('body', '') or ''
+    try:
+        body_json = json.loads(body_raw)
+        s3_key = body_json.get('s3_key', '')
+        currency_hint = body_json.get('currency', '')
+    except Exception as e:
+        return {'statusCode': 400, 'body': json.dumps({'error': f'Invalid JSON body: {e}'})}
+
+    if not s3_key:
+        return {'statusCode': 400, 'body': json.dumps({'error': 's3_key field required'})}
+
+    # Write 'processing' status so the frontend can poll
+    try:
+        table = boto3.resource('dynamodb', region_name='eu-west-1').Table(MANUAL_DATA_TABLE)
+        table.update_item(
+            Key={'ticker': ticker},
+            UpdateExpression='SET pdf_status = :s, pdf_s3_key = :k, pdf_started_at = :t',
+            ExpressionAttributeValues={
+                ':s': 'processing', ':k': s3_key, ':t': datetime.now().isoformat(),
+            },
+        )
+    except Exception as e:
+        print(f"[PDF Upload] Could not write processing status: {e}")
+
+    # Async self-invocation — fire and forget
+    try:
+        fn_name = getattr(context, 'function_name', 'stock-analysis-analyzer')
+        boto3.client('lambda', region_name='eu-west-1').invoke(
+            FunctionName=fn_name,
+            InvocationType='Event',
+            Payload=json.dumps({
+                '_pdf_async': True,
+                'ticker': ticker,
+                's3_key': s3_key,
+                'currency_hint': currency_hint,
+            }),
+        )
+        print(f"[PDF Upload] Async job fired for {ticker} / {s3_key}")
+    except Exception as e:
+        print(f"[PDF Upload] Failed to invoke async processor: {e}")
+        try:
+            table.update_item(
+                Key={'ticker': ticker},
+                UpdateExpression='SET pdf_status = :s, pdf_error = :e',
+                ExpressionAttributeValues={':s': 'error', ':e': str(e)},
+            )
+        except Exception:
+            pass
+        return {'statusCode': 500, 'body': json.dumps({'error': f'Could not start PDF processing: {e}'})}
+
+    return {
+        'statusCode': 200,
+        'body': json.dumps({
+            'status': 'processing',
+            'message': 'PDF received. Extraction is running in the background.',
+            'ticker': ticker,
+        }),
+    }
+
+
+def handle_pdf_status(event: dict) -> dict:
+    """GET /api/upload-pdf/status?ticker=XXX — returns current processing status."""
+    params = event.get('queryStringParameters') or {}
+    ticker = params.get('ticker', '').strip().upper()
+    if not ticker:
+        return {'statusCode': 400, 'body': json.dumps({'error': 'ticker required'})}
+    try:
+        item = (boto3.resource('dynamodb', region_name='eu-west-1')
+                .Table(MANUAL_DATA_TABLE)
+                .get_item(Key={'ticker': ticker})
+                .get('Item') or {})
+        return {
+            'statusCode': 200,
+            'body': json.dumps({
+                'status': item.get('pdf_status', 'unknown'),
+                'has_data': bool(item.get('has_data')),
+                'error': item.get('pdf_error'),
+                'ticker': ticker,
+            }),
+        }
+    except Exception as e:
+        return {'statusCode': 500, 'body': json.dumps({'error': str(e)})}
+
+
+# ---------------------------------------------------------------------------
 # Lambda entry point
 # ---------------------------------------------------------------------------
 
 def lambda_handler(event, context):
     """AWS Lambda handler for stock analysis"""
+
+    # Async PDF processing — invoked by handle_pdf_upload with InvocationType='Event'
+    if event.get('_pdf_async'):
+        _handle_pdf_upload_async(event)
+        return
 
     headers = {
         'Access-Control-Allow-Origin': '*',
@@ -1045,6 +1742,16 @@ def lambda_handler(event, context):
 
         elif '/api/batch-analyze' in path and method == 'POST':
             result = handle_batch_analyze(event)
+
+        # /api/upload-pdf/status must be checked before /api/upload-pdf
+        elif '/api/upload-pdf/status' in path and method == 'GET':
+            result = handle_pdf_status(event)
+
+        elif '/api/upload-pdf' in path and method == 'GET':
+            result = handle_get_pdf_upload_url(event)
+
+        elif '/api/upload-pdf' in path and method == 'POST':
+            result = handle_pdf_upload(event, context)
 
         else:
             result = {

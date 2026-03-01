@@ -414,6 +414,15 @@ export default function TickerPage() {
   const priceError = watchlistData?.price_error || null
   const recommendation = analysis?.recommendation || watchlistData?.watchlist_item?.recommendation
 
+  // Incomplete financial data: some core sections have data but at least one is missing
+  const hasIncompleteFinancialData = (() => {
+    const fd = financialData?.financial_data || {}
+    const coreSections = ['income_statement', 'balance_sheet', 'cashflow']
+    const someHaveData = coreSections.some(k => fd[k] && Object.keys(fd[k]).length > 0)
+    const someAreMissing = coreSections.some(k => !fd[k] || Object.keys(fd[k] || {}).length === 0)
+    return someHaveData && someAreMissing
+  })()
+
   return (
     <div className="container" style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
       {/* Header */}
@@ -479,9 +488,9 @@ export default function TickerPage() {
                     )}
                   </div>
                 )}
-                {/* Recommendation Badge - moved below price */}
-                {recommendation && (
-                  <div style={{ marginTop: '8px' }}>
+                {/* Recommendation + Incomplete Data badges */}
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px', alignItems: 'center' }}>
+                  {recommendation && (
                     <span style={{
                       padding: '6px 16px',
                       borderRadius: '16px',
@@ -492,8 +501,21 @@ export default function TickerPage() {
                     }}>
                       {recommendation}
                     </span>
-                  </div>
-                )}
+                  )}
+                  {hasIncompleteFinancialData && (
+                    <span style={{
+                      padding: '5px 12px',
+                      borderRadius: '16px',
+                      fontSize: '13px',
+                      fontWeight: '500',
+                      color: '#92400e',
+                      backgroundColor: '#fef3c7',
+                      border: '1px solid #fde68a',
+                    }}>
+                      ⚠ Incomplete Financial Data
+                    </span>
+                  )}
+                </div>
               </div>
             ) : priceError ? (
               <p style={{ fontSize: '16px', color: '#dc2626', margin: 0, marginTop: '8px' }}>
@@ -599,8 +621,7 @@ export default function TickerPage() {
           ticker={ticker}
           onDataExtracted={() => {
             setShowPDFUpload(false)
-            loadFinancialData()
-            loadAnalysis(true)
+            loadAnalysis(false)
           }}
         />
       )}
@@ -610,6 +631,7 @@ export default function TickerPage() {
         ticker={ticker}
         financialData={financialData.financial_data || {}}
         metadata={financialData.metadata || {}}
+        financialCurrency={financialData.financial_currency}
       />
 
       {analysis ? (
@@ -618,7 +640,7 @@ export default function TickerPage() {
           <DataQualityWarnings warnings={analysis.dataQualityWarnings} />
           
           {/* Show missing data prompt if needed */}
-          {(analysis.fairValue === 0 || (analysis.missingData?.has_missing_data)) && (
+          {(!analysis.fairValue || analysis.fairValue === 0 || (analysis.missingData?.has_missing_data)) && (
             <MissingDataPrompt
               ticker={ticker}
               missingData={analysis.missingData || {

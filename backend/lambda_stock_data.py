@@ -18,6 +18,22 @@ except ImportError:
     YFINANCE_AVAILABLE = False
 
 
+# Authoritative currency overrides by ticker suffix.
+# APIs often return the exchange's base currency (ZAR) but JSE trades in cents (ZAC).
+_TICKER_CURRENCY_OVERRIDE: dict[str, str] = {
+    '.XJSE': 'ZAC',   # Johannesburg Stock Exchange — prices quoted in cents
+}
+
+
+def _resolve_currency(ticker: str, api_currency: str | None) -> str:
+    """Return the correct currency for a ticker, overriding API values where known."""
+    upper = ticker.upper()
+    for suffix, currency in _TICKER_CURRENCY_OVERRIDE.items():
+        if upper.endswith(suffix):
+            return currency
+    return api_currency or 'USD'
+
+
 def _yahoo_symbol(ticker: str) -> str:
     """Convert MarketStack/XJSE style tickers to Yahoo Finance format"""
     # BEL.XJSE -> BEL.JO, PPE.XJSE -> PPE.JO
@@ -52,7 +68,7 @@ def get_ticker_data_yahoo(ticker: str) -> dict:
             'name': name,
             'price': price,
             'currentPrice': price,
-            'currency': currency,
+            'currency': _resolve_currency(ticker, currency),
             'exchange': meta.get('exchangeName', ''),
             'source': 'yahoo_finance'
         }
@@ -81,12 +97,16 @@ def get_ticker_data_marketstack(ticker: str) -> dict:
         item = items[0] if isinstance(items, list) else items
         price = item.get('close') or item.get('adj_close') or 0
 
-        # Fetch ticker info for company name
+        # Fetch ticker info for company name and currency
         name = ticker
+        currency = 'USD'
         try:
             info_url = f"https://api.marketstack.com/v1/tickers/{ticker}?{urlencode({'access_key': api_key})}"
             info_data = _urllib_get(info_url)
             name = info_data.get('name') or ticker
+            # currency_code lives under stock_exchange on the tickers endpoint
+            exchange_info = info_data.get('stock_exchange') or {}
+            currency = exchange_info.get('currency_code') or 'USD'
         except Exception:
             pass
 
@@ -95,7 +115,7 @@ def get_ticker_data_marketstack(ticker: str) -> dict:
             'name': name,
             'price': price,
             'currentPrice': price,
-            'currency': item.get('adj_currency') or 'USD',
+            'currency': _resolve_currency(ticker, currency),
             'exchange': item.get('exchange', ''),
             'source': 'marketstack'
         }
@@ -104,8 +124,21 @@ def get_ticker_data_marketstack(ticker: str) -> dict:
 
 
 def get_ticker_data(ticker: str) -> dict:
-    """Get stock ticker data - MarketStack (paid) first, Yahoo Finance fallback"""
-    # Try MarketStack first (paid plan, HTTPS, no IP restrictions)
+    """Get stock ticker data.
+    For tickers with known exchange overrides (e.g. JSE), Yahoo Finance is tried
+    first because it returns accurate real-time prices. MarketStack EOD data for
+    these exchanges is often stale or incorrect.
+    For all other tickers, MarketStack (paid) is tried first, with Yahoo as fallback.
+    """
+    upper = ticker.upper()
+    use_yahoo_first = any(upper.endswith(s) for s in _TICKER_CURRENCY_OVERRIDE)
+
+    if use_yahoo_first:
+        yf_data = get_ticker_data_yahoo(ticker)
+        if 'error' not in yf_data:
+            return {'statusCode': 200, 'body': json.dumps(yf_data)}
+
+    # MarketStack (paid plan, HTTPS)
     ms_data = get_ticker_data_marketstack(ticker)
     if 'error' not in ms_data:
         return {
@@ -113,13 +146,14 @@ def get_ticker_data(ticker: str) -> dict:
             'body': json.dumps(ms_data)
         }
 
-    # Fall back to Yahoo Finance unofficial API
-    yf_data = get_ticker_data_yahoo(ticker)
-    if 'error' not in yf_data:
-        return {
-            'statusCode': 200,
-            'body': json.dumps(yf_data)
-        }
+    # Fall back to Yahoo Finance
+    if not use_yahoo_first:
+        yf_data = get_ticker_data_yahoo(ticker)
+        if 'error' not in yf_data:
+            return {
+                'statusCode': 200,
+                'body': json.dumps(yf_data)
+            }
 
     return {
         'statusCode': 503,

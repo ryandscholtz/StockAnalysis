@@ -51,6 +51,7 @@ export default function WatchlistPage() {
   const [error, setError] = useState<string>('')
   const [bulkAnalyzing, setBulkAnalyzing] = useState(false)
   const [bulkResult, setBulkResult] = useState<{ success: boolean; message: string } | null>(null)
+  const [sortBy, setSortBy] = useState<'name' | 'undervalued'>('name')
 
   useEffect(() => {
     loadWatchlist()
@@ -139,6 +140,7 @@ export default function WatchlistPage() {
   const runBulkAnalysis = async () => {
     if (watchlistItems.length === 0) {
       setBulkResult({ success: false, message: 'No stocks in watchlist to analyze.' })
+      setTimeout(() => setBulkResult(null), 5000)
       return
     }
     try {
@@ -152,12 +154,14 @@ export default function WatchlistPage() {
         success: result.success,
         message: result.message || (result.summary ? `Processed ${result.summary.successful ?? 0} successfully, ${result.summary.failed ?? 0} failed.` : 'Done.')
       })
+      setTimeout(() => setBulkResult(null), 5000)
       if (result.success) await loadWatchlist()
     } catch (err: any) {
       setBulkResult({
         success: false,
         message: err?.response?.data?.detail || err?.message || 'Bulk analysis failed.'
       })
+      setTimeout(() => setBulkResult(null), 5000)
     } finally {
       setBulkAnalyzing(false)
     }
@@ -174,6 +178,16 @@ export default function WatchlistPage() {
     }
     return { text: `${absMargin.toFixed(0)}% Overvalued`, color: '#dc2626' }
   }
+
+  const sortedItems = [...watchlistItems].sort((a, b) => {
+    if (sortBy === 'undervalued') {
+      // Items with margin data first, sorted descending (most undervalued first)
+      const aVal = a.margin_of_safety_pct ?? -Infinity
+      const bVal = b.margin_of_safety_pct ?? -Infinity
+      return bVal - aVal
+    }
+    return (a.company_name || a.ticker).localeCompare(b.company_name || b.ticker)
+  })
 
   if (loading) {
     return (
@@ -220,9 +234,32 @@ export default function WatchlistPage() {
         marginBottom: '32px'
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
-          <h2 style={{ fontSize: '24px', fontWeight: '600', color: '#111827', margin: 0 }}>
-            📊 Your Stocks
-          </h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+            <h2 style={{ fontSize: '24px', fontWeight: '600', color: '#111827', margin: 0 }}>
+              📊 Your Stocks
+            </h2>
+            <div style={{ display: 'flex', gap: '4px', background: '#f3f4f6', borderRadius: '8px', padding: '3px' }}>
+              {(['name', 'undervalued'] as const).map(opt => (
+                <button
+                  key={opt}
+                  onClick={() => setSortBy(opt)}
+                  style={{
+                    padding: '4px 12px',
+                    borderRadius: '6px',
+                    border: 'none',
+                    fontSize: '13px',
+                    fontWeight: '500',
+                    cursor: 'pointer',
+                    backgroundColor: sortBy === opt ? 'white' : 'transparent',
+                    color: sortBy === opt ? '#111827' : '#6b7280',
+                    boxShadow: sortBy === opt ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                  }}
+                >
+                  {opt === 'name' ? 'Name' : '% Undervalued'}
+                </button>
+              ))}
+            </div>
+          </div>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             <button
               onClick={runBulkAnalysis}
@@ -308,7 +345,7 @@ export default function WatchlistPage() {
           </div>
         ) : (
           <div style={{ display: 'grid', gap: '16px' }}>
-            {watchlistItems.map((stock) => {
+            {sortedItems.map((stock) => {
               const valuation = getValuationDisplay(stock)
               return (
               <div
@@ -363,6 +400,20 @@ export default function WatchlistPage() {
                           backgroundColor: valuation.color
                         }}>
                           {valuation.text}
+                        </span>
+                      )}
+                      {/* Show when analysis ran but produced no fair value — missing financial data */}
+                      {stock.last_analyzed_at && !stock.fair_value && (
+                        <span style={{
+                          padding: '4px 10px',
+                          borderRadius: '8px',
+                          fontSize: '12px',
+                          fontWeight: '500',
+                          color: '#92400e',
+                          backgroundColor: '#fef3c7',
+                          border: '1px solid #fde68a',
+                        }}>
+                          ⚠ Incomplete Data
                         </span>
                       )}
                     </div>

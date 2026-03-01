@@ -50,39 +50,22 @@ export default function PDFUpload({ ticker, onDataExtracted }: PDFUploadProps) {
     setUploading(true)
     setExtractedData(null)
 
-    // Declare progress interval outside try block so it's accessible in catch/finally
-    let progressInterval: NodeJS.Timeout | null = null
-    let elapsedSeconds = 0
-
     try {
-      // Process PDF directly with AWS Textract (no image conversion needed)
-      setProcessingStatus('📄 Processing PDF with AWS Textract...')
-      
-      // Update progress every 15 seconds while processing
-      progressInterval = setInterval(() => {
-        elapsedSeconds += 15
-        const minutes = Math.floor(elapsedSeconds / 60)
-        const seconds = elapsedSeconds % 60
-        const timeStr = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`
-        setProcessingStatus(`📄 Processing PDF with AWS Textract... (${timeStr} elapsed)`)
-      }, 15000) // Update every 15 seconds
-      
+      setProcessingStatus('📄 Starting PDF upload...')
+
       try {
-        const result = await stockApi.uploadPDF(ticker, file)
-        
-        // Clear progress interval when done
-        if (progressInterval) {
-          clearInterval(progressInterval)
-        }
-        
+        const result = await stockApi.uploadPDF(ticker, file, (status) => {
+          setProcessingStatus(status)
+        })
+
         // Update processing status
         if (result.updated_periods && result.updated_periods > 0) {
-          setProcessingStatus(`✅ Textract processing complete: Extracted ${result.updated_periods} data period(s)`)
+          setProcessingStatus(`✅ Done: extracted ${result.updated_periods} period(s) of financial data`)
         } else {
-          setProcessingStatus(`⚠️ Textract processing completed but no financial data was extracted`)
+          setProcessingStatus('⚠️ Upload complete but no financial data could be extracted')
         }
         
-        setMessage(result.message || 'PDF processed successfully!')
+        setMessage(result.message || 'PDF processed successfully')
         
         // Store extracted data if available
         if (result.extracted_data) {
@@ -95,25 +78,13 @@ export default function PDFUpload({ ticker, onDataExtracted }: PDFUploadProps) {
           }, 2000)
         }
       } catch (err: any) {
-        // Clear progress interval on error
-        if (progressInterval) {
-          clearInterval(progressInterval)
-        }
         setError(err.response?.data?.detail || err.message || 'Error uploading PDF')
         setProcessingStatus('❌ Processing failed')
       }
     } catch (err: any) {
-      // Clear progress interval on error (outer catch for any other errors)
-      if (progressInterval) {
-        clearInterval(progressInterval)
-      }
       setError(err.response?.data?.detail || err.message || 'Error uploading PDF')
       setProcessingStatus('❌ Processing failed')
     } finally {
-      // Clear progress interval in finally as well (safety)
-      if (progressInterval) {
-        clearInterval(progressInterval)
-      }
       setUploading(false)
       // Reset file input
       if (fileInputRef.current) {

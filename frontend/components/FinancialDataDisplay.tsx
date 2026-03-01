@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { getCurrencySymbol } from '@/lib/currency'
 
 interface SectionMeta {
   last_updated: string | null
@@ -12,6 +13,7 @@ interface FinancialDataDisplayProps {
   ticker: string
   financialData: Record<string, Record<string, Record<string, number>>>
   metadata: Record<string, SectionMeta>
+  financialCurrency?: string
 }
 
 // Human-readable labels for common field names (both snake_case and title case)
@@ -83,27 +85,49 @@ const SOURCE_LABELS: Record<string, string> = {
   pdf_upload:      'PDF Upload',
   ai_fetch:        'AI Retrieved',
   ai_bedrock:      'AI Retrieved',
+  yahoo_finance:   'Yahoo Finance',
+  sec_edgar:       'SEC EDGAR',
   unknown:         'Unknown',
 }
 
-function formatValue(field: string, value: number): string {
+// Fields that are dimensionless ratios, percentages, or counts — no currency symbol
+function isNonMonetary(field: string): boolean {
+  const f = field.toLowerCase()
+  return (
+    f.includes('roe') || f.includes('roa') || f.includes('margin') ||
+    f.includes('ratio') || f === 'pe_ratio' || f === 'pb_ratio' ||
+    f === 'current_ratio' || f === 'debt_to_equity' ||
+    f === 'shares_outstanding' || f.startsWith('shares_')
+  )
+}
+
+function formatValue(field: string, value: number, currencySymbol: string = ''): string {
   const f = field.toLowerCase()
   if (f.includes('roe') || f.includes('roa') || f.includes('margin')) {
-    // If stored as decimal (< 2), treat as percentage
     if (Math.abs(value) < 2) return `${(value * 100).toFixed(2)}%`
     return `${value.toFixed(2)}%`
   }
-  if (f.includes('eps') || f.includes('per_share') || f.includes('ratio') || f === 'pe_ratio' || f === 'pb_ratio' || f === 'current_ratio' || f === 'debt_to_equity') {
+  if (f.includes('ratio') || f === 'pe_ratio' || f === 'pb_ratio' ||
+      f === 'current_ratio' || f === 'debt_to_equity') {
     return value.toFixed(2)
   }
-  // Monetary values
+  if (f === 'shares_outstanding' || f.startsWith('shares_')) {
+    const abs = Math.abs(value)
+    const sign = value < 0 ? '-' : ''
+    if (abs >= 1e9)  return `${sign}${(abs / 1e9).toFixed(2)}B`
+    if (abs >= 1e6)  return `${sign}${(abs / 1e6).toFixed(2)}M`
+    if (abs >= 1e3)  return `${sign}${(abs / 1e3).toFixed(2)}K`
+    return `${sign}${abs.toFixed(0)}`
+  }
+  // Monetary values — prefix with currency symbol
+  const sym = isNonMonetary(field) ? '' : currencySymbol
   const abs = Math.abs(value)
   const sign = value < 0 ? '-' : ''
-  if (abs >= 1e12) return `${sign}${(abs / 1e12).toFixed(2)}T`
-  if (abs >= 1e9)  return `${sign}${(abs / 1e9).toFixed(2)}B`
-  if (abs >= 1e6)  return `${sign}${(abs / 1e6).toFixed(2)}M`
-  if (abs >= 1e3)  return `${sign}${(abs / 1e3).toFixed(2)}K`
-  return value.toFixed(2)
+  if (abs >= 1e12) return `${sign}${sym}${(abs / 1e12).toFixed(2)}T`
+  if (abs >= 1e9)  return `${sign}${sym}${(abs / 1e9).toFixed(2)}B`
+  if (abs >= 1e6)  return `${sign}${sym}${(abs / 1e6).toFixed(2)}M`
+  if (abs >= 1e3)  return `${sign}${sym}${(abs / 1e3).toFixed(2)}K`
+  return `${sign}${sym}${abs.toFixed(2)}`
 }
 
 function formatDate(iso: string | null): string {
@@ -118,8 +142,9 @@ function formatDate(iso: string | null): string {
   }
 }
 
-export default function FinancialDataDisplay({ ticker, financialData, metadata }: FinancialDataDisplayProps) {
+export default function FinancialDataDisplay({ ticker, financialData, metadata, financialCurrency }: FinancialDataDisplayProps) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  const currencySymbol = getCurrencySymbol(financialCurrency)
 
   const toggle = (key: string) => setExpanded(prev => ({ ...prev, [key]: !prev[key] }))
 
@@ -148,7 +173,43 @@ export default function FinancialDataDisplay({ ticker, financialData, metadata }
         <span style={{ fontSize: '13px', fontWeight: '400', color: '#6b7280', marginLeft: '8px' }}>
           {ticker}
         </span>
+        {financialCurrency && (
+          <span style={{
+            fontSize: '12px', fontWeight: '500', color: '#374151',
+            backgroundColor: '#f3f4f6', border: '1px solid #e5e7eb',
+            padding: '1px 7px', borderRadius: '10px', marginLeft: '8px'
+          }}>
+            {financialCurrency}
+          </span>
+        )}
       </h2>
+
+      {/* Summary notice when any section is missing data */}
+      {(() => {
+        const missingSections = sectionKeys
+          .filter(k => !(financialData[k] && Object.keys(financialData[k]).length > 0))
+          .map(k => SECTION_CONFIG[k]?.title)
+          .filter(Boolean)
+        if (missingSections.length === 0) return null
+        return (
+          <div style={{
+            display: 'flex', alignItems: 'flex-start', gap: '10px',
+            padding: '10px 14px', borderRadius: '6px', marginBottom: '14px',
+            backgroundColor: '#fffbeb', border: '1px solid #fde68a',
+          }}>
+            <span style={{ fontSize: '15px', lineHeight: '1.5', flexShrink: 0 }}>⚠️</span>
+            <div>
+              <span style={{ color: '#92400e', fontSize: '13px', fontWeight: '600' }}>
+                Incomplete financial data —{' '}
+              </span>
+              <span style={{ color: '#b45309', fontSize: '13px' }}>
+                {missingSections.join(', ')} could not be retrieved automatically.
+                Add the missing data manually or re-run the analysis to try again.
+              </span>
+            </div>
+          </div>
+        )
+      })()}
 
       {sectionKeys.map(sectionKey => {
         const cfg = SECTION_CONFIG[sectionKey]
@@ -161,7 +222,7 @@ export default function FinancialDataDisplay({ ticker, financialData, metadata }
         return (
           <div key={sectionKey} style={{
             marginBottom: '10px',
-            border: '1px solid #e5e7eb',
+            border: `1px solid ${hasData ? '#e5e7eb' : '#fde68a'}`,
             borderRadius: '8px',
             overflow: 'hidden',
           }}>
@@ -170,7 +231,7 @@ export default function FinancialDataDisplay({ ticker, financialData, metadata }
               onClick={() => toggle(sectionKey)}
               style={{
                 padding: '12px 16px',
-                backgroundColor: hasData ? '#f9fafb' : '#fafafa',
+                backgroundColor: hasData ? '#f9fafb' : '#fffbeb',
                 cursor: 'pointer',
                 display: 'flex',
                 justifyContent: 'space-between',
@@ -181,7 +242,7 @@ export default function FinancialDataDisplay({ ticker, financialData, metadata }
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <span style={{ fontSize: '18px' }}>{cfg.icon}</span>
                 <div>
-                  <span style={{ fontWeight: '600', fontSize: '15px', color: '#111827' }}>
+                  <span style={{ fontWeight: '600', fontSize: '15px', color: hasData ? '#111827' : '#92400e' }}>
                     {cfg.title}
                   </span>
                   {hasData && meta ? (
@@ -200,8 +261,8 @@ export default function FinancialDataDisplay({ ticker, financialData, metadata }
                       </span>
                     </span>
                   ) : (
-                    <span style={{ fontSize: '12px', color: '#9ca3af', marginLeft: '10px' }}>
-                      No data stored
+                    <span style={{ fontSize: '12px', color: '#b45309', marginLeft: '10px', fontWeight: '500' }}>
+                      ⚠ Data unavailable — add manually
                     </span>
                   )}
                 </div>
@@ -225,9 +286,22 @@ export default function FinancialDataDisplay({ ticker, financialData, metadata }
             {isOpen && (
               <div style={{ padding: '16px', overflowX: 'auto' }}>
                 {!hasData ? (
-                  <p style={{ color: '#9ca3af', fontSize: '13px', margin: 0 }}>
-                    No data stored for this section.
-                  </p>
+                  <div style={{
+                    display: 'flex', alignItems: 'flex-start', gap: '10px',
+                    padding: '12px 14px', borderRadius: '6px',
+                    backgroundColor: '#fffbeb', border: '1px solid #fde68a',
+                  }}>
+                    <span style={{ fontSize: '16px', lineHeight: '1.4' }}>⚠️</span>
+                    <div>
+                      <p style={{ color: '#92400e', fontSize: '13px', fontWeight: '600', margin: '0 0 2px' }}>
+                        Data unavailable
+                      </p>
+                      <p style={{ color: '#b45309', fontSize: '12px', margin: 0 }}>
+                        Could not be retrieved automatically from Yahoo Finance or AI.
+                        Add it manually using the data entry form, or re-run the analysis to try again.
+                      </p>
+                    </div>
+                  </div>
                 ) : (
                   /* Table: rows = fields, columns = periods */
                   (() => {
@@ -275,7 +349,7 @@ export default function FinancialDataDisplay({ ticker, financialData, metadata }
                                     fontFamily: 'monospace', color: val !== undefined ? '#111827' : '#d1d5db',
                                     borderBottom: '1px solid #f3f4f6'
                                   }}>
-                                    {val !== undefined ? formatValue(field, val) : '—'}
+                                    {val !== undefined ? formatValue(field, val, currencySymbol) : '—'}
                                   </td>
                                 )
                               })}
