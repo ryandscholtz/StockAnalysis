@@ -1,7 +1,7 @@
 import axios from 'axios'
 import { logApiEvent } from '@/components/DeveloperFeedback'
 import { WatchlistSimulation } from './watchlist-simulation'
-import { authService } from './auth-mock' // Use mock auth for development
+import { authService } from './auth'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'
 
@@ -15,10 +15,14 @@ const api = axios.create({
 // Add request interceptor for logging and authentication
 api.interceptors.request.use(
   (config) => {
-    // Add authentication token if available
+    // Add authentication token and user ID if available
     const token = authService.getAccessToken()
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
+    }
+    const userId = authService.getCurrentUser()?.userId
+    if (userId) {
+      config.headers['X-User-Id'] = userId
     }
     
     logApiEvent({
