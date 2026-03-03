@@ -131,7 +131,7 @@ function AddToWatchlistContent() {
       
       if (result.success) {
         console.log('Successfully added to watchlist, redirecting...')
-        router.push('/watchlist')
+        router.push(`/ticker?symbol=${encodeURIComponent(suggestion.ticker)}`)
       } else {
         console.error('Add to watchlist failed:', result.message)
         setError(result.message || 'Failed to add to watchlist')

@@ -1,7 +1,6 @@
 import './globals.css'
 import type { Metadata } from 'next'
 import Navigation from '@/components/Navigation'
-import DeveloperFeedback from '@/components/DeveloperFeedback'
 import VersionFooter from '@/components/VersionFooter'
 import { Providers } from '@/components/Providers'
 import { AuthProvider } from '@/components/AuthProvider'
@@ -29,7 +28,6 @@ export default function RootLayout({
               {children}
             </main>
             <VersionFooter />
-            <DeveloperFeedback enabled={true} />
           </Providers>
         </AuthProvider>
       </body>

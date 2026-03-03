@@ -283,8 +283,9 @@ def lambda_handler(event, context):
     path = event.get('path', '')
     method = event.get('httpMethod', 'GET')
     
-    # Extract user ID from headers — required for all watchlist/manual-data operations
-    user_id = event.get('headers', {}).get('X-User-Id')
+    # Extract user ID from headers — API Gateway lowercases headers, so check both cases
+    _headers = event.get('headers', {}) or {}
+    user_id = _headers.get('X-User-Id') or _headers.get('x-user-id')
     if not user_id and ('/api/watchlist' in path or '/api/manual-data' in path):
         return {
             'statusCode': 401,

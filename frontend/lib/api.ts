@@ -1,5 +1,4 @@
 import axios from 'axios'
-import { logApiEvent } from '@/components/DeveloperFeedback'
 import { WatchlistSimulation } from './watchlist-simulation'
 import { authService } from './auth'
 
@@ -25,20 +24,9 @@ api.interceptors.request.use(
       config.headers['X-User-Id'] = userId
     }
     
-    logApiEvent({
-      type: 'request',
-      method: config.method?.toUpperCase(),
-      url: `${config.baseURL}${config.url}`,
-      data: config.data
-    })
     return config
   },
   (error) => {
-    logApiEvent({
-      type: 'error',
-      message: 'Request setup error',
-      error: error.message
-    })
     return Promise.reject(error)
   }
 )
@@ -86,13 +74,6 @@ export function formatApiError(error: any): string {
 // Add response interceptor to handle errors globally
 api.interceptors.response.use(
   (response) => {
-    logApiEvent({
-      type: 'response',
-      method: response.config.method?.toUpperCase(),
-      url: `${response.config.baseURL}${response.config.url}`,
-      status: response.status,
-      data: response.data
-    })
     return response
   },
   (error) => {
@@ -105,16 +86,7 @@ api.interceptors.response.use(
       url: error.config?.url
     }
     console.error('API Error:', errorInfo)
-    
-    logApiEvent({
-      type: 'error',
-      method: error.config?.method?.toUpperCase(),
-      url: error.config ? `${error.config.baseURL}${error.config.url}` : undefined,
-      status: error.response?.status,
-      message: formatApiError(error),
-      error: errorInfo
-    })
-    
+
     // Re-throw with formatted error message
     const formattedError = new Error(formatApiError(error))
     ;(formattedError as any).originalError = error
@@ -242,13 +214,6 @@ export const stockApi = {
             if (weights) params.append('weights', JSON.stringify(weights))
             const paramString = params.toString()
             const url = `${API_BASE_URL}/api/analyze/${ticker}?stream=true${paramString ? '&' + paramString : ''}`
-            logApiEvent({
-              type: 'request',
-              method: 'GET',
-              url: url,
-              message: `Starting streaming analysis for ${ticker}${forceRefresh ? ' (force refresh)' : ''}`
-            })
-            
             const response = await fetch(url, {
               headers: {
                 'Accept': 'text/event-stream',
@@ -258,26 +223,10 @@ export const stockApi = {
 
             console.log('Response status:', response.status, response.statusText)
             console.log('Response headers:', Object.fromEntries(response.headers.entries()))
-            
-            logApiEvent({
-              type: 'response',
-              method: 'GET',
-              url: url,
-              status: response.status,
-              message: `Stream connection established for ${ticker}`
-            })
-            
+
             if (!response.ok) {
               const errorText = await response.text()
               console.error('Error response:', errorText)
-              logApiEvent({
-                type: 'error',
-                method: 'GET',
-                url: url,
-                status: response.status,
-                message: `HTTP error! status: ${response.status}`,
-                error: errorText
-              })
               throw new Error(`HTTP error! status: ${response.status}`)
             }
 
@@ -424,21 +373,6 @@ export const stockApi = {
                             issues.push('⚠️ Missing financial data detected')
                           }
                           
-                          logApiEvent({
-                            type: issues.length > 0 ? 'error' : 'response',
-                            method: 'GET',
-                            url: `${API_BASE_URL}/api/analyze/${ticker}?stream=true`,
-                            message: issues.length > 0 
-                              ? `Analysis complete for ${ticker} - ${issues.join('; ')}`
-                              : `Analysis complete for ${ticker}`,
-                            data: { 
-                              ticker: update.data.ticker, 
-                              fairValue: update.data.fairValue,
-                              currentPrice: update.data.currentPrice,
-                              issues: issues.length > 0 ? issues : undefined
-                            }
-                          })
-                          
                           if (timeoutId) {
                             clearTimeout(timeoutId)
                           }
@@ -446,34 +380,13 @@ export const stockApi = {
                           return
                         } else if (update.type === 'error') {
                           console.error('Error from server:', update.message)
-                          logApiEvent({
-                            type: 'error',
-                            method: 'GET',
-                            url: `${API_BASE_URL}/api/analyze/${ticker}?stream=true`,
-                            message: update.message || 'Analysis failed',
-                            error: update
-                          })
                           reject(new Error(update.message || 'Analysis failed'))
                           return
                         } else if (update.type === 'progress') {
                           onProgress(update)
-                          logApiEvent({
-                            type: 'info',
-                            method: 'GET',
-                            url: `${API_BASE_URL}/api/analyze/${ticker}?stream=true`,
-                            message: `Progress: ${update.task} (${update.step}/${update.total})`
-                          })
                         } else if ((update as any).type === 'heartbeat') {
                           // Heartbeat received - connection is alive, reset timeout
                           console.log('Heartbeat received - connection alive', (update as any).warning || '')
-                          if ((update as any).warning) {
-                            logApiEvent({
-                              type: 'info',
-                              method: 'GET',
-                              url: `${API_BASE_URL}/api/analyze/${ticker}?stream=true`,
-                              message: (update as any).warning
-                            })
-                          }
                           resetTimeout()
                         }
                       }
@@ -581,12 +494,6 @@ export const stockApi = {
   },
 
   async getQuote(ticker: string): Promise<QuoteResponse> {
-    logApiEvent({
-      type: 'info',
-      method: 'GET',
-      url: `${API_BASE_URL}/api/quote/${ticker}`,
-      message: `Fetching quote for ${ticker}`
-    })
     const response = await api.get<QuoteResponse>(`/api/quote/${ticker}`)
     return response.data
   },
@@ -595,12 +502,6 @@ export const stockApi = {
     if (!query || query.trim().length === 0) {
       return []
     }
-    logApiEvent({
-      type: 'info',
-      method: 'GET',
-      url: `${API_BASE_URL}/api/search`,
-      message: `Searching for tickers: ${query}`
-    })
     const response = await api.get<any>(`/api/search`, {
       params: { q: query }
     })
