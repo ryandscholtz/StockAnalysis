@@ -199,7 +199,7 @@ export default function WatchlistPage() {
   }
 
   return (
-    <div className="container" style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
+    <div className="container watchlist-page" style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
       {/* Header */}
       <div style={{ marginBottom: '32px' }}>
         <h1 style={{ fontSize: '36px', fontWeight: '700', color: '#111827', marginBottom: '8px' }}>
@@ -225,14 +225,17 @@ export default function WatchlistPage() {
       )}
 
       {/* Watchlist Items */}
-      <div style={{
-        background: 'white',
-        borderRadius: '12px',
-        padding: '24px',
-        boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-        border: '1px solid #e5e7eb',
-        marginBottom: '32px'
-      }}>
+      <div
+        className="watchlist-cards-box"
+        style={{
+          background: 'white',
+          borderRadius: '12px',
+          padding: '24px',
+          boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+          border: '1px solid #e5e7eb',
+          marginBottom: '32px'
+        }}
+      >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
             <h2 style={{ fontSize: '24px', fontWeight: '600', color: '#111827', margin: 0 }}>
@@ -344,12 +347,13 @@ export default function WatchlistPage() {
             </button>
           </div>
         ) : (
-          <div style={{ display: 'grid', gap: '16px' }}>
+          <div className="watchlist-cards-grid" style={{ display: 'grid', gap: '16px' }}>
             {sortedItems.map((stock) => {
               const valuation = getValuationDisplay(stock)
               return (
               <div
                 key={stock.ticker}
+                className="watchlist-stock-card"
                 style={{
                   padding: '20px',
                   border: '1px solid #e5e7eb',

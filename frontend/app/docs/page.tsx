@@ -143,41 +143,6 @@ export default function DocsPage() {
             </p>
           </div>
         </div>
-
-        {/* Weighted Average */}
-        <div style={{ backgroundColor: '#eff6ff', padding: '20px', borderRadius: '8px', border: '1px solid #bfdbfe', marginTop: '24px' }}>
-          <h4 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '12px', color: '#1e40af' }}>
-            Weighted Average — How the Models are Combined
-          </h4>
-          <p style={{ fontSize: '16px', lineHeight: '1.7', color: '#374151', marginBottom: '16px' }}>
-            The four model outputs are combined into a single fair value estimate using fixed weights:
-          </p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '16px' }}>
-            {[
-              { label: 'DCF', weight: '40%', color: '#0d9488' },
-              { label: 'P/E', weight: '30%', color: '#7c3aed' },
-              { label: 'EPV', weight: '20%', color: '#0891b2' },
-              { label: 'Book Value', weight: '10%', color: '#0284c7' },
-            ].map(({ label, weight, color }) => (
-              <div key={label} style={{ background: 'white', border: `2px solid ${color}`, borderRadius: '8px', padding: '12px', textAlign: 'center' }}>
-                <div style={{ fontSize: '22px', fontWeight: '700', color }}>{weight}</div>
-                <div style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>{label}</div>
-              </div>
-            ))}
-          </div>
-          <p style={{ fontSize: '15px', lineHeight: '1.6', color: '#374151', marginBottom: '0' }}>
-            DCF receives the highest weight because it is the most comprehensive model — it captures both current
-            earnings power and future growth. P/E grounds the valuation in reported earnings. EPV provides a
-            conservative floor. Book Value guards against overpaying for asset-light stories.
-          </p>
-          <div style={{ backgroundColor: '#fef3c7', padding: '16px', borderRadius: '6px', marginTop: '16px', borderLeft: '4px solid #f59e0b' }}>
-            <p style={{ fontSize: '14px', lineHeight: '1.6', color: '#92400e', margin: 0 }}>
-              <strong>Note:</strong> If a model produces an invalid result (zero, negative, or missing data), its
-              weight is automatically redistributed proportionally across the remaining valid models, so the final
-              fair value always uses the best available data.
-            </p>
-          </div>
-        </div>
       </section>
 
       {/* Analysis Weights & Presets Section */}
@@ -185,6 +150,15 @@ export default function DocsPage() {
         <h2 style={{ fontSize: '28px', fontWeight: '600', marginBottom: '24px', color: '#111827', borderBottom: '2px solid #e5e7eb', paddingBottom: '8px' }}>
           Analysis Weights & Business Type Presets
         </h2>
+        <p style={{ fontSize: '16px', lineHeight: '1.7', color: '#374151', marginBottom: '12px' }}>
+          The four model outputs (DCF, P/E, EPV, and Book Value) are combined into a single fair value estimate using a
+          weighted average. You choose the weights via a preset or custom configuration: DCF is often weighted highest
+          because it is the most comprehensive (current earnings and future growth), P/E grounds the valuation in
+          reported earnings, EPV provides a conservative floor, and Book Value guards against overpaying for
+          asset-light businesses. If a model produces an invalid result (zero, negative, or missing data), its weight
+          is automatically redistributed proportionally across the remaining valid models, so the final fair value
+          always uses the best available data.
+        </p>
         <p style={{ fontSize: '16px', lineHeight: '1.7', color: '#374151', marginBottom: '24px' }}>
           The tool includes 15 pre-configured business type presets, each optimized for specific industries and business models
           based on industry-standard valuation practices. You can select a preset or manually configure weights to customize the analysis.

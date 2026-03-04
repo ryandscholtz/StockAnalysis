@@ -24,7 +24,7 @@ export default function RootLayout({
         <AuthProvider>
           <Providers>
             <Navigation />
-            <main className="flex-1 container mx-auto px-4 py-6">
+            <main className="flex-1 container mx-auto px-0 sm:px-4 py-4 sm:py-6 bg-white sm:bg-transparent">
               {children}
             </main>
             <VersionFooter />

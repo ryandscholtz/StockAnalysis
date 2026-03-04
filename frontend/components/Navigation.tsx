@@ -3,12 +3,27 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAuth } from './AuthProvider'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+
+const MOBILE_BREAKPOINT = 640
 
 export default function Navigation() {
   const pathname = usePathname()
   const { isAuthenticated, user, signOut } = useAuth()
   const [showUserMenu, setShowUserMenu] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    const check = () => setIsMobile(typeof window !== 'undefined' && window.innerWidth < MOBILE_BREAKPOINT)
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
+
+  useEffect(() => {
+    setMenuOpen(false)
+  }, [pathname])
 
   const navItems = [
     { href: '/watchlist', label: 'Watchlist', requireAuth: true },
@@ -22,6 +37,7 @@ export default function Navigation() {
 
   return (
     <nav style={{
+      position: 'relative',
       backgroundColor: 'white',
       borderBottom: '1px solid #e5e7eb',
       padding: '16px 0',
@@ -32,15 +48,71 @@ export default function Navigation() {
         alignItems: 'center',
         justifyContent: 'space-between'
       }}>
-        <Link href="/" style={{
-          fontSize: '20px',
-          fontWeight: '700',
-          color: '#111827',
-          textDecoration: 'none'
-        }}>
+        <Link
+          href="/"
+          style={{
+            fontSize: '20px',
+            fontWeight: '700',
+            color: '#111827',
+            textDecoration: 'none'
+          }}
+          onClick={() => setMenuOpen(false)}
+        >
           Stock Analysis Tool
         </Link>
-        
+
+        {/* Hamburger button - mobile only */}
+        {isMobile && (
+          <button
+            type="button"
+            aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+            onClick={() => setMenuOpen((o) => !o)}
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              gap: '5px',
+              width: '40px',
+              height: '40px',
+              padding: '8px',
+              background: '#f9fafb',
+              border: '1px solid #e5e7eb',
+              borderRadius: '8px',
+              cursor: 'pointer'
+            }}
+          >
+            <span style={{
+              display: 'block',
+              width: '20px',
+              height: '2px',
+              borderRadius: '1px',
+              background: '#374151',
+              transform: menuOpen ? 'rotate(45deg) translate(5px, 5px)' : 'none',
+              transition: 'all 0.2s'
+            }} />
+            <span style={{
+              display: 'block',
+              width: '20px',
+              height: '2px',
+              borderRadius: '1px',
+              background: '#374151',
+              opacity: menuOpen ? 0 : 1,
+              transition: 'opacity 0.2s'
+            }} />
+            <span style={{
+              display: 'block',
+              width: '20px',
+              height: '2px',
+              borderRadius: '1px',
+              background: '#374151',
+              transform: menuOpen ? 'rotate(-45deg) translate(5px, -5px)' : 'none',
+              transition: 'all 0.2s'
+            }} />
+          </button>
+        )}
+
+        {/* Desktop nav */}
+        {!isMobile && (
         <div style={{
           display: 'flex',
           alignItems: 'center',
@@ -253,10 +325,144 @@ export default function Navigation() {
             </div>
           )}
         </div>
+        )}
       </div>
 
-      {/* Click outside to close user menu */}
-      {showUserMenu && (
+      {/* Mobile menu panel - full width below nav */}
+      {isMobile && menuOpen && (
+        <div
+          className="nav-mobile-menu"
+          role="dialog"
+          aria-label="Mobile menu"
+          onClick={(e) => { if (e.target === e.currentTarget) setMenuOpen(false) }}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 60,
+            paddingTop: '60px',
+            backgroundColor: 'rgba(0,0,0,0.3)',
+            overflowY: 'auto'
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              backgroundColor: 'white',
+              borderBottom: '1px solid #e5e7eb',
+              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+              padding: '12px 0',
+              minHeight: '120px'
+            }}
+          >
+          {navItems.map((item) => {
+            if (item.requireAuth && !isAuthenticated) return null
+            const isActive = pathname === item.href || (item.href === '/watchlist' && pathname === '/')
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setMenuOpen(false)}
+                style={{
+                  display: 'block',
+                  padding: '12px 16px',
+                  fontSize: '15px',
+                  fontWeight: '500',
+                  color: isActive ? '#2563eb' : '#374151',
+                  backgroundColor: isActive ? '#eff6ff' : 'transparent',
+                  textDecoration: 'none',
+                  borderLeft: '3px solid transparent'
+                }}
+              >
+                {item.label}
+              </Link>
+            )
+          })}
+          {isAuthenticated ? (
+            <>
+              <div style={{ padding: '12px 16px', borderTop: '1px solid #e5e7eb', marginTop: '8px' }}>
+                <div style={{ fontSize: '13px', color: '#6b7280', marginBottom: '4px' }}>
+                  {user?.email}
+                </div>
+                <div style={{ fontSize: '14px', fontWeight: '600', color: '#111827' }}>
+                  {user?.givenName && user?.familyName ? `${user.givenName} ${user.familyName}` : user?.username}
+                </div>
+              </div>
+              <Link
+                href="/profile"
+                onClick={() => setMenuOpen(false)}
+                style={{
+                  display: 'block',
+                  padding: '12px 16px',
+                  fontSize: '15px',
+                  color: '#374151',
+                  textDecoration: 'none'
+                }}
+              >
+                Profile Settings
+              </Link>
+              <button
+                type="button"
+                onClick={() => { handleSignOut(); setMenuOpen(false) }}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  padding: '12px 16px',
+                  fontSize: '15px',
+                  color: '#dc2626',
+                  background: 'none',
+                  border: 'none',
+                  textAlign: 'left',
+                  cursor: 'pointer'
+                }}
+              >
+                Sign Out
+              </button>
+            </>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px 16px', borderTop: '1px solid #e5e7eb', marginTop: '8px' }}>
+              <Link
+                href="/auth/signin"
+                onClick={() => setMenuOpen(false)}
+                style={{
+                  padding: '12px 16px',
+                  borderRadius: '6px',
+                  textAlign: 'center' as const,
+                  fontSize: '15px',
+                  fontWeight: '500',
+                  color: '#374151',
+                  backgroundColor: '#f3f4f6',
+                  textDecoration: 'none'
+                }}
+              >
+                Sign In
+              </Link>
+              <Link
+                href="/auth/signup"
+                onClick={() => setMenuOpen(false)}
+                style={{
+                  padding: '12px 16px',
+                  borderRadius: '6px',
+                  textAlign: 'center' as const,
+                  fontSize: '15px',
+                  fontWeight: '500',
+                  color: 'white',
+                  backgroundColor: '#2563eb',
+                  textDecoration: 'none'
+                }}
+              >
+                Sign Up
+              </Link>
+            </div>
+          )}
+          </div>
+        </div>
+      )}
+
+      {/* Click outside to close user menu / mobile menu */}
+      {(showUserMenu || (isMobile && menuOpen)) && (
         <div
           style={{
             position: 'fixed',
@@ -266,7 +472,10 @@ export default function Navigation() {
             bottom: 0,
             zIndex: 40
           }}
-          onClick={() => setShowUserMenu(false)}
+          onClick={() => {
+            setShowUserMenu(false)
+            setMenuOpen(false)
+          }}
         />
       )}
     </nav>
