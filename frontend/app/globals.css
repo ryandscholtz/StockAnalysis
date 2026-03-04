@@ -33,6 +33,86 @@ a {
   padding: 20px;
 }
 
+@media (max-width: 639px) {
+  html {
+    font-size: 14px;
+  }
+
+  .container {
+    padding: 10px 6px;
+  }
+
+  .card {
+    padding: 16px;
+  }
+
+  .metric-value {
+    font-size: 15px;
+  }
+
+  .score {
+    font-size: 12px;
+    padding: 3px 10px;
+  }
+
+  .btn {
+    padding: 10px 18px;
+    font-size: 14px;
+  }
+
+  .input {
+    padding: 10px;
+    font-size: 14px;
+  }
+
+  .loading {
+    padding: 24px;
+  }
+
+  .error,
+  .success {
+    padding: 12px;
+    margin: 12px 0;
+  }
+
+  .metric {
+    padding: 8px 0;
+  }
+
+  /* Scale down headings and large text inside main content */
+  main h1 {
+    font-size: 1.5rem !important;
+  }
+
+  main h2 {
+    font-size: 1.25rem !important;
+  }
+
+  main h3 {
+    font-size: 1.1rem !important;
+  }
+
+  /* Watchlist: tighter padding and narrower cards on mobile */
+  .watchlist-page.container {
+    padding: 4px 4px !important;
+  }
+
+  .watchlist-cards-box {
+    padding: 12px !important;
+    margin-bottom: 20px !important;
+    border-radius: 8px;
+  }
+
+  .watchlist-cards-grid {
+    gap: 10px !important;
+  }
+
+  .watchlist-stock-card {
+    padding: 12px !important;
+    max-width: 100%;
+  }
+}
+
 .card {
   background: white;
   border-radius: 8px;
