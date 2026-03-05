@@ -891,6 +891,18 @@ export const stockApi = {
       return { ticker: ticker.toUpperCase(), financial_data: {}, metadata: {}, has_data: false }
     }
   },
+
+  async getExploreMarkets(): Promise<{ markets: ExploreMarket[] }> {
+    const response = await api.get<{ markets: ExploreMarket[] }>('/api/explore/markets')
+    return response.data
+  },
+
+  async getExploreStocks(market: string, forceRefresh = false): Promise<ExploreStocksResponse> {
+    const params: Record<string, string> = { market }
+    if (forceRefresh) params.force_refresh = 'true'
+    const response = await api.get<ExploreStocksResponse>('/api/explore/stocks', { params })
+    return response.data
+  },
 }
 
 export interface WatchlistItem {
@@ -937,5 +949,47 @@ export interface WatchlistItemDetail {
     is_today: boolean
     needs_refresh: boolean
   }
+}
+
+export interface ExploreMarket {
+  id: string
+  name: string
+  description: string
+  region: string
+  ticker_count: number
+}
+
+export interface ExploreStock {
+  ticker: string
+  companyName: string
+  exchange?: string
+  sector?: string
+  industry?: string
+  currency?: string
+  price?: number
+  priceChange?: number
+  priceChangePct?: number
+  marketCap?: number
+  peRatio?: number
+  forwardPE?: number
+  pbRatio?: number
+  psRatio?: number
+  evToEbitda?: number
+  dividendYield?: number
+  week52High?: number
+  week52Low?: number
+  volume?: number
+  avgVolume?: number
+  beta?: number
+  eps?: number
+  roe?: number
+}
+
+export interface ExploreStocksResponse {
+  market: string
+  market_name: string
+  stocks: ExploreStock[]
+  cached: boolean
+  cache_age_seconds: number
 }
 
