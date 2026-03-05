@@ -30,8 +30,8 @@ const LoadingSpinner = () => (
     <div style={{
       width: '40px',
       height: '40px',
-      border: '4px solid #f3f4f6',
-      borderTop: '4px solid #2563eb',
+      border: '4px solid var(--bg-hover)',
+      borderTop: '4px solid var(--color-primary)',
       borderRadius: '50%',
       animation: 'spin 1s linear infinite'
     }}></div>
@@ -133,7 +133,7 @@ export default function WatchlistPage() {
   }
 
   const getPriceChangeColor = (change?: number) => {
-    if (!change) return '#6b7280'
+    if (!change) return 'var(--text-muted)'
     return change >= 0 ? '#10b981' : '#ef4444'
   }
 
@@ -193,7 +193,7 @@ export default function WatchlistPage() {
     return (
       <div className="container" style={{ padding: '40px 20px', textAlign: 'center' }}>
         <LoadingSpinner />
-        <p style={{ marginTop: '20px', color: '#6b7280' }}>Loading your watchlist...</p>
+        <p style={{ marginTop: '20px', color: 'var(--text-muted)' }}>Loading your watchlist...</p>
       </div>
     )
   }
@@ -202,10 +202,10 @@ export default function WatchlistPage() {
     <div className="container watchlist-page" style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
       {/* Header */}
       <div style={{ marginBottom: '32px' }}>
-        <h1 style={{ fontSize: '36px', fontWeight: '700', color: '#111827', marginBottom: '8px' }}>
+        <h1 style={{ fontSize: '36px', fontWeight: '700', color: 'var(--text-primary)', marginBottom: '8px' }}>
           Watchlist
         </h1>
-        <p style={{ fontSize: '16px', color: '#6b7280' }}>
+        <p style={{ fontSize: '16px', color: 'var(--text-muted)' }}>
           Monitor and analyze your favorite stocks with real-time data and comprehensive financial metrics.
         </p>
       </div>
@@ -214,10 +214,10 @@ export default function WatchlistPage() {
       {error && (
         <div style={{
           padding: '12px 16px',
-          backgroundColor: '#fee2e2',
+          backgroundColor: 'var(--status-error-bg)',
           border: '1px solid #ef4444',
           borderRadius: '6px',
-          color: '#991b1b',
+          color: 'var(--status-error-text)',
           marginBottom: '20px'
         }}>
           ⚠️ {error}
@@ -228,20 +228,20 @@ export default function WatchlistPage() {
       <div
         className="watchlist-cards-box"
         style={{
-          background: 'white',
+          background: 'var(--bg-surface)',
           borderRadius: '12px',
           padding: '24px',
-          boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-          border: '1px solid #e5e7eb',
+          boxShadow: '0 4px 6px rgba(0, 0, 0, 0.15)',
+          border: '1px solid var(--border-default)',
           marginBottom: '32px'
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
-            <h2 style={{ fontSize: '24px', fontWeight: '600', color: '#111827', margin: 0 }}>
+            <h2 style={{ fontSize: '24px', fontWeight: '600', color: 'var(--text-primary)', margin: 0 }}>
               📊 Your Stocks
             </h2>
-            <div style={{ display: 'flex', gap: '4px', background: '#f3f4f6', borderRadius: '8px', padding: '3px' }}>
+            <div style={{ display: 'flex', gap: '4px', background: 'var(--bg-hover)', borderRadius: '8px', padding: '3px' }}>
               {(['name', 'undervalued'] as const).map(opt => (
                 <button
                   key={opt}
@@ -253,9 +253,9 @@ export default function WatchlistPage() {
                     fontSize: '13px',
                     fontWeight: '500',
                     cursor: 'pointer',
-                    backgroundColor: sortBy === opt ? 'white' : 'transparent',
-                    color: sortBy === opt ? '#111827' : '#6b7280',
-                    boxShadow: sortBy === opt ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                    backgroundColor: sortBy === opt ? 'var(--bg-surface)' : 'transparent',
+                    color: sortBy === opt ? 'var(--text-primary)' : 'var(--text-muted)',
+                    boxShadow: sortBy === opt ? '0 1px 3px rgba(0,0,0,0.15)' : 'none',
                   }}
                 >
                   {opt === 'name' ? 'Name' : '% Undervalued'}
@@ -284,7 +284,7 @@ export default function WatchlistPage() {
               onClick={loadWatchlist}
               style={{
                 padding: '8px 16px',
-                backgroundColor: '#2563eb',
+                backgroundColor: 'var(--color-primary)',
                 color: 'white',
                 border: 'none',
                 borderRadius: '6px',
@@ -317,23 +317,23 @@ export default function WatchlistPage() {
           <div style={{
             padding: '12px 16px',
             marginBottom: '16px',
-            backgroundColor: bulkResult.success ? '#d1fae5' : '#fee2e2',
+            backgroundColor: bulkResult.success ? 'var(--status-success-bg)' : 'var(--status-error-bg)',
             border: `1px solid ${bulkResult.success ? '#10b981' : '#ef4444'}`,
             borderRadius: '6px',
-            color: bulkResult.success ? '#065f46' : '#991b1b'
+            color: bulkResult.success ? 'var(--status-success-text)' : 'var(--status-error-text)'
           }}>
             {bulkResult.success ? '✅' : '⚠️'} {bulkResult.message}
           </div>
         )}
         
         {watchlistItems.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>
+          <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
             <p>No stocks in your watchlist yet.</p>
             <button
               onClick={() => router.push('/watchlist/add')}
               style={{
                 padding: '10px 20px',
-                backgroundColor: '#2563eb',
+                backgroundColor: 'var(--color-primary)',
                 color: 'white',
                 border: 'none',
                 borderRadius: '6px',
@@ -356,22 +356,22 @@ export default function WatchlistPage() {
                 className="watchlist-stock-card"
                 style={{
                   padding: '20px',
-                  border: '1px solid #e5e7eb',
+                  border: '1px solid var(--border-default)',
                   borderRadius: '8px',
-                  backgroundColor: '#f9fafb',
+                  backgroundColor: 'var(--bg-surface-subtle)',
                   cursor: 'pointer',
                   transition: 'all 0.2s ease'
                 }}
                 onClick={() => handleStockClick(stock.ticker)}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = '#f3f4f6'
+                  e.currentTarget.style.backgroundColor = 'var(--bg-hover)'
                   e.currentTarget.style.borderColor = '#3b82f6'
                   e.currentTarget.style.transform = 'translateY(-2px)'
-                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)'
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.2)'
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = '#f9fafb'
-                  e.currentTarget.style.borderColor = '#e5e7eb'
+                  e.currentTarget.style.backgroundColor = 'var(--bg-surface-subtle)'
+                  e.currentTarget.style.borderColor = 'var(--border-default)'
                   e.currentTarget.style.transform = 'translateY(0)'
                   e.currentTarget.style.boxShadow = 'none'
                 }}
@@ -379,7 +379,7 @@ export default function WatchlistPage() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px' }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px', flexWrap: 'wrap' }}>
-                      <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#111827', margin: 0 }}>
+                      <h3 style={{ fontSize: '18px', fontWeight: '600', color: 'var(--text-primary)', margin: 0 }}>
                         {stock.company_name || `${stock.ticker} Corporation`}
                       </h3>
                       {stock.recommendation && (
@@ -413,30 +413,30 @@ export default function WatchlistPage() {
                           borderRadius: '8px',
                           fontSize: '12px',
                           fontWeight: '500',
-                          color: '#92400e',
-                          backgroundColor: '#fef3c7',
-                          border: '1px solid #fde68a',
+                          color: 'var(--status-warning-text)',
+                          backgroundColor: 'var(--status-warning-bg)',
+                          border: '1px solid var(--status-warning-border)',
                         }}>
                           ⚠ Incomplete Data
                         </span>
                       )}
                     </div>
-                    <p style={{ fontSize: '14px', color: '#6b7280', margin: '0 0 4px 0' }}>
+                    <p style={{ fontSize: '14px', color: 'var(--text-muted)', margin: '0 0 4px 0' }}>
                       {stock.ticker}
                     </p>
                     <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginTop: '6px', alignItems: 'center' }}>
                       {stock.fair_value != null && !isNaN(stock.fair_value) && (
-                        <span style={{ fontSize: '12px', color: '#4b5563' }}>
+                        <span style={{ fontSize: '12px', color: 'var(--text-meta)' }}>
                           Fair value: {formatPrice(stock.fair_value, stock.currency)}
                         </span>
                       )}
                       {stock.pe_ratio != null && !isNaN(stock.pe_ratio) && (
-                        <span style={{ fontSize: '12px', color: '#4b5563' }}>
+                        <span style={{ fontSize: '12px', color: 'var(--text-meta)' }}>
                           P/E: {stock.pe_ratio.toFixed(1)}
                         </span>
                       )}
                       {(stock.financial_health_score != null || stock.business_quality_score != null) && (
-                        <span style={{ fontSize: '12px', color: '#6b7280' }}>
+                        <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
                           {stock.financial_health_score != null && `Health ${Math.round(stock.financial_health_score)}`}
                           {stock.financial_health_score != null && stock.business_quality_score != null && ' · '}
                           {stock.business_quality_score != null && `Quality ${Math.round(stock.business_quality_score)}`}
@@ -444,7 +444,7 @@ export default function WatchlistPage() {
                       )}
                     </div>
                     {(stock.last_updated || stock.last_analyzed_at) && (
-                      <p style={{ fontSize: '12px', color: '#9ca3af', margin: '4px 0 0 0' }}>
+                      <p style={{ fontSize: '12px', color: 'var(--text-subtle)', margin: '4px 0 0 0' }}>
                         Updated: {new Date(stock.last_analyzed_at || stock.last_updated!).toLocaleDateString()}
                       </p>
                     )}
@@ -453,7 +453,7 @@ export default function WatchlistPage() {
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
                     {stock.current_price ? (
                       <>
-                        <div style={{ fontSize: '20px', fontWeight: '700', color: '#111827' }}>
+                        <div style={{ fontSize: '20px', fontWeight: '700', color: 'var(--text-primary)' }}>
                           {formatPrice(stock.current_price, stock.currency)}
                         </div>
                         {stock.price_change !== undefined && (
@@ -472,7 +472,7 @@ export default function WatchlistPage() {
                         )}
                       </>
                     ) : (
-                      <div style={{ fontSize: '14px', color: '#6b7280' }}>
+                      <div style={{ fontSize: '14px', color: 'var(--text-muted)' }}>
                         Price unavailable
                       </div>
                     )}
@@ -483,7 +483,7 @@ export default function WatchlistPage() {
                         <div style={{
                           fontSize: '15px',
                           fontWeight: '700',
-                          color: isUndervalued ? '#059669' : '#6b7280',
+                          color: isUndervalued ? '#059669' : 'var(--text-muted)',
                           marginTop: '4px',
                         }}>
                           V/P: {multiplier.toFixed(2)}x

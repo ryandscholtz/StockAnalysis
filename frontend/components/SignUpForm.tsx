@@ -4,6 +4,25 @@ import { useState } from 'react'
 import { useAuth } from './AuthProvider'
 import { useRouter } from 'next/navigation'
 
+const inputStyle = {
+  width: '100%',
+  padding: '10px 12px',
+  border: '1px solid var(--border-input)',
+  borderRadius: '6px',
+  fontSize: '14px',
+  boxSizing: 'border-box' as const,
+  backgroundColor: 'var(--bg-surface)',
+  color: 'var(--text-primary)'
+}
+
+const labelStyle = {
+  display: 'block',
+  marginBottom: '6px',
+  fontSize: '14px',
+  fontWeight: '500' as const,
+  color: 'var(--text-secondary)'
+}
+
 export default function SignUpForm() {
   const [formData, setFormData] = useState({
     username: '',
@@ -25,14 +44,12 @@ export default function SignUpForm() {
     setLoading(true)
     setError('')
 
-    // Validate passwords match
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match')
       setLoading(false)
       return
     }
 
-    // Validate password strength
     if (formData.password.length < 8) {
       setError('Password must be at least 8 characters long')
       setLoading(false)
@@ -49,7 +66,6 @@ export default function SignUpForm() {
       )
       
       setSuccess(true)
-      // Redirect to confirmation page after 2 seconds
       setTimeout(() => {
         router.push(`/auth/confirm?username=${encodeURIComponent(formData.username)}`)
       }, 2000)
@@ -73,17 +89,17 @@ export default function SignUpForm() {
       <div className="card" style={{ maxWidth: '400px', margin: '0 auto', textAlign: 'center' }}>
         <div style={{
           padding: '24px',
-          backgroundColor: '#f0fdf4',
+          backgroundColor: 'var(--status-success-bg)',
           border: '1px solid #86efac',
           borderRadius: '8px',
           marginBottom: '16px'
         }}>
-          <h2 style={{ color: '#166534', marginBottom: '12px' }}>Account Created!</h2>
-          <p style={{ color: '#166534', margin: 0 }}>
+          <h2 style={{ color: 'var(--status-success-text)', marginBottom: '12px' }}>Account Created!</h2>
+          <p style={{ color: 'var(--status-success-text)', margin: 0 }}>
             Please check your email for a verification code to complete your registration.
           </p>
         </div>
-        <p style={{ fontSize: '14px', color: '#6b7280' }}>
+        <p style={{ fontSize: '14px', color: 'var(--text-muted)' }}>
           Redirecting to confirmation page...
         </p>
       </div>
@@ -97,11 +113,11 @@ export default function SignUpForm() {
       {error && (
         <div style={{
           padding: '12px',
-          backgroundColor: '#fef2f2',
+          backgroundColor: 'var(--status-error-bg)',
           border: '1px solid #fecaca',
           borderRadius: '6px',
           marginBottom: '16px',
-          color: '#dc2626',
+          color: 'var(--status-error-text)',
           fontSize: '14px'
         }}>
           {error}
@@ -111,168 +127,78 @@ export default function SignUpForm() {
       <form onSubmit={handleSubmit}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
           <div>
-            <label style={{ 
-              display: 'block', 
-              marginBottom: '6px', 
-              fontSize: '14px', 
-              fontWeight: '500',
-              color: '#374151'
-            }}>
-              First Name
-            </label>
+            <label style={labelStyle}>First Name</label>
             <input
               type="text"
               name="givenName"
               value={formData.givenName}
               onChange={handleChange}
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                border: '1px solid #d1d5db',
-                borderRadius: '6px',
-                fontSize: '14px',
-                boxSizing: 'border-box'
-              }}
+              style={inputStyle}
               placeholder="First name"
             />
           </div>
           
           <div>
-            <label style={{ 
-              display: 'block', 
-              marginBottom: '6px', 
-              fontSize: '14px', 
-              fontWeight: '500',
-              color: '#374151'
-            }}>
-              Last Name
-            </label>
+            <label style={labelStyle}>Last Name</label>
             <input
               type="text"
               name="familyName"
               value={formData.familyName}
               onChange={handleChange}
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                border: '1px solid #d1d5db',
-                borderRadius: '6px',
-                fontSize: '14px',
-                boxSizing: 'border-box'
-              }}
+              style={inputStyle}
               placeholder="Last name"
             />
           </div>
         </div>
 
         <div style={{ marginBottom: '16px' }}>
-          <label style={{ 
-            display: 'block', 
-            marginBottom: '6px', 
-            fontSize: '14px', 
-            fontWeight: '500',
-            color: '#374151'
-          }}>
-            Username *
-          </label>
+          <label style={labelStyle}>Username *</label>
           <input
             type="text"
             name="username"
             value={formData.username}
             onChange={handleChange}
             required
-            style={{
-              width: '100%',
-              padding: '10px 12px',
-              border: '1px solid #d1d5db',
-              borderRadius: '6px',
-              fontSize: '14px',
-              boxSizing: 'border-box'
-            }}
+            style={inputStyle}
             placeholder="Choose a username"
           />
         </div>
 
         <div style={{ marginBottom: '16px' }}>
-          <label style={{ 
-            display: 'block', 
-            marginBottom: '6px', 
-            fontSize: '14px', 
-            fontWeight: '500',
-            color: '#374151'
-          }}>
-            Email Address *
-          </label>
+          <label style={labelStyle}>Email Address *</label>
           <input
             type="email"
             name="email"
             value={formData.email}
             onChange={handleChange}
             required
-            style={{
-              width: '100%',
-              padding: '10px 12px',
-              border: '1px solid #d1d5db',
-              borderRadius: '6px',
-              fontSize: '14px',
-              boxSizing: 'border-box'
-            }}
+            style={inputStyle}
             placeholder="Enter your email"
           />
         </div>
 
         <div style={{ marginBottom: '16px' }}>
-          <label style={{ 
-            display: 'block', 
-            marginBottom: '6px', 
-            fontSize: '14px', 
-            fontWeight: '500',
-            color: '#374151'
-          }}>
-            Password *
-          </label>
+          <label style={labelStyle}>Password *</label>
           <input
             type="password"
             name="password"
             value={formData.password}
             onChange={handleChange}
             required
-            style={{
-              width: '100%',
-              padding: '10px 12px',
-              border: '1px solid #d1d5db',
-              borderRadius: '6px',
-              fontSize: '14px',
-              boxSizing: 'border-box'
-            }}
+            style={inputStyle}
             placeholder="Create a password (min 8 characters)"
           />
         </div>
 
         <div style={{ marginBottom: '24px' }}>
-          <label style={{ 
-            display: 'block', 
-            marginBottom: '6px', 
-            fontSize: '14px', 
-            fontWeight: '500',
-            color: '#374151'
-          }}>
-            Confirm Password *
-          </label>
+          <label style={labelStyle}>Confirm Password *</label>
           <input
             type="password"
             name="confirmPassword"
             value={formData.confirmPassword}
             onChange={handleChange}
             required
-            style={{
-              width: '100%',
-              padding: '10px 12px',
-              border: '1px solid #d1d5db',
-              borderRadius: '6px',
-              fontSize: '14px',
-              boxSizing: 'border-box'
-            }}
+            style={inputStyle}
             placeholder="Confirm your password"
           />
         </div>
@@ -283,7 +209,7 @@ export default function SignUpForm() {
           style={{
             width: '100%',
             padding: '12px',
-            backgroundColor: loading ? '#9ca3af' : '#2563eb',
+            backgroundColor: loading ? '#9ca3af' : 'var(--color-primary)',
             color: 'white',
             border: 'none',
             borderRadius: '6px',
@@ -297,12 +223,12 @@ export default function SignUpForm() {
         </button>
       </form>
 
-      <div style={{ textAlign: 'center', fontSize: '14px', color: '#6b7280' }}>
+      <div style={{ textAlign: 'center', fontSize: '14px', color: 'var(--text-muted)' }}>
         <p>
           Already have an account?{' '}
           <a 
             href="/auth/signin" 
-            style={{ color: '#2563eb', textDecoration: 'none' }}
+            style={{ color: 'var(--color-primary)', textDecoration: 'none' }}
           >
             Sign in
           </a>

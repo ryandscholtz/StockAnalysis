@@ -67,10 +67,10 @@ export default function VersionFooter() {
       <footer style={{
         marginTop: 'auto',
         padding: '12px 20px',
-        backgroundColor: '#f9fafb',
-        borderTop: '1px solid #e5e7eb',
+        backgroundColor: 'var(--bg-surface-subtle)',
+        borderTop: '1px solid var(--border-default)',
         fontSize: '12px',
-        color: '#6b7280',
+        color: 'var(--text-muted)',
         textAlign: 'center'
       }}>
         <div style={{
@@ -90,10 +90,10 @@ export default function VersionFooter() {
     <footer style={{
       marginTop: 'auto',
       padding: '12px 20px',
-      backgroundColor: '#f9fafb',
-      borderTop: '1px solid #e5e7eb',
+      backgroundColor: 'var(--bg-surface-subtle)',
+      borderTop: '1px solid var(--border-default)',
       fontSize: '12px',
-      color: '#6b7280',
+      color: 'var(--text-muted)',
       textAlign: 'center'
     }}>
       <div style={{

@@ -20,11 +20,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="flex flex-col min-h-screen bg-gray-50 text-gray-900">
+      <body className="flex flex-col min-h-screen bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-slate-100">
         <AuthProvider>
           <Providers>
             <Navigation />
-            <main className="flex-1 container mx-auto px-0 sm:px-4 py-4 sm:py-6 bg-white sm:bg-transparent">
+            <main className="flex-1 container mx-auto px-0 sm:px-4 py-4 sm:py-6 bg-white dark:bg-slate-900 sm:bg-transparent sm:dark:bg-transparent">
               {children}
             </main>
             <VersionFooter />

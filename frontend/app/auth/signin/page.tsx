@@ -9,7 +9,7 @@ export default function SignInPage() {
         <h1 style={{ fontSize: '32px', marginBottom: '12px' }}>
           Welcome Back
         </h1>
-        <p style={{ fontSize: '16px', color: '#6b7280' }}>
+        <p style={{ fontSize: '16px', color: 'var(--text-muted)' }}>
           Sign in to access your personalized stock analysis dashboard
         </p>
       </div>
@@ -20,11 +20,11 @@ export default function SignInPage() {
         textAlign: 'center', 
         marginTop: '40px', 
         padding: '20px',
-        backgroundColor: '#f9fafb',
+        backgroundColor: 'var(--bg-surface-subtle)',
         borderRadius: '8px',
-        border: '1px solid #e5e7eb'
+        border: '1px solid var(--border-default)'
       }}>
-        <h3 style={{ margin: '0 0 12px 0', fontSize: '18px', color: '#374151' }}>
+        <h3 style={{ margin: '0 0 12px 0', fontSize: '18px', color: 'var(--text-secondary)' }}>
           Why Create an Account?
         </h3>
         <ul style={{ 
@@ -34,7 +34,7 @@ export default function SignInPage() {
           padding: 0,
           listStyle: 'none',
           fontSize: '14px',
-          color: '#6b7280'
+          color: 'var(--text-muted)'
         }}>
           <li style={{ marginBottom: '8px', display: 'flex', alignItems: 'center' }}>
             <span style={{ color: '#10b981', marginRight: '8px' }}>✓</span>
