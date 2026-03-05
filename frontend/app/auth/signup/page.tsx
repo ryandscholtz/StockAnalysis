@@ -9,7 +9,7 @@ export default function SignUpPage() {
         <h1 style={{ fontSize: '32px', marginBottom: '12px' }}>
           Join Stock Analysis
         </h1>
-        <p style={{ fontSize: '16px', color: '#6b7280' }}>
+        <p style={{ fontSize: '16px', color: 'var(--text-muted)' }}>
           Create your free account to start building personalized watchlists and analysis
         </p>
       </div>

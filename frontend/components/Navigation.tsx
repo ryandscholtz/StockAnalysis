@@ -38,8 +38,8 @@ export default function Navigation() {
   return (
     <nav style={{
       position: 'relative',
-      backgroundColor: 'white',
-      borderBottom: '1px solid #e5e7eb',
+      backgroundColor: 'var(--bg-surface)',
+      borderBottom: '1px solid var(--border-default)',
       padding: '16px 0',
       marginBottom: '20px'
     }}>
@@ -53,7 +53,7 @@ export default function Navigation() {
           style={{
             fontSize: '20px',
             fontWeight: '700',
-            color: '#111827',
+            color: 'var(--text-primary)',
             textDecoration: 'none'
           }}
           onClick={() => setMenuOpen(false)}
@@ -75,8 +75,8 @@ export default function Navigation() {
               width: '40px',
               height: '40px',
               padding: '8px',
-              background: '#f9fafb',
-              border: '1px solid #e5e7eb',
+              background: 'var(--bg-surface-subtle)',
+              border: '1px solid var(--border-default)',
               borderRadius: '8px',
               cursor: 'pointer'
             }}
@@ -86,7 +86,7 @@ export default function Navigation() {
               width: '20px',
               height: '2px',
               borderRadius: '1px',
-              background: '#374151',
+              background: 'var(--text-secondary)',
               transform: menuOpen ? 'rotate(45deg) translate(5px, 5px)' : 'none',
               transition: 'all 0.2s'
             }} />
@@ -95,7 +95,7 @@ export default function Navigation() {
               width: '20px',
               height: '2px',
               borderRadius: '1px',
-              background: '#374151',
+              background: 'var(--text-secondary)',
               opacity: menuOpen ? 0 : 1,
               transition: 'opacity 0.2s'
             }} />
@@ -104,7 +104,7 @@ export default function Navigation() {
               width: '20px',
               height: '2px',
               borderRadius: '1px',
-              background: '#374151',
+              background: 'var(--text-secondary)',
               transform: menuOpen ? 'rotate(-45deg) translate(5px, -5px)' : 'none',
               transition: 'all 0.2s'
             }} />
@@ -136,13 +136,13 @@ export default function Navigation() {
                   textDecoration: 'none',
                   fontSize: '14px',
                   fontWeight: '500',
-                  color: isActive ? '#2563eb' : '#6b7280',
-                  backgroundColor: isActive ? '#eff6ff' : 'transparent',
+                  color: isActive ? 'var(--color-primary)' : 'var(--text-muted)',
+                  backgroundColor: isActive ? 'var(--color-primary-bg)' : 'transparent',
                   transition: 'all 0.2s'
                 }}
                 onMouseEnter={(e) => {
                   if (!isActive) {
-                    e.currentTarget.style.backgroundColor = '#f3f4f6'
+                    e.currentTarget.style.backgroundColor = 'var(--bg-hover)'
                   }
                 }}
                 onMouseLeave={(e) => {
@@ -166,12 +166,12 @@ export default function Navigation() {
                   alignItems: 'center',
                   gap: '8px',
                   padding: '8px 12px',
-                  backgroundColor: '#f3f4f6',
-                  border: '1px solid #d1d5db',
+                  backgroundColor: 'var(--bg-hover)',
+                  border: '1px solid var(--border-input)',
                   borderRadius: '6px',
                   fontSize: '14px',
                   fontWeight: '500',
-                  color: '#374151',
+                  color: 'var(--text-secondary)',
                   cursor: 'pointer'
                 }}
               >
@@ -179,7 +179,7 @@ export default function Navigation() {
                   width: '24px',
                   height: '24px',
                   borderRadius: '50%',
-                  backgroundColor: '#2563eb',
+                  backgroundColor: 'var(--color-primary)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -199,21 +199,21 @@ export default function Navigation() {
                   top: '100%',
                   right: 0,
                   marginTop: '4px',
-                  backgroundColor: 'white',
-                  border: '1px solid #d1d5db',
+                  backgroundColor: 'var(--bg-surface)',
+                  border: '1px solid var(--border-input)',
                   borderRadius: '6px',
-                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2)',
                   minWidth: '200px',
                   zIndex: 50
                 }}>
-                  <div style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb' }}>
-                    <div style={{ fontSize: '14px', fontWeight: '500', color: '#111827' }}>
+                  <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border-default)' }}>
+                    <div style={{ fontSize: '14px', fontWeight: '500', color: 'var(--text-primary)' }}>
                       {user?.givenName && user?.familyName 
                         ? `${user.givenName} ${user.familyName}`
                         : user?.username
                       }
                     </div>
-                    <div style={{ fontSize: '12px', color: '#6b7280' }}>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
                       {user?.email}
                     </div>
                     <div style={{ 
@@ -238,11 +238,11 @@ export default function Navigation() {
                         display: 'block',
                         padding: '8px 16px',
                         fontSize: '14px',
-                        color: '#374151',
+                        color: 'var(--text-secondary)',
                         textDecoration: 'none'
                       }}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = '#f3f4f6'
+                        e.currentTarget.style.backgroundColor = 'var(--bg-hover)'
                       }}
                       onMouseLeave={(e) => {
                         e.currentTarget.style.backgroundColor = 'transparent'
@@ -266,7 +266,7 @@ export default function Navigation() {
                         cursor: 'pointer'
                       }}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = '#fef2f2'
+                        e.currentTarget.style.backgroundColor = 'var(--status-error-bg)'
                       }}
                       onMouseLeave={(e) => {
                         e.currentTarget.style.backgroundColor = 'transparent'
@@ -288,12 +288,12 @@ export default function Navigation() {
                   textDecoration: 'none',
                   fontSize: '14px',
                   fontWeight: '500',
-                  color: '#6b7280',
+                  color: 'var(--text-muted)',
                   backgroundColor: 'transparent',
                   transition: 'all 0.2s'
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = '#f3f4f6'
+                  e.currentTarget.style.backgroundColor = 'var(--bg-hover)'
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.backgroundColor = 'transparent'
@@ -310,14 +310,14 @@ export default function Navigation() {
                   fontSize: '14px',
                   fontWeight: '500',
                   color: 'white',
-                  backgroundColor: '#2563eb',
+                  backgroundColor: 'var(--color-primary)',
                   transition: 'all 0.2s'
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = '#1d4ed8'
+                  e.currentTarget.style.backgroundColor = 'var(--color-primary-hover)'
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = '#2563eb'
+                  e.currentTarget.style.backgroundColor = 'var(--color-primary)'
                 }}
               >
                 Sign Up
@@ -343,16 +343,16 @@ export default function Navigation() {
             bottom: 0,
             zIndex: 60,
             paddingTop: '60px',
-            backgroundColor: 'rgba(0,0,0,0.3)',
+            backgroundColor: 'rgba(0,0,0,0.4)',
             overflowY: 'auto'
           }}
         >
           <div
             onClick={(e) => e.stopPropagation()}
             style={{
-              backgroundColor: 'white',
-              borderBottom: '1px solid #e5e7eb',
-              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+              backgroundColor: 'var(--bg-surface)',
+              borderBottom: '1px solid var(--border-default)',
+              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2)',
               padding: '12px 0',
               minHeight: '120px'
             }}
@@ -370,8 +370,8 @@ export default function Navigation() {
                   padding: '12px 16px',
                   fontSize: '15px',
                   fontWeight: '500',
-                  color: isActive ? '#2563eb' : '#374151',
-                  backgroundColor: isActive ? '#eff6ff' : 'transparent',
+                  color: isActive ? 'var(--color-primary)' : 'var(--text-secondary)',
+                  backgroundColor: isActive ? 'var(--color-primary-bg)' : 'transparent',
                   textDecoration: 'none',
                   borderLeft: '3px solid transparent'
                 }}
@@ -382,11 +382,11 @@ export default function Navigation() {
           })}
           {isAuthenticated ? (
             <>
-              <div style={{ padding: '12px 16px', borderTop: '1px solid #e5e7eb', marginTop: '8px' }}>
-                <div style={{ fontSize: '13px', color: '#6b7280', marginBottom: '4px' }}>
+              <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border-default)', marginTop: '8px' }}>
+                <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '4px' }}>
                   {user?.email}
                 </div>
-                <div style={{ fontSize: '14px', fontWeight: '600', color: '#111827' }}>
+                <div style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-primary)' }}>
                   {user?.givenName && user?.familyName ? `${user.givenName} ${user.familyName}` : user?.username}
                 </div>
               </div>
@@ -397,7 +397,7 @@ export default function Navigation() {
                   display: 'block',
                   padding: '12px 16px',
                   fontSize: '15px',
-                  color: '#374151',
+                  color: 'var(--text-secondary)',
                   textDecoration: 'none'
                 }}
               >
@@ -422,7 +422,7 @@ export default function Navigation() {
               </button>
             </>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px 16px', borderTop: '1px solid #e5e7eb', marginTop: '8px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px 16px', borderTop: '1px solid var(--border-default)', marginTop: '8px' }}>
               <Link
                 href="/auth/signin"
                 onClick={() => setMenuOpen(false)}
@@ -432,8 +432,8 @@ export default function Navigation() {
                   textAlign: 'center' as const,
                   fontSize: '15px',
                   fontWeight: '500',
-                  color: '#374151',
-                  backgroundColor: '#f3f4f6',
+                  color: 'var(--text-secondary)',
+                  backgroundColor: 'var(--bg-hover)',
                   textDecoration: 'none'
                 }}
               >
@@ -449,7 +449,7 @@ export default function Navigation() {
                   fontSize: '15px',
                   fontWeight: '500',
                   color: 'white',
-                  backgroundColor: '#2563eb',
+                  backgroundColor: 'var(--color-primary)',
                   textDecoration: 'none'
                 }}
               >
@@ -481,4 +481,3 @@ export default function Navigation() {
     </nav>
   )
 }
-

@@ -163,17 +163,17 @@ function AddToWatchlistContent() {
 
   return (
     <div className="container" style={{ padding: '40px 20px', maxWidth: '600px', margin: '0 auto' }}>
-      <h1 style={{ fontSize: '28px', fontWeight: '700', color: '#111827', marginBottom: '24px' }}>
+      <h1 style={{ fontSize: '28px', fontWeight: '700', color: 'var(--text-primary)', marginBottom: '24px' }}>
         Add Stock to Watchlist
       </h1>
 
       {error && (
         <div style={{
           padding: '12px 16px',
-          backgroundColor: '#fee2e2',
+          backgroundColor: 'var(--status-error-bg)',
           border: '1px solid #ef4444',
           borderRadius: '6px',
-          color: '#991b1b',
+          color: 'var(--status-error-text)',
           marginBottom: '20px'
         }}>
           ❌ {error}
@@ -188,11 +188,11 @@ function AddToWatchlistContent() {
           onChange={(e) => setSearchQuery(e.target.value || '')}
           onKeyDown={handleKeyDown}
           onFocus={(e) => {
-            e.currentTarget.style.borderColor = '#2563eb'
+            e.currentTarget.style.borderColor = 'var(--color-primary)'
             setShowSuggestions(suggestions.length > 0)
           }}
           onBlur={(e) => {
-            e.currentTarget.style.borderColor = '#d1d5db'
+            e.currentTarget.style.borderColor = 'var(--border-input)'
             // Delay hiding suggestions to allow click
             setTimeout(() => setShowSuggestions(false), 200)
           }}
@@ -202,10 +202,12 @@ function AddToWatchlistContent() {
             width: '100%',
             padding: '12px 16px',
             fontSize: '16px',
-            border: '1px solid #d1d5db',
+            border: '1px solid var(--border-input)',
             borderRadius: '6px',
             outline: 'none',
-            transition: 'border-color 0.2s'
+            transition: 'border-color 0.2s',
+            backgroundColor: 'var(--bg-surface)',
+            color: 'var(--text-primary)'
           }}
         />
 
@@ -215,7 +217,7 @@ function AddToWatchlistContent() {
             right: '16px',
             top: '50%',
             transform: 'translateY(-50%)',
-            color: '#6b7280'
+            color: 'var(--text-muted)'
           }}>
             Searching...
           </div>
@@ -228,10 +230,10 @@ function AddToWatchlistContent() {
             left: 0,
             right: 0,
             marginTop: '4px',
-            backgroundColor: 'white',
-            border: '1px solid #e5e7eb',
+            backgroundColor: 'var(--bg-surface)',
+            border: '1px solid var(--border-default)',
             borderRadius: '6px',
-            boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+            boxShadow: '0 4px 6px rgba(0,0,0,0.15)',
             maxHeight: '300px',
             overflowY: 'auto',
             zIndex: 1000
@@ -247,30 +249,30 @@ function AddToWatchlistContent() {
                 style={{
                   padding: '12px 16px',
                   cursor: 'pointer',
-                  backgroundColor: index === selectedIndex ? '#eff6ff' : 'white',
-                  borderBottom: index < suggestions.length - 1 ? '1px solid #f3f4f6' : 'none'
+                  backgroundColor: index === selectedIndex ? 'var(--color-primary-bg)' : 'var(--bg-surface)',
+                  borderBottom: index < suggestions.length - 1 ? '1px solid var(--border-default)' : 'none'
                 }}
                 onMouseEnter={(e) => {
                   if (index !== selectedIndex) {
-                    e.currentTarget.style.backgroundColor = '#f9fafb'
+                    e.currentTarget.style.backgroundColor = 'var(--bg-surface-subtle)'
                   }
                 }}
                 onMouseLeave={(e) => {
                   if (index !== selectedIndex) {
-                    e.currentTarget.style.backgroundColor = 'white'
+                    e.currentTarget.style.backgroundColor = 'var(--bg-surface)'
                   }
                 }}
               >
-                <div style={{ fontWeight: '600', color: '#111827', marginBottom: '4px' }}>
+                <div style={{ fontWeight: '600', color: 'var(--text-primary)', marginBottom: '4px' }}>
                   {suggestion.ticker}
                   {suggestion.exchange && (
-                    <span style={{ fontSize: '14px', color: '#6b7280', fontWeight: '400', marginLeft: '8px' }}>
+                    <span style={{ fontSize: '14px', color: 'var(--text-muted)', fontWeight: '400', marginLeft: '8px' }}>
                       ({suggestion.exchange})
                     </span>
                   )}
                 </div>
                 {suggestion.companyName && (
-                  <div style={{ fontSize: '13px', color: '#6b7280' }}>
+                  <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
                     {suggestion.companyName}
                   </div>
                 )}
@@ -286,8 +288,8 @@ function AddToWatchlistContent() {
           disabled={adding}
           style={{
             padding: '10px 20px',
-            backgroundColor: '#f3f4f6',
-            color: '#374151',
+            backgroundColor: 'var(--bg-hover)',
+            color: 'var(--text-secondary)',
             border: 'none',
             borderRadius: '6px',
             fontSize: '14px',
@@ -304,9 +306,9 @@ function AddToWatchlistContent() {
         <div style={{
           marginTop: '20px',
           padding: '12px',
-          backgroundColor: '#eff6ff',
+          backgroundColor: 'var(--color-primary-bg)',
           borderRadius: '6px',
-          color: '#1e40af',
+          color: 'var(--color-primary)',
           textAlign: 'center'
         }}>
           Adding to watchlist...

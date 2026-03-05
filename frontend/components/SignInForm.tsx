@@ -44,11 +44,11 @@ export default function SignInForm() {
       {error && (
         <div style={{
           padding: '12px',
-          backgroundColor: '#fef2f2',
+          backgroundColor: 'var(--status-error-bg)',
           border: '1px solid #fecaca',
           borderRadius: '6px',
           marginBottom: '16px',
-          color: '#dc2626',
+          color: 'var(--status-error-text)',
           fontSize: '14px'
         }}>
           {error}
@@ -62,7 +62,7 @@ export default function SignInForm() {
             marginBottom: '6px', 
             fontSize: '14px', 
             fontWeight: '500',
-            color: '#374151'
+            color: 'var(--text-secondary)'
           }}>
             Username or Email
           </label>
@@ -75,10 +75,12 @@ export default function SignInForm() {
             style={{
               width: '100%',
               padding: '10px 12px',
-              border: '1px solid #d1d5db',
+              border: '1px solid var(--border-input)',
               borderRadius: '6px',
               fontSize: '14px',
-              boxSizing: 'border-box'
+              boxSizing: 'border-box',
+              backgroundColor: 'var(--bg-surface)',
+              color: 'var(--text-primary)'
             }}
             placeholder="Enter your username or email"
           />
@@ -90,7 +92,7 @@ export default function SignInForm() {
             marginBottom: '6px', 
             fontSize: '14px', 
             fontWeight: '500',
-            color: '#374151'
+            color: 'var(--text-secondary)'
           }}>
             Password
           </label>
@@ -103,10 +105,12 @@ export default function SignInForm() {
             style={{
               width: '100%',
               padding: '10px 12px',
-              border: '1px solid #d1d5db',
+              border: '1px solid var(--border-input)',
               borderRadius: '6px',
               fontSize: '14px',
-              boxSizing: 'border-box'
+              boxSizing: 'border-box',
+              backgroundColor: 'var(--bg-surface)',
+              color: 'var(--text-primary)'
             }}
             placeholder="Enter your password"
           />
@@ -118,7 +122,7 @@ export default function SignInForm() {
           style={{
             width: '100%',
             padding: '12px',
-            backgroundColor: loading ? '#9ca3af' : '#2563eb',
+            backgroundColor: loading ? '#9ca3af' : 'var(--color-primary)',
             color: 'white',
             border: 'none',
             borderRadius: '6px',
@@ -132,12 +136,12 @@ export default function SignInForm() {
         </button>
       </form>
 
-      <div style={{ textAlign: 'center', fontSize: '14px', color: '#6b7280' }}>
+      <div style={{ textAlign: 'center', fontSize: '14px', color: 'var(--text-muted)' }}>
         <p>
           Don't have an account?{' '}
           <a 
             href="/auth/signup" 
-            style={{ color: '#2563eb', textDecoration: 'none' }}
+            style={{ color: 'var(--color-primary)', textDecoration: 'none' }}
           >
             Sign up
           </a>
@@ -145,7 +149,7 @@ export default function SignInForm() {
         <p>
           <a 
             href="/auth/forgot-password" 
-            style={{ color: '#2563eb', textDecoration: 'none' }}
+            style={{ color: 'var(--color-primary)', textDecoration: 'none' }}
           >
             Forgot your password?
           </a>
