@@ -2,6 +2,16 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --bg-app: #f5f5f5;
+  --bg-surface: #ffffff;
+  --bg-muted: #f9fafb;
+  --bg-subtle: #f3f4f6;
+  --text-primary: #111827;
+  --text-secondary: #6b7280;
+  --border-color: #e5e7eb;
+}
+
 * {
   box-sizing: border-box;
   padding: 0;
@@ -17,8 +27,9 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #f5f5f5;
-  color: #333;
+  background-color: var(--bg-app);
+  color: var(--text-primary);
+  color-scheme: light;
 }
 
 a {
@@ -114,7 +125,7 @@ a {
 }
 
 .card {
-  background: white;
+  background: var(--bg-surface);
   border-radius: 8px;
   padding: 24px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
@@ -147,10 +158,12 @@ a {
 
 .input {
   padding: 12px;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--border-color);
   border-radius: 6px;
   font-size: 16px;
   width: 100%;
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
 }
 
 .input:focus {
@@ -162,7 +175,7 @@ a {
 .loading {
   text-align: center;
   padding: 40px;
-  color: #6b7280;
+  color: var(--text-secondary);
 }
 
 .error {
@@ -186,7 +199,7 @@ a {
   justify-content: space-between;
   align-items: center;
   padding: 12px 0;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .metric:last-child {
@@ -195,13 +208,13 @@ a {
 
 .metric-label {
   font-weight: 500;
-  color: #6b7280;
+  color: var(--text-secondary);
 }
 
 .metric-value {
   font-weight: 600;
   font-size: 18px;
-  color: #111827;
+  color: var(--text-primary);
 }
 
 .recommendation-strong-buy {
@@ -266,6 +279,95 @@ a {
   to {
     transform: translateX(100%);
     opacity: 0;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-app: #030712;
+    --bg-surface: #111827;
+    --bg-muted: #1f2937;
+    --bg-subtle: #374151;
+    --text-primary: #f9fafb;
+    --text-secondary: #9ca3af;
+    --border-color: #374151;
+  }
+
+  html,
+  body {
+    color-scheme: dark;
+  }
+
+  .app-main {
+    background-color: transparent !important;
+  }
+
+  .site-nav,
+  .site-footer {
+    background-color: var(--bg-surface) !important;
+    border-color: var(--border-color) !important;
+    color: var(--text-secondary) !important;
+  }
+
+  .card {
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
+  }
+
+  .input::placeholder {
+    color: #9ca3af;
+  }
+
+  .watchlist-cards-box,
+  .watchlist-stock-card {
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45) !important;
+  }
+
+  /* Override common inline light styles in dark mode */
+  [style*="background-color:white"],
+  [style*="background-color: white"],
+  [style*="background:white"],
+  [style*="background: white"] {
+    background-color: var(--bg-surface) !important;
+    background: var(--bg-surface) !important;
+  }
+
+  [style*="background-color:#f9fafb"],
+  [style*="background-color: #f9fafb"],
+  [style*="background:#f9fafb"],
+  [style*="background: #f9fafb"] {
+    background-color: var(--bg-muted) !important;
+    background: var(--bg-muted) !important;
+  }
+
+  [style*="background-color:#f3f4f6"],
+  [style*="background-color: #f3f4f6"],
+  [style*="background:#f3f4f6"],
+  [style*="background: #f3f4f6"] {
+    background-color: var(--bg-subtle) !important;
+    background: var(--bg-subtle) !important;
+  }
+
+  [style*="border:1px solid #e5e7eb"],
+  [style*="border: 1px solid #e5e7eb"],
+  [style*="border-color:#e5e7eb"],
+  [style*="border-color: #e5e7eb"] {
+    border-color: var(--border-color) !important;
+  }
+
+  [style*="color:#111827"],
+  [style*="color: #111827"] {
+    color: var(--text-primary) !important;
+  }
+
+  [style*="color:#374151"],
+  [style*="color: #374151"],
+  [style*="color:#4b5563"],
+  [style*="color: #4b5563"],
+  [style*="color:#6b7280"],
+  [style*="color: #6b7280"],
+  [style*="color:#9ca3af"],
+  [style*="color: #9ca3af"] {
+    color: var(--text-secondary) !important;
   }
 }
 

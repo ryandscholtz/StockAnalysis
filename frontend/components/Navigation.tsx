@@ -36,7 +36,7 @@ export default function Navigation() {
   }
 
   return (
-    <nav style={{
+    <nav className="site-nav" style={{
       position: 'relative',
       backgroundColor: 'white',
       borderBottom: '1px solid #e5e7eb',

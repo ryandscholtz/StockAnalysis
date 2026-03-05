@@ -20,11 +20,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="flex flex-col min-h-screen bg-gray-50 text-gray-900">
+      <body className="app-body flex flex-col min-h-screen bg-gray-50 text-gray-900">
         <AuthProvider>
           <Providers>
             <Navigation />
-            <main className="flex-1 container mx-auto px-0 sm:px-4 py-4 sm:py-6 bg-white sm:bg-transparent">
+            <main className="app-main flex-1 container mx-auto px-0 sm:px-4 py-4 sm:py-6 bg-white sm:bg-transparent">
               {children}
             </main>
             <VersionFooter />

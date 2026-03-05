@@ -64,7 +64,7 @@ export default function VersionFooter() {
   // Don't render anything until mounted to avoid hydration mismatch
   if (!mounted) {
     return (
-      <footer style={{
+      <footer className="site-footer" style={{
         marginTop: 'auto',
         padding: '12px 20px',
         backgroundColor: '#f9fafb',
@@ -87,7 +87,7 @@ export default function VersionFooter() {
   }
 
   return (
-    <footer style={{
+    <footer className="site-footer" style={{
       marginTop: 'auto',
       padding: '12px 20px',
       backgroundColor: '#f9fafb',
