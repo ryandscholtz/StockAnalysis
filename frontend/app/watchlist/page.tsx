@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { stockApi } from '@/lib/api'
 import { formatPrice } from '@/lib/currency'
+import { useAuth } from '@/components/AuthProvider'
 
 interface WatchlistItem {
   ticker: string
@@ -46,6 +47,7 @@ const LoadingSpinner = () => (
 
 export default function WatchlistPage() {
   const router = useRouter()
+  const { isAuthenticated, loading: authLoading } = useAuth()
   const [watchlistItems, setWatchlistItems] = useState<WatchlistItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string>('')
@@ -54,8 +56,16 @@ export default function WatchlistPage() {
   const [sortBy, setSortBy] = useState<'name' | 'undervalued'>('name')
 
   useEffect(() => {
-    loadWatchlist()
-  }, [])
+    if (!authLoading && !isAuthenticated) {
+      router.replace('/')
+    }
+  }, [isAuthenticated, authLoading, router])
+
+  useEffect(() => {
+    if (!authLoading && isAuthenticated) {
+      loadWatchlist()
+    }
+  }, [isAuthenticated, authLoading])
 
   const loadWatchlist = async () => {
     try {
@@ -188,6 +198,14 @@ export default function WatchlistPage() {
     }
     return (a.company_name || a.ticker).localeCompare(b.company_name || b.ticker)
   })
+
+  if (authLoading || (!isAuthenticated && !authLoading)) {
+    return (
+      <div className="container" style={{ padding: '40px 20px', textAlign: 'center' }}>
+        <LoadingSpinner />
+      </div>
+    )
+  }
 
   if (loading) {
     return (
