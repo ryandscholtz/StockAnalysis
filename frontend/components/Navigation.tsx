@@ -26,6 +26,7 @@ export default function Navigation() {
   }, [pathname])
 
   const navItems = [
+    { href: '/explore', label: 'Explore', requireAuth: false },
     { href: '/watchlist', label: 'Watchlist', requireAuth: true },
     { href: '/docs', label: 'Docs', requireAuth: false },
   ]
