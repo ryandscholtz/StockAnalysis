@@ -22,7 +22,7 @@ export default function SignInForm() {
 
     try {
       await signIn(formData.username, formData.password)
-      router.push('/') // Redirect to home page after successful sign in
+      router.push('/watchlist')
     } catch (err: any) {
       setError(err.message || 'Sign in failed')
     } finally {

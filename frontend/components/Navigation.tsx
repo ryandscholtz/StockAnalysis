@@ -125,7 +125,7 @@ export default function Navigation() {
               return null
             }
             
-            const isActive = pathname === item.href || (item.href === '/watchlist' && pathname === '/')
+            const isActive = pathname === item.href
             return (
               <Link
                 key={item.href}
@@ -359,7 +359,7 @@ export default function Navigation() {
           >
           {navItems.map((item) => {
             if (item.requireAuth && !isAuthenticated) return null
-            const isActive = pathname === item.href || (item.href === '/watchlist' && pathname === '/')
+            const isActive = pathname === item.href
             return (
               <Link
                 key={item.href}
