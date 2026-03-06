@@ -616,6 +616,74 @@ class DatabaseService:
         finally:
             session.close()
 
+    def get_financial_data_with_metadata(self, ticker: str) -> dict:
+        """
+        Get all stored financial data for a ticker, including per-section metadata
+        (last updated timestamp, source).
+
+        Returns:
+            {
+              "financial_data": {
+                "income_statement": {"period": {field: value, ...}, ...},
+                "balance_sheet": {...},
+                "cashflow": {...},
+                "key_metrics": {...}
+              },
+              "metadata": {
+                "income_statement": {"last_updated": "ISO", "source": "...", "period_count": N},
+                ...
+              },
+              "has_data": bool
+            }
+        """
+        session = self.get_session()
+        try:
+            ticker_upper = ticker.upper()
+            records = session.query(AIExtractedFinancialData).filter(
+                AIExtractedFinancialData.ticker == ticker_upper
+            ).all()
+
+            financial_data: dict = {}
+            metadata: dict = {}
+
+            for record in records:
+                dt = record.data_type
+                period = record.period
+
+                # Accumulate data
+                if dt not in financial_data:
+                    financial_data[dt] = {}
+                financial_data[dt][period] = record.data
+
+                # Track the latest extracted_at per data_type
+                extracted_at = record.extracted_at
+                iso = extracted_at.isoformat() if extracted_at else None
+                if dt not in metadata:
+                    metadata[dt] = {
+                        'last_updated': iso,
+                        'source': record.source or 'unknown',
+                        'period_count': 0
+                    }
+                else:
+                    # Keep the most recent timestamp
+                    existing = metadata[dt]['last_updated']
+                    if iso and (existing is None or iso > existing):
+                        metadata[dt]['last_updated'] = iso
+                    if record.source and metadata[dt]['source'] == 'unknown':
+                        metadata[dt]['source'] = record.source
+                metadata[dt]['period_count'] = len(financial_data[dt])
+
+            return {
+                'financial_data': financial_data,
+                'metadata': metadata,
+                'has_data': bool(financial_data)
+            }
+        except Exception as e:
+            print(f"Error getting financial data with metadata for {ticker}: {e}")
+            return {'financial_data': {}, 'metadata': {}, 'has_data': False}
+        finally:
+            session.close()
+
     def has_ai_extracted_data(self, ticker: str) -> bool:
         """Check if AI-extracted data exists for a ticker"""
         session = self.get_session()

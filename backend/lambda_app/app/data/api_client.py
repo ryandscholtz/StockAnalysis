@@ -1,8 +1,16 @@
 """
 API client for fetching stock data from various sources
 """
-import yfinance as yf
-import pandas as pd
+# Make yfinance and pandas optional for Lambda deployment
+try:
+    import yfinance as yf
+    import pandas as pd
+    YFINANCE_AVAILABLE = True
+except ImportError:
+    YFINANCE_AVAILABLE = False
+    yf = None
+    pd = None
+
 from typing import Optional, Dict, List
 import requests
 from datetime import datetime, timedelta
@@ -16,10 +24,16 @@ class YahooFinanceClient:
     """Client for Yahoo Finance API using yfinance library"""
 
     def __init__(self):
+        if not YFINANCE_AVAILABLE:
+            logger.warning("yfinance not available - Yahoo Finance features disabled")
         self.session = None
 
     def get_ticker(self, symbol: str) -> Optional[yf.Ticker]:
         """Get yfinance Ticker object"""
+        if not YFINANCE_AVAILABLE:
+            logger.error("yfinance not available")
+            return None
+            
         try:
             ticker = yf.Ticker(symbol)
             # For international tickers, try to verify with a lightweight check

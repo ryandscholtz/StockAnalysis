@@ -3582,6 +3582,238 @@ MARKET_TICKERS: Dict[str, Dict] = {
     },
 }
 
+# Static ticker -> company name for Explore (avoids empty Company when yfinance blocks in Lambda)
+TICKER_COMPANY_NAMES: Dict[str, str] = {
+    # US – S&P 500 / NASDAQ 100 / DOW 30 / NYSE / NASDAQ
+    "AAPL": "Apple Inc.",
+    "MSFT": "Microsoft Corporation",
+    "NVDA": "NVIDIA Corporation",
+    "AMZN": "Amazon.com Inc.",
+    "GOOGL": "Alphabet Inc. (Google)",
+    "GOOG": "Alphabet Inc. (Google) Class C",
+    "META": "Meta Platforms Inc.",
+    "TSLA": "Tesla Inc.",
+    "BRK-B": "Berkshire Hathaway Inc.",
+    "LLY": "Eli Lilly and Company",
+    "JPM": "JPMorgan Chase & Co.",
+    "V": "Visa Inc.",
+    "UNH": "UnitedHealth Group Inc.",
+    "XOM": "Exxon Mobil Corporation",
+    "MA": "Mastercard Inc.",
+    "AVGO": "Broadcom Inc.",
+    "JNJ": "Johnson & Johnson",
+    "HD": "The Home Depot Inc.",
+    "PG": "Procter & Gamble Co.",
+    "COST": "Costco Wholesale Corporation",
+    "ABBV": "AbbVie Inc.",
+    "MRK": "Merck & Co. Inc.",
+    "CVX": "Chevron Corporation",
+    "KO": "The Coca-Cola Company",
+    "WMT": "Walmart Inc.",
+    "PEP": "PepsiCo Inc.",
+    "BAC": "Bank of America Corp.",
+    "CRM": "Salesforce Inc.",
+    "NFLX": "Netflix Inc.",
+    "TMO": "Thermo Fisher Scientific Inc.",
+    "ORCL": "Oracle Corporation",
+    "AMD": "Advanced Micro Devices Inc.",
+    "ABT": "Abbott Laboratories",
+    "ACN": "Accenture plc",
+    "LIN": "Linde plc",
+    "MCD": "McDonald's Corporation",
+    "DHR": "Danaher Corporation",
+    "CSCO": "Cisco Systems Inc.",
+    "TXN": "Texas Instruments Inc.",
+    "NEE": "NextEra Energy Inc.",
+    "PM": "Philip Morris International Inc.",
+    "ADBE": "Adobe Inc.",
+    "WFC": "Wells Fargo & Company",
+    "MS": "Morgan Stanley",
+    "RTX": "RTX Corporation",
+    "INTU": "Intuit Inc.",
+    "DIS": "The Walt Disney Company",
+    "BMY": "Bristol-Myers Squibb Company",
+    "UPS": "United Parcel Service Inc.",
+    "AMGN": "Amgen Inc.",
+    "LOW": "Lowe's Companies Inc.",
+    "TMUS": "T-Mobile US Inc.",
+    "QCOM": "Qualcomm Inc.",
+    "HON": "Honeywell International Inc.",
+    "AMAT": "Applied Materials Inc.",
+    "ISRG": "Intuitive Surgical Inc.",
+    "MU": "Micron Technology Inc.",
+    "BKNG": "Booking Holdings Inc.",
+    "LRCX": "Lam Research Corporation",
+    "REGN": "Regeneron Pharmaceuticals Inc.",
+    "ADI": "Analog Devices Inc.",
+    "VRTX": "Vertex Pharmaceuticals Inc.",
+    "PANW": "Palo Alto Networks Inc.",
+    "KLAC": "KLA Corporation",
+    "SNPS": "Synopsys Inc.",
+    "MRVL": "Marvell Technology Inc.",
+    "CDNS": "Cadence Design Systems Inc.",
+    "GILD": "Gilead Sciences Inc.",
+    "SBUX": "Starbucks Corporation",
+    "ADP": "Automatic Data Processing Inc.",
+    "MDLZ": "Mondelez International Inc.",
+    "PYPL": "PayPal Holdings Inc.",
+    "CTAS": "Cintas Corporation",
+    "ABNB": "Airbnb Inc.",
+    "ORLY": "O'Reilly Automotive Inc.",
+    "FTNT": "Fortinet Inc.",
+    "MELI": "MercadoLibre Inc.",
+    "MNST": "Monster Beverage Corporation",
+    "CRWD": "CrowdStrike Holdings Inc.",
+    "PCAR": "PACCAR Inc.",
+    "KDP": "Keurig Dr Pepper Inc.",
+    "INTC": "Intel Corporation",
+    "ASML": "ASML Holding N.V.",
+    "AXP": "American Express Company",
+    "BA": "The Boeing Company",
+    "CAT": "Caterpillar Inc.",
+    "DOW": "Dow Inc.",
+    "GS": "Goldman Sachs Group Inc.",
+    "IBM": "International Business Machines Corp.",
+    "NKE": "Nike Inc.",
+    "TRV": "The Travelers Companies Inc.",
+    "VZ": "Verizon Communications Inc.",
+    "WBA": "Walgreens Boots Alliance Inc.",
+    "C": "Citigroup Inc.",
+    "PFE": "Pfizer Inc.",
+    "TGT": "Target Corporation",
+    "GE": "General Electric Company",
+    "DUK": "Duke Energy Corporation",
+    "AMT": "American Tower Corporation",
+    "PLD": "Prologis Inc.",
+    "COP": "ConocoPhillips",
+    "EOG": "EOG Resources Inc.",
+    "T": "AT&T Inc.",
+    "FDX": "FedEx Corporation",
+    "SLB": "Schlumberger Limited",
+    "LYFT": "Lyft Inc.",
+    # UK (FTSE 100)
+    "AZN.L": "AstraZeneca plc",
+    "SHEL.L": "Shell plc",
+    "HSBA.L": "HSBC Holdings plc",
+    "ULVR.L": "Unilever plc",
+    "BP.L": "BP plc",
+    "BATS.L": "BAT plc",
+    "GSK.L": "GSK plc",
+    "RIO.L": "Rio Tinto plc",
+    "DGE.L": "Diageo plc",
+    "REL.L": "Relx plc",
+    "BA.L": "BAE Systems plc",
+    "LSEG.L": "London Stock Exchange Group",
+    "PRU.L": "Prudential plc",
+    "IMB.L": "Imperial Brands plc",
+    "NG.L": "National Grid plc",
+    "VOD.L": "Vodafone Group plc",
+    "BT-A.L": "BT Group plc",
+    "LLOY.L": "Lloyds Banking Group plc",
+    "BARC.L": "Barclays plc",
+    "NWG.L": "NatWest Group plc",
+    "STAN.L": "Standard Chartered plc",
+    "AAL.L": "Anglo American plc",
+    "ANTO.L": "Antofagasta plc",
+    "ABF.L": "Associated British Foods plc",
+    "CNA.L": "Centrica plc",
+    "SSE.L": "SSE plc",
+    "WPP.L": "WPP plc",
+    "HLN.L": "Haleon plc",
+    "MNDI.L": "Mondi plc",
+    "RKT.L": "Reckitt Benckiser Group plc",
+    # Australia (ASX)
+    "BHP.AX": "BHP Group Ltd",
+    "CSL.AX": "CSL Limited",
+    "CBA.AX": "Commonwealth Bank of Australia",
+    "NAB.AX": "National Australia Bank Ltd",
+    "WBC.AX": "Westpac Banking Corporation",
+    "ANZ.AX": "ANZ Group Holdings Ltd",
+    "WES.AX": "Wesfarmers Ltd",
+    "MQG.AX": "Macquarie Group Ltd",
+    "RIO.AX": "Rio Tinto Ltd",
+    "TLS.AX": "Telstra Group Ltd",
+    "WOW.AX": "Woolworths Group Ltd",
+    "FMG.AX": "Fortescue Metals Group Ltd",
+    "AMC.AX": "Amcor plc",
+    "ALL.AX": "Aristocrat Leisure Ltd",
+    "REA.AX": "REA Group Ltd",
+    "QBE.AX": "QBE Insurance Group Ltd",
+    "SUN.AX": "Suncorp Group Ltd",
+    "IAG.AX": "Insurance Australia Group Ltd",
+    "MPL.AX": "Medibank Private Ltd",
+    "ORG.AX": "Origin Energy Ltd",
+    # Canada (TSX)
+    "RY.TO": "Royal Bank of Canada",
+    "TD.TO": "Toronto-Dominion Bank",
+    "BNS.TO": "Bank of Nova Scotia",
+    "BMO.TO": "Bank of Montreal",
+    "CM.TO": "Canadian Imperial Bank of Commerce",
+    "ENB.TO": "Enbridge Inc.",
+    "CNR.TO": "Canadian National Railway Co.",
+    "TRP.TO": "TC Energy Corporation",
+    "SU.TO": "Suncor Energy Inc.",
+    "ABX.TO": "Barrick Gold Corporation",
+    "MFC.TO": "Manulife Financial Corporation",
+    "SLF.TO": "Sun Life Financial Inc.",
+    "CP.TO": "Canadian Pacific Kansas City Ltd",
+    "BCE.TO": "BCE Inc.",
+    "T.TO": "TELUS Corporation",
+    "CNQ.TO": "Canadian Natural Resources Ltd",
+    "PPL.TO": "Pembina Pipeline Corporation",
+    "ATD.TO": "Alimentation Couche-Tard Inc.",
+    "GWO.TO": "Great-West Lifeco Inc.",
+    "AEM.TO": "Agnico Eagle Mines Limited",
+    # Germany (DAX)
+    "SAP.DE": "SAP SE",
+    "SIE.DE": "Siemens AG",
+    "ALV.DE": "Allianz SE",
+    "MBG.DE": "Mercedes-Benz Group AG",
+    "DTE.DE": "Deutsche Telekom AG",
+    "BAYN.DE": "Bayer AG",
+    "BMW.DE": "BMW AG",
+    "VOW3.DE": "Volkswagen AG",
+    "MUV2.DE": "Munich Re",
+    "DB1.DE": "Deutsche Börse AG",
+    "RWE.DE": "RWE AG",
+    "BAS.DE": "BASF SE",
+    "MRK.DE": "Merck KGaA",
+    "HEI.DE": "HeidelbergCement AG",
+    "ADS.DE": "Adidas AG",
+    "IFX.DE": "Infineon Technologies AG",
+    "LIN.DE": "Linde plc",
+    "EOAN.DE": "E.ON SE",
+    "HEN3.DE": "Henkel AG & Co. KGaA",
+    "DHER.DE": "Delivery Hero SE",
+    # Japan (Nikkei)
+    "7203.T": "Toyota Motor Corporation",
+    "6758.T": "Sony Group Corporation",
+    "9984.T": "SoftBank Group Corp.",
+    "6861.T": "Keyence Corporation",
+    "8306.T": "Mitsubishi UFJ Financial Group",
+    "8316.T": "Sumitomo Mitsui Financial Group",
+    "6902.T": "Denso Corporation",
+    "9432.T": "Nippon Telegraph and Telephone",
+    "9433.T": "KDDI Corporation",
+    "4063.T": "Shin-Etsu Chemical Co.",
+    "6954.T": "Fanuc Corporation",
+    "7974.T": "Nintendo Co., Ltd.",
+    "8035.T": "Tokyo Electron Limited",
+    "4519.T": "Chugai Pharmaceutical Co.",
+    "6367.T": "Daikin Industries Ltd",
+    "5108.T": "Bridgestone Corporation",
+    "4661.T": "Oriental Land Co., Ltd.",
+    "9022.T": "Central Japan Railway Company",
+    "8591.T": "Orix Corporation",
+    "6098.T": "Recruit Holdings Co., Ltd.",
+}
+
+
+def _explore_company_name(ticker: str) -> str:
+    """Return display company name for a ticker (static map or ticker as fallback)."""
+    return TICKER_COMPANY_NAMES.get(ticker, ticker)
+
+
 # In-memory cache: {market_id: {"data": [...], "timestamp": datetime}}
 _explore_cache: Dict[str, Dict] = {}
 _EXPLORE_CACHE_TTL = 900  # 15 minutes
@@ -3619,7 +3851,7 @@ def _fetch_single_stock_info(ticker_symbol: str) -> Optional[Dict]:
 
         return {
             "ticker": ticker_symbol,
-            "companyName": info.get("shortName") or info.get("longName") or ticker_symbol,
+            "companyName": info.get("shortName") or info.get("longName") or _explore_company_name(ticker_symbol),
             "exchange": info.get("exchange") or info.get("fullExchangeName", ""),
             "sector": info.get("sector", ""),
             "industry": info.get("industry", ""),
@@ -3660,6 +3892,103 @@ def _fetch_stocks_batch(tickers: List[str], max_workers: int = 8) -> List[Dict]:
             except Exception as exc:
                 logger.debug(f"Explore fetch error for {future_map[future]}: {exc}")
     return results
+
+
+def _fetch_stocks_bulk_fallback(tickers: List[str]) -> List[Dict]:
+    """Fallback: bulk download via yfinance.download in small chunks (works better in Lambda)."""
+    try:
+        import yfinance as yf
+        import pandas as pd
+        if not tickers:
+            return []
+        # Chunk size: smaller batches more likely to succeed in Lambda (timeouts / Yahoo throttling)
+        chunk_size = 12
+        all_results: List[Dict] = []
+        seen = set()
+        for i in range(0, len(tickers), chunk_size):
+            chunk = tickers[i : i + chunk_size]
+            try:
+                df = yf.download(
+                    chunk,
+                    period="5d",
+                    interval="1d",
+                    group_by="ticker",
+                    progress=False,
+                    threads=False,
+                    auto_adjust=True,
+                    timeout=10,
+                )
+                if df is None or df.empty:
+                    continue
+                # Parse chunk result into list of stock dicts
+                for ticker in chunk:
+                    if ticker in seen:
+                        continue
+                    try:
+                        price = None
+                        vol = None
+                        if len(chunk) == 1:
+                            if "Close" in df.columns:
+                                last = df.iloc[-1]
+                                price = float(last.get("Close", 0) or 0)
+                                vol = float(last.get("Volume", 0) or 0) if last.get("Volume") else None
+                        elif isinstance(df.columns, pd.MultiIndex):
+                            if ticker not in df.columns.get_level_values(0):
+                                continue
+                            close_col = (ticker, "Close")
+                            if close_col not in df.columns:
+                                continue
+                            ser = df[close_col].dropna()
+                            if ser.empty:
+                                continue
+                            price = float(ser.iloc[-1])
+                            if (ticker, "Volume") in df.columns:
+                                vser = df[(ticker, "Volume")].dropna()
+                                if not vser.empty:
+                                    vol = float(vser.iloc[-1])
+                        else:
+                            # Single-level columns: assume one ticker or Adj Close/Close
+                            if "Close" in df.columns:
+                                price = float(df["Close"].iloc[-1])
+                            elif "Adj Close" in df.columns:
+                                price = float(df["Adj Close"].iloc[-1])
+                            if price and "Volume" in df.columns:
+                                vol = float(df["Volume"].iloc[-1])
+                        if price and price > 0:
+                            seen.add(ticker)
+                            all_results.append({
+                                "ticker": ticker,
+                                "companyName": _explore_company_name(ticker),
+                                "exchange": "",
+                                "sector": "",
+                                "industry": "",
+                                "currency": "USD",
+                                "price": price,
+                                "priceChange": None,
+                                "priceChangePct": None,
+                                "marketCap": None,
+                                "peRatio": None,
+                                "forwardPE": None,
+                                "pbRatio": None,
+                                "psRatio": None,
+                                "evToEbitda": None,
+                                "dividendYield": None,
+                                "week52High": None,
+                                "week52Low": None,
+                                "volume": vol,
+                                "avgVolume": None,
+                                "beta": None,
+                                "eps": None,
+                                "roe": None,
+                            })
+                    except Exception as exc:
+                        logger.debug(f"Explore bulk chunk ticker {ticker}: {exc}")
+            except Exception as exc:
+                logger.warning(f"Explore bulk chunk failed for {chunk[:3]}...: {exc}")
+        return all_results
+    except Exception as exc:
+        logger.warning(f"Explore bulk fallback failed: {exc}")
+        return []
 
 
 @router.get("/explore/markets")
@@ -3709,7 +4038,26 @@ async def get_explore_stocks(
     loop = asyncio.get_event_loop()
     stocks = await loop.run_in_executor(None, _fetch_stocks_batch, tickers)
 
-    stocks.sort(key=lambda x: x.get("marketCap") or 0, reverse=True)
+    # In Lambda/server, yfinance Ticker().info often returns empty; try bulk download fallback
+    if len(stocks) < max(1, len(tickers) * 2 // 10):
+        fallback = await loop.run_in_executor(None, _fetch_stocks_bulk_fallback, tickers)
+        if len(fallback) > len(stocks):
+            stocks = fallback
+            logger.info(f"Explore used bulk fallback for {market_id}: {len(stocks)} stocks")
+
+    # If still empty, return minimal placeholders so UI shows ticker list
+    if not stocks and tickers:
+        stocks = [
+            {"ticker": t, "companyName": _explore_company_name(t), "exchange": "", "sector": "", "industry": "",
+             "currency": "USD", "price": None, "priceChange": None, "priceChangePct": None,
+             "marketCap": None, "peRatio": None, "forwardPE": None, "pbRatio": None, "psRatio": None,
+             "evToEbitda": None, "dividendYield": None, "week52High": None, "week52Low": None,
+             "volume": None, "avgVolume": None, "beta": None, "eps": None, "roe": None}
+            for t in tickers[:50]
+        ]
+        logger.info(f"Explore returning minimal placeholders for {market_id} ({len(stocks)} tickers)")
+
+    stocks.sort(key=lambda x: (x.get("marketCap") or 0, x.get("price") or 0), reverse=True)
 
     _explore_cache[market_id] = {"data": stocks, "timestamp": now}
 

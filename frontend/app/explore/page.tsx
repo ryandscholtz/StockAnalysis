@@ -402,7 +402,7 @@ export default function ExplorePage() {
         }}>
           <thead>
             <tr style={{ backgroundColor: 'var(--bg-surface-subtle)' }}>
-              {COLUMNS.map((col) => (
+              {COLUMNS.map((col, colIdx) => (
                 <th
                   key={String(col.key)}
                   title={col.tooltip}
@@ -418,17 +418,19 @@ export default function ExplorePage() {
                     whiteSpace: 'nowrap',
                     position: 'sticky',
                     top: 0,
+                    left: colIdx === 0 ? 0 : undefined,
                     backgroundColor: 'var(--bg-surface-subtle)',
-                    zIndex: 2,
+                    zIndex: colIdx === 0 ? 3 : 2,
                     minWidth: col.minWidth,
                     userSelect: 'none',
+                    boxShadow: colIdx === 0 ? '2px 0 6px -2px rgba(0,0,0,0.08)' : undefined,
                   }}
                 >
                   {col.label}
                   {col.key && <SortIcon active={sortField === col.key} dir={sortDir} />}
                 </th>
               ))}
-              {/* Action column */}
+              {/* Action column — sticky right */}
               <th style={{
                 padding: '10px 12px',
                 textAlign: 'right',
@@ -438,10 +440,12 @@ export default function ExplorePage() {
                 borderBottom: '2px solid var(--border-default)',
                 position: 'sticky',
                 top: 0,
+                right: 0,
                 backgroundColor: 'var(--bg-surface-subtle)',
-                zIndex: 2,
+                zIndex: 3,
                 minWidth: 140,
                 whiteSpace: 'nowrap',
+                boxShadow: '-2px 0 6px -2px rgba(0,0,0,0.08)',
               }}>
                 Watchlist
               </th>
@@ -507,6 +511,8 @@ function StockRow({ stock, idx, isAuthenticated, onWatchlist, adding, onAdd }: S
   const currency = stock.currency || 'USD'
 
   const rowBg = idx % 2 === 0 ? 'var(--bg-surface)' : 'var(--bg-surface-subtle)'
+  const [hover, setHover] = useState(false)
+  const stickyBg = hover ? 'var(--bg-hover)' : rowBg
 
   const cell = (content: React.ReactNode, align: 'left' | 'right' = 'right', style?: React.CSSProperties) => (
     <td style={{
@@ -522,12 +528,21 @@ function StockRow({ stock, idx, isAuthenticated, onWatchlist, adding, onAdd }: S
 
   return (
     <tr
-      style={{ backgroundColor: rowBg, transition: 'background-color 0.1s' }}
-      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-hover)')}
-      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = rowBg)}
+      style={{ backgroundColor: stickyBg, transition: 'background-color 0.1s' }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
     >
-      {/* Symbol */}
-      <td style={{ padding: '9px 12px', textAlign: 'left', whiteSpace: 'nowrap' }}>
+      {/* Symbol — sticky left */}
+      <td style={{
+        padding: '9px 12px',
+        textAlign: 'left',
+        whiteSpace: 'nowrap',
+        position: 'sticky',
+        left: 0,
+        backgroundColor: stickyBg,
+        zIndex: 1,
+        boxShadow: '2px 0 6px -2px rgba(0,0,0,0.08)',
+      }}>
         <Link
           href={`/ticker?ticker=${stock.ticker}`}
           style={{
@@ -668,8 +683,17 @@ function StockRow({ stock, idx, isAuthenticated, onWatchlist, adding, onAdd }: S
         ) : '-'}
       </td>
 
-      {/* Add to Watchlist */}
-      <td style={{ padding: '9px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+      {/* Add to Watchlist — sticky right */}
+      <td style={{
+        padding: '9px 12px',
+        textAlign: 'right',
+        whiteSpace: 'nowrap',
+        position: 'sticky',
+        right: 0,
+        backgroundColor: stickyBg,
+        zIndex: 1,
+        boxShadow: '-2px 0 6px -2px rgba(0,0,0,0.08)',
+      }}>
         {!isAuthenticated ? (
           <Link
             href="/auth/signin"
