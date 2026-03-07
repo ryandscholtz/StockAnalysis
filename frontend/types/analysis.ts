@@ -36,6 +36,7 @@ export interface StockAnalysis {
   analysisWeights?: AnalysisWeights
   businessType?: string
   recommendedPreset?: string
+  aiCommentary?: string | null
   dataSource?: {
     price_source: string
     has_real_price: boolean

@@ -766,6 +766,82 @@ def _recommend_preset(ticker: str, company_name: str, sector: str = '', industry
     return 'default'
 
 
+def _generate_ai_commentary(
+    ticker: str, company_name: str, sector: str, industry: str,
+    current_price: float, currency: str,
+    fair_value: float | None, margin_of_safety: float | None,
+    recommendation: str | None, resolved_preset: str | None,
+    inc: dict, bal: dict, cf: dict, km: dict,
+) -> str:
+    """
+    Generate a plain-language AI commentary on the stock: what's driving the
+    current price and whether buying is a good idea.  Returns a markdown string.
+    """
+    # Build a compact data summary for the prompt
+    def _fmt(v, decimals=2, pct=False, prefix=''):
+        if v is None or (isinstance(v, float) and not (v == v)):
+            return 'N/A'
+        s = f'{v:,.{decimals}f}'
+        if pct:
+            s += '%'
+        return f'{prefix}{s}'
+
+    rev   = inc.get('Total Revenue')
+    ni    = inc.get('Net Income')
+    ocf   = cf.get('Operating Cash Flow')
+    fcf   = cf.get('Free Cash Flow')
+    eq    = bal.get('Total Stockholder Equity')
+    debt  = bal.get('Long Term Debt')
+    cash  = bal.get('Cash And Cash Equivalents')
+    roe   = km.get('roe')
+    roa   = km.get('roa')
+    d2e   = km.get('debt_to_equity')
+    cr    = km.get('current_ratio')
+    pe    = km.get('pe_ratio')
+    eps   = inc.get('Diluted EPS') or inc.get('Basic EPS')
+
+    def _scale(v):
+        """Return human-readable scale (B/M) for large currency numbers."""
+        if v is None:
+            return 'N/A'
+        abs_v = abs(v)
+        if abs_v >= 1e9:
+            return f'{currency} {v/1e9:,.2f}B'
+        if abs_v >= 1e6:
+            return f'{currency} {v/1e6:,.2f}M'
+        return f'{currency} {v:,.2f}'
+
+    mos_str = f'{margin_of_safety:+.1f}%' if margin_of_safety is not None else 'N/A'
+    fv_str  = f'{currency} {fair_value:,.2f}' if fair_value else 'N/A'
+
+    prompt = (
+        f"You are a senior equity analyst. Write a concise investment commentary "
+        f"for {company_name} ({ticker}) in 3 short paragraphs:\n"
+        f"1. What key factors (sector trends, business model, recent performance) explain "
+        f"the current market price of {currency} {current_price:,.2f}.\n"
+        f"2. Whether the stock appears cheap or expensive given its fundamentals "
+        f"(our model estimates fair value of {fv_str}, margin of safety {mos_str}).\n"
+        f"3. A clear buy / hold / avoid recommendation with 1-2 key risks to watch.\n\n"
+        f"Available data:\n"
+        f"- Sector: {sector or 'N/A'} | Industry: {industry or 'N/A'}\n"
+        f"- Valuation preset: {resolved_preset or 'default'} | Model recommendation: {recommendation or 'N/A'}\n"
+        f"- Revenue: {_scale(rev)} | Net Income: {_scale(ni)}\n"
+        f"- Operating CF: {_scale(ocf)} | Free CF: {_scale(fcf)}\n"
+        f"- Equity: {_scale(eq)} | LT Debt: {_scale(debt)} | Cash: {_scale(cash)}\n"
+        f"- ROE: {_fmt(roe, pct=True)} | ROA: {_fmt(roa, pct=True)} | "
+        f"D/E: {_fmt(d2e)} | Current ratio: {_fmt(cr)} | P/E: {_fmt(pe)} | EPS: {_fmt(eps, prefix=currency+' ')}\n\n"
+        f"Write in plain English, 3 paragraphs, no bullet lists. "
+        f"Be direct about whether this stock is worth buying. "
+        f"Do not fabricate specific news events — stick to the numbers provided."
+    )
+    try:
+        text = _call_bedrock_claude(prompt, max_tokens=600)
+        return text.strip()
+    except Exception as exc:
+        print(f"[WARN] AI commentary failed for {ticker}: {exc}")
+        return ''
+
+
 def get_financial_data_with_ai(ticker: str, company_name: str) -> dict:
     """
     Use Claude (via AWS Bedrock) to retrieve the most recent known annual
@@ -1054,7 +1130,7 @@ def analyze_stock_get(ticker: str, stream: bool, params: dict) -> dict:
             {'type': 'progress', 'step': step, 'total': total, 'task': task}
         )
 
-    total_steps = 7
+    total_steps = 8
 
     # ------------------------------------------------------------------
     # Step 1: Fetch live stock price
@@ -1344,6 +1420,27 @@ def analyze_stock_get(ticker: str, stream: bool, params: dict) -> dict:
             'use manual data entry for a full analysis.'
         )
 
+    # ------------------------------------------------------------------
+    # Step 8: AI commentary — plain-language price & buy opinion
+    # ------------------------------------------------------------------
+    progress_events.append(progress(8, total_steps, 'Generating AI commentary...'))
+    ai_commentary = _generate_ai_commentary(
+        ticker=ticker,
+        company_name=company_name,
+        sector=sector,
+        industry=industry,
+        current_price=current_price,
+        currency=currency,
+        fair_value=fair_value,
+        margin_of_safety=margin_of_safety,
+        recommendation=recommendation,
+        resolved_preset=resolved_preset,
+        inc=inc,
+        bal=bal,
+        cf=cf,
+        km=km,
+    )
+
     # Financial health indicators from AI data
     health_metrics = {}
     if _safe(km.get('current_ratio')):
@@ -1394,6 +1491,7 @@ def analyze_stock_get(ticker: str, stream: bool, params: dict) -> dict:
             'cashflow': cf if cf else None,
             'keyMetrics': km if km else None,
         },
+        'aiCommentary': ai_commentary or None,
         'timestamp': datetime.now().isoformat(),
         'dataSource': 'ai-bedrock-claude',
         # Preset / weight info so the frontend can sync its dropdown
@@ -1431,6 +1529,7 @@ def analyze_stock_get(ticker: str, stream: bool, params: dict) -> dict:
             'dataSource': analysis['dataSource'],
             'businessType': analysis.get('businessType'),
             'analysisWeights': analysis.get('analysisWeights'),
+            'aiCommentary': analysis.get('aiCommentary'),
         }
         dynamodb_res = boto3.resource('dynamodb', region_name='eu-west-1')
         table = dynamodb_res.Table(MANUAL_DATA_TABLE)

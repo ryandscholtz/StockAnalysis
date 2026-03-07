@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { stockApi, WatchlistItemDetail } from '@/lib/api'
+import { stockApi, WatchlistItemDetail, QuoteResponse } from '@/lib/api'
 import { StockAnalysis } from '@/types/analysis'
 import { formatPrice } from '@/lib/currency'
 import AnalysisCard from '@/components/AnalysisCard'
@@ -45,6 +45,7 @@ export default function TickerPage() {
   })
   const [showManualEntry, setShowManualEntry] = useState(false)
   const [showPDFUpload, setShowPDFUpload] = useState(false)
+  const [marketQuote, setMarketQuote] = useState<QuoteResponse | null>(null)
 
   // Get ticker from URL parameters or hash
   useEffect(() => {
@@ -65,6 +66,7 @@ export default function TickerPage() {
       loadWatchlistData()
       loadFinancialData()
       fetchAvailableModels()
+      loadMarketQuote()
     }
   }, [ticker])
 
@@ -171,6 +173,15 @@ export default function TickerPage() {
     }
   }
 
+  const loadMarketQuote = async () => {
+    try {
+      const q = await stockApi.getQuote(normalizeTicker(ticker))
+      setMarketQuote(q)
+    } catch {
+      // non-fatal — Other Metrics just won't show
+    }
+  }
+
   const loadWatchlistData = async (forceRefresh: boolean = false) => {
     try {
       const result = await stockApi.getWatchlistItem(ticker, forceRefresh)
@@ -236,8 +247,8 @@ export default function TickerPage() {
       const resolvedWeights = data.analysisWeights || modelPresets[resolvedPreset] || null
       if (resolvedWeights) setAnalysisWeights(resolvedWeights)
       
-      // Update watchlist and stored financial data with latest analysis
-      await Promise.all([loadWatchlistData(), loadFinancialData()])
+      // Update watchlist, stored financial data, and live quote with latest analysis
+      await Promise.all([loadWatchlistData(), loadFinancialData(), loadMarketQuote()])
     } catch (err: any) {
       console.error('Analysis error:', err)
       // Use formatted error message (from api.ts interceptor)
@@ -679,7 +690,110 @@ export default function TickerPage() {
 
           {/* Analysis Components */}
           <AnalysisCard analysis={analysis} />
+
+          {/* Other Metrics — live market data, positioned just below Key Metrics */}
+          {marketQuote && (() => {
+            const currency = marketQuote.currency || analysis.currency || 'USD'
+            const fmtPrice = (v?: number | null) =>
+              v != null ? formatPrice(v, currency) : '—'
+            const fmtNum = (v?: number | null, decimals = 2) =>
+              v != null && isFinite(v) ? v.toFixed(decimals) : '—'
+            const fmtLarge = (v?: number | null) => {
+              if (v == null) return '—'
+              if (v >= 1e12) return `${currency} ${(v / 1e12).toFixed(2)}T`
+              if (v >= 1e9)  return `${currency} ${(v / 1e9).toFixed(2)}B`
+              if (v >= 1e6)  return `${currency} ${(v / 1e6).toFixed(2)}M`
+              return `${currency} ${v.toLocaleString()}`
+            }
+            const fmtVol = (v?: number | null) => {
+              if (v == null) return '—'
+              if (v >= 1e9) return `${(v / 1e9).toFixed(1)}B`
+              if (v >= 1e6) return `${(v / 1e6).toFixed(1)}M`
+              if (v >= 1e3) return `${(v / 1e3).toFixed(0)}K`
+              return v.toFixed(0)
+            }
+
+            const metrics = [
+              { label: 'Market Cap',     value: fmtLarge(marketQuote.marketCap) },
+              { label: 'Forward P/E',    value: fmtNum(marketQuote.forwardPE) },
+              { label: 'Dividend Yield', value: marketQuote.dividendYield != null ? `${marketQuote.dividendYield.toFixed(2)}%` : '—' },
+              { label: 'Trailing EPS',   value: fmtPrice(marketQuote.eps) },
+              { label: 'Beta',           value: fmtNum(marketQuote.beta) },
+              { label: '52W High',       value: fmtPrice(marketQuote.week52High) },
+              { label: '52W Low',        value: fmtPrice(marketQuote.week52Low) },
+              { label: 'Volume',         value: fmtVol(marketQuote.volume) },
+            ]
+
+            const hasAny = metrics.some(m => m.value !== '—')
+            if (!hasAny) return null
+
+            return (
+              <div style={{
+                backgroundColor: 'var(--bg-surface, #fff)',
+                border: '1px solid var(--border-default, #e5e7eb)',
+                borderRadius: '8px',
+                padding: '24px',
+                marginBottom: '20px',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+              }}>
+                <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '20px', color: '#111827' }}>
+                  Other Metrics
+                </h2>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '16px' }}>
+                  {metrics.map(({ label, value }) => value !== '—' && (
+                    <div key={label} style={{
+                      padding: '16px',
+                      background: '#f9fafb',
+                      borderRadius: '6px',
+                      border: '1px solid #e5e7eb',
+                    }}>
+                      <div style={{ fontSize: '13px', color: '#6b7280', marginBottom: '8px' }}>{label}</div>
+                      <div style={{ fontSize: '20px', fontWeight: '700', color: '#111827', fontFamily: 'monospace' }}>{value}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })()}
+
           <ValuationStatus analysis={analysis} />
+
+          {/* AI Commentary */}
+          {analysis.aiCommentary && (
+            <div style={{
+              backgroundColor: 'var(--bg-surface, #fff)',
+              border: '1px solid var(--border-default, #e5e7eb)',
+              borderRadius: '12px',
+              padding: '24px',
+              marginBottom: '24px',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+                <span style={{ fontSize: '18px' }}>🤖</span>
+                <h2 style={{ fontSize: '18px', fontWeight: '700', margin: 0, color: 'var(--text-primary, #111827)' }}>
+                  AI Analysis
+                </h2>
+                <span style={{
+                  fontSize: '11px',
+                  padding: '2px 8px',
+                  borderRadius: '10px',
+                  backgroundColor: 'var(--bg-hover, #f3f4f6)',
+                  color: 'var(--text-muted, #6b7280)',
+                  fontWeight: '500',
+                }}>
+                  Claude Haiku
+                </span>
+              </div>
+              <div style={{
+                fontSize: '14px',
+                lineHeight: '1.75',
+                color: 'var(--text-secondary, #374151)',
+                whiteSpace: 'pre-wrap',
+              }}>
+                {analysis.aiCommentary}
+              </div>
+            </div>
+          )}
+
           <ValuationChart
             analysis={analysis}
             availablePresets={availableModels}

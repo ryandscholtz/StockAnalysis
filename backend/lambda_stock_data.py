@@ -289,26 +289,94 @@ def _fetch_tickers_from_marketstack(mic: str, yahoo_suffix: str) -> list[str]:
         return []
 
 
-def _get_tickers_for_market(market_id: str, market_config: dict) -> list[str]:
+def _fetch_screener_tickers(screener_exchange: str, max_count: int = 1000) -> list:
     """
-    Return ticker list for a market: from API (when exchange_mic is set) with cache/fallback,
-    otherwise from static config.
+    Fetch all equity tickers for an exchange via Yahoo Finance screener, sorted by market cap.
+    screener_exchange is the Yahoo Finance exchange code (e.g. 'JNB' for JSE, 'NYQ' for NYSE).
+    Works without a paid API key — uses the same crumb/cookie session.
     """
-    mic = market_config.get('exchange_mic')
-    yahoo_suffix = market_config.get('yahoo_suffix', _MIC_TO_YAHOO_SUFFIX.get(mic, ''))
+    # _get_yahoo_session is defined later in the file; import json is already at top level
+    try:
+        # _get_yahoo_session will be available at call time (defined below)
+        crumb, cookie_str = _get_yahoo_session()
+    except Exception as e:
+        print(f"[DEBUG] Yahoo session error for screener {screener_exchange}: {e}")
+        return []
 
-    if mic:
+    from urllib.request import Request as _Req, urlopen as _uopen
+    url = (
+        f"https://query2.finance.yahoo.com/v1/finance/screener"
+        f"?formatted=false&crumb={crumb}&lang=en-US&region=US"
+    )
+    all_symbols = []
+    batch = 250
+
+    for offset in range(0, max_count, batch):
+        size = min(batch, max_count - offset)
+        body = json.dumps({
+            "size": size,
+            "offset": offset,
+            "sortField": "intradaymarketcap",
+            "sortType": "DESC",
+            "quoteType": "EQUITY",
+            "topOperator": "AND",
+            "query": {
+                "operator": "AND",
+                "operands": [{"operator": "EQ", "operands": ["exchange", screener_exchange]}],
+            },
+            "userId": "",
+            "userIdType": "guid",
+        }).encode("utf-8")
+        req = _Req(url, data=body, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Cookie": cookie_str,
+        })
+        try:
+            with _uopen(req, timeout=20) as resp:
+                data = json.loads(resp.read().decode())
+            result = data.get("finance", {}).get("result") or []
+            quotes = result[0].get("quotes", []) if result else []
+            symbols = [q["symbol"] for q in quotes if q.get("symbol")]
+            all_symbols.extend(symbols)
+            print(f"[DEBUG] Screener {screener_exchange} offset={offset}: {len(symbols)} symbols")
+            if len(symbols) < size:
+                break  # exhausted
+        except Exception as e:
+            print(f"[DEBUG] Screener error {screener_exchange} offset={offset}: {e}")
+            break
+
+    return all_symbols
+
+
+def _get_tickers_for_market(market_id: str, market_config: dict) -> list:
+    """
+    Return ticker list for a market.
+    Priority: Yahoo screener > MarketStack > static tickers list.
+    Results are cached for 24h inside _explore_ticker_list_cache.
+    """
+    screener_exchange = market_config.get('screener_exchange')
+    mic = market_config.get('exchange_mic')
+    yahoo_suffix = market_config.get('yahoo_suffix', _MIC_TO_YAHOO_SUFFIX.get(mic or '', ''))
+
+    if screener_exchange or mic:
         now = datetime.utcnow()
         cache_entry = _explore_ticker_list_cache.get(market_id)
         if cache_entry:
             age = (now - cache_entry["timestamp"]).total_seconds()
             if age < _EXPLORE_TICKER_LIST_CACHE_TTL:
                 return list(cache_entry["tickers"])
-        tickers = _fetch_tickers_from_marketstack(mic, yahoo_suffix)
+
+        tickers = []
+        if screener_exchange:
+            tickers = _fetch_screener_tickers(screener_exchange, max_count=market_config.get('screener_max', 1000))
+        if not tickers and mic:
+            tickers = _fetch_tickers_from_marketstack(mic, yahoo_suffix)
         if tickers:
             _explore_ticker_list_cache[market_id] = {"tickers": tickers, "timestamp": now}
             return tickers
-        # Fallback to static list if API failed or no key
+        # Fallback to static list
         static = market_config.get('tickers', [])
         if static:
             return list(static)
@@ -441,33 +509,26 @@ MARKET_TICKERS = {
     },
     "NYSE": {
         "name": "NYSE",
-        "description": "Popular New York Stock Exchange stocks",
+        "description": "New York Stock Exchange – all listed companies",
         "region": "US", "continent": "Americas",
-        "tickers": [
-            "JPM", "BAC", "V", "JNJ", "WMT", "PG", "XOM", "CVX", "KO", "PEP",
-            "MCD", "DIS", "MS", "GS", "WFC", "C", "ABT", "LLY", "UNH", "PFE",
-            "MRK", "ABBV", "TMO", "HD", "NKE", "TGT", "LOW", "CRM", "AXP", "MA",
-            "CAT", "BA", "HON", "MMM", "UPS", "GE", "NEE", "DUK", "AMT", "PLD",
-            "COP", "EOG", "BRK-B", "RTX", "IBM", "T", "VZ", "FDX", "SLB",
-        ],
+        "screener_exchange": "NYQ",
+        "screener_max": 500,
+        "tickers": [],  # screener-driven
     },
     "NASDAQ": {
         "name": "NASDAQ",
-        "description": "Popular NASDAQ-listed stocks",
+        "description": "NASDAQ Global Select Market – all listed companies",
         "region": "US", "continent": "Americas",
-        "tickers": [
-            "AAPL", "MSFT", "NVDA", "AMZN", "META", "TSLA", "GOOGL", "GOOG", "NFLX", "AMD",
-            "INTC", "CSCO", "ADBE", "PYPL", "INTU", "QCOM", "TXN", "HON", "AMGN", "SBUX",
-            "COST", "PEP", "TMUS", "AVGO", "ISRG", "MU", "LRCX", "REGN", "GILD", "VRTX",
-            "PANW", "CRWD", "FTNT", "ABNB", "MELI", "BKNG", "ORLY", "MNST", "KDP", "MDLZ",
-            "ADP", "CTAS", "CDNS", "SNPS", "PCAR", "KLAC", "AMAT", "MRVL", "ADI", "LYFT",
-        ],
+        "screener_exchange": "NMS",
+        "screener_max": 500,
+        "tickers": [],  # screener-driven
     },
     "TSX": {
         "name": "TSX",
-        "description": "Toronto Stock Exchange – top Canadian companies",
+        "description": "Toronto Stock Exchange – all listed Canadian companies",
         "region": "CA", "continent": "Americas",
-        "tickers": [
+        "screener_exchange": "TOR",
+        "tickers": [  # fallback
             "RY.TO", "TD.TO", "BNS.TO", "BMO.TO", "CM.TO", "ENB.TO", "CNR.TO",
             "TRP.TO", "SU.TO", "ABX.TO", "MFC.TO", "SLF.TO", "CP.TO", "BCE.TO",
             "T.TO", "CNQ.TO", "PPL.TO", "ATD.TO", "GWO.TO", "AEM.TO",
@@ -657,20 +718,22 @@ MARKET_TICKERS = {
         ],
     },
     "ASX200": {
-        "name": "ASX 200",
-        "description": "Australian Securities Exchange – largest Australian companies by market cap",
+        "name": "ASX",
+        "description": "Australian Securities Exchange – all listed Australian companies",
         "region": "AU", "continent": "Asia Pacific",
-        "tickers": [
+        "screener_exchange": "ASX",
+        "tickers": [  # fallback
             "BHP.AX", "CSL.AX", "CBA.AX", "NAB.AX", "WBC.AX", "ANZ.AX", "WES.AX",
             "MQG.AX", "RIO.AX", "TLS.AX", "WOW.AX", "FMG.AX", "AMC.AX",
             "ALL.AX", "REA.AX", "QBE.AX", "SUN.AX", "IAG.AX", "MPL.AX", "ORG.AX",
         ],
     },
     "HANGSENG": {
-        "name": "Hang Seng",
-        "description": "Hong Kong Stock Exchange – top HK companies",
+        "name": "HKEX",
+        "description": "Hong Kong Stock Exchange – all listed companies",
         "region": "HK", "continent": "Asia Pacific",
-        "tickers": [
+        "screener_exchange": "HKG",
+        "tickers": [  # fallback
             "0700.HK", "9988.HK", "0939.HK", "1398.HK", "3988.HK", "0005.HK",
             "0388.HK", "2318.HK", "0941.HK", "0883.HK", "0857.HK", "0688.HK",
             "0011.HK", "0992.HK", "0027.HK", "0001.HK", "1177.HK", "0762.HK",
@@ -690,10 +753,11 @@ MARKET_TICKERS = {
         ],
     },
     "KOSPI": {
-        "name": "KOSPI",
-        "description": "Korea Exchange – top South Korean companies",
+        "name": "Korea Exchange",
+        "description": "Korea Exchange – all listed South Korean companies",
         "region": "KR", "continent": "Asia Pacific",
-        "tickers": [
+        "screener_exchange": "KOE",
+        "tickers": [  # fallback
             "005930.KS", "000660.KS", "035420.KS", "005380.KS", "000270.KS",
             "051910.KS", "035720.KS", "006400.KS", "017670.KS", "015760.KS",
             "012330.KS", "009150.KS", "028260.KS", "032830.KS", "033780.KS",
@@ -701,9 +765,10 @@ MARKET_TICKERS = {
     },
     "TWSE": {
         "name": "TWSE",
-        "description": "Taiwan Stock Exchange – top Taiwanese companies",
+        "description": "Taiwan Stock Exchange – all listed Taiwanese companies",
         "region": "TW", "continent": "Asia Pacific",
-        "tickers": [
+        "screener_exchange": "TAI",
+        "tickers": [  # fallback
             "2330.TW", "2454.TW", "2317.TW", "2308.TW", "2303.TW", "2412.TW",
             "2882.TW", "1303.TW", "1301.TW", "2886.TW", "2891.TW", "1326.TW",
             "2881.TW", "2002.TW", "2207.TW",
@@ -732,19 +797,21 @@ MARKET_TICKERS = {
     # ── Middle East & Africa ─────────────────────────────────────────────────────
     "TADAWUL": {
         "name": "Tadawul",
-        "description": "Saudi Exchange – top Saudi Arabian companies",
+        "description": "Saudi Exchange – all listed Saudi Arabian companies",
         "region": "SA", "continent": "Middle East & Africa",
-        "tickers": [
+        "screener_exchange": "SAU",
+        "tickers": [  # fallback
             "2222.SR", "1180.SR", "2010.SR", "4200.SR", "1050.SR", "2030.SR",
             "1150.SR", "4005.SR", "8010.SR", "2350.SR", "4001.SR", "4030.SR",
             "1111.SR", "2380.SR", "7010.SR",
         ],
     },
     "TASE": {
-        "name": "Tel Aviv 35",
-        "description": "Tel Aviv Stock Exchange – top Israeli companies",
+        "name": "Tel Aviv Stock Exchange",
+        "description": "Tel Aviv Stock Exchange – all listed Israeli companies",
         "region": "IL", "continent": "Middle East & Africa",
-        "tickers": [
+        "screener_exchange": "TLV",
+        "tickers": [  # fallback
             "NICE.TA", "ESLT.TA", "ICL.TA", "TEVA.TA", "BEZQ.TA", "LUMI.TA",
             "HAPO.TA", "MZTF.TA", "AZRG.TA", "FIBI.TA", "POLI.TA", "ENLT.TA",
             "KRNT.TA", "DSCT.TA", "BIDI.TA",
@@ -752,11 +819,12 @@ MARKET_TICKERS = {
     },
     "JSE": {
         "name": "JSE",
-        "description": "Johannesburg Stock Exchange – all listed equities",
+        "description": "Johannesburg Stock Exchange – all listed companies",
         "region": "ZA", "continent": "Middle East & Africa",
-        "exchange_mic": "XJSE",
+        "screener_exchange": "JNB",
+        "exchange_mic": "XJSE",  # MarketStack fallback
         "yahoo_suffix": ".JO",
-        "tickers": [
+        "tickers": [  # fallback if both screener and MarketStack fail
             "NPN.JO", "PRX.JO", "CPI.JO", "FSR.JO", "SBK.JO", "MTN.JO", "AGL.JO",
             "SOL.JO", "SHP.JO", "WHL.JO", "REM.JO", "DSY.JO", "GRT.JO", "AMS.JO",
             "ABG.JO", "NED.JO", "BID.JO", "IMP.JO", "SGL.JO", "GFI.JO", "HAR.JO",
@@ -902,12 +970,29 @@ def _fetch_stocks_batch(tickers, batch_size=50):
     return all_results
 
 
+def get_quote_data(ticker: str) -> dict:
+    """Return rich market data for a single ticker using the v7 quote API.
+    Returns: price, marketCap, peRatio, forwardPE, pbRatio, psRatio, evToEbitda,
+             dividendYield, eps, beta, week52High, week52Low, volume, priceChangePct, etc.
+    """
+    try:
+        results = _fetch_one_batch([ticker.upper()], *_get_yahoo_session())
+        if not results:
+            return {'statusCode': 404, 'body': json.dumps({'error': f'No data for {ticker}'})}
+        return {'statusCode': 200, 'body': json.dumps(results[0])}
+    except Exception as e:
+        return {'statusCode': 500, 'body': json.dumps({'error': str(e)})}
+
+
 def get_explore_markets():
     """Return available markets for the explore page."""
     markets = []
     for key, val in MARKET_TICKERS.items():
-        if val.get("exchange_mic") and key in _explore_ticker_list_cache:
+        is_screener = bool(val.get("screener_exchange") or val.get("exchange_mic"))
+        if is_screener and key in _explore_ticker_list_cache:
             ticker_count = len(_explore_ticker_list_cache[key]["tickers"])
+        elif is_screener:
+            ticker_count = None  # unknown until first fetch
         else:
             ticker_count = len(val.get("tickers") or [])
         markets.append({
@@ -917,6 +1002,7 @@ def get_explore_markets():
             "region": val["region"],
             "continent": val.get("continent", "Other"),
             "ticker_count": ticker_count,
+            "screener_based": is_screener,
         })
     return {
         "statusCode": 200,
@@ -997,6 +1083,9 @@ def lambda_handler(event, context):
         if '/api/ticker/' in path:
             ticker = path.split('/api/ticker/')[-1]
             result = get_ticker_data(ticker)
+        elif '/api/quote/' in path:
+            ticker = path.split('/api/quote/')[-1]
+            result = get_quote_data(ticker)
         elif '/api/search' in path:
             params = event.get('queryStringParameters', {}) or {}
             query = params.get('q', '')

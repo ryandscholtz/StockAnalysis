@@ -71,7 +71,7 @@ def route_request(event: dict) -> dict:
         }
     
     # Route to appropriate Lambda
-    if '/api/ticker/' in path or '/api/search' in path:
+    if '/api/ticker/' in path or '/api/search' in path or '/api/explore' in path or '/api/quote/' in path:
         return invoke_lambda(STOCK_DATA_LAMBDA, event)
     
     elif '/api/upload-pdf' in path:

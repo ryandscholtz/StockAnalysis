@@ -685,6 +685,163 @@ def _extract_json(text: str) -> dict:
     return {}
 
 
+# ---------------------------------------------------------------------------
+# Valuation preset weights (match frontend fallbackPresets in ticker/page.tsx)
+# P/E weight = 1 - dcf - epv - asset
+# ---------------------------------------------------------------------------
+PRESET_WEIGHTS = {
+    'default':            {'dcf': 0.40, 'pe': 0.30, 'epv': 0.20, 'asset': 0.10},
+    'high_growth':        {'dcf': 0.60, 'pe': 0.15, 'epv': 0.20, 'asset': 0.05},
+    'growth_company':     {'dcf': 0.50, 'pe': 0.25, 'epv': 0.15, 'asset': 0.10},
+    'mature_company':     {'dcf': 0.35, 'pe': 0.35, 'epv': 0.20, 'asset': 0.10},
+    'cyclical':           {'dcf': 0.25, 'pe': 0.25, 'epv': 0.35, 'asset': 0.15},
+    'asset_heavy':        {'dcf': 0.20, 'pe': 0.10, 'epv': 0.25, 'asset': 0.45},
+    'distressed_company': {'dcf': 0.10, 'pe': 0.05, 'epv': 0.15, 'asset': 0.70},
+    'bank':               {'dcf': 0.20, 'pe': 0.30, 'epv': 0.35, 'asset': 0.15},
+    'reit':               {'dcf': 0.30, 'pe': 0.10, 'epv': 0.15, 'asset': 0.45},
+    'insurance':          {'dcf': 0.20, 'pe': 0.25, 'epv': 0.40, 'asset': 0.15},
+    'utility':            {'dcf': 0.40, 'pe': 0.20, 'epv': 0.30, 'asset': 0.10},
+    'technology':         {'dcf': 0.50, 'pe': 0.25, 'epv': 0.20, 'asset': 0.05},
+    'healthcare':         {'dcf': 0.45, 'pe': 0.25, 'epv': 0.25, 'asset': 0.05},
+    'retail':             {'dcf': 0.40, 'pe': 0.30, 'epv': 0.20, 'asset': 0.10},
+    'energy':             {'dcf': 0.25, 'pe': 0.15, 'epv': 0.40, 'asset': 0.20},
+}
+
+PRESET_DESCRIPTIONS = {
+    'high_growth':        'Technology startups, high-growth SaaS, biotech',
+    'growth_company':     'Established growth companies, expanding businesses',
+    'mature_company':     'Stable blue-chips, dividend payers',
+    'technology':         'Software, internet, semiconductors',
+    'healthcare':         'Pharma, biotech, medical devices, healthcare services',
+    'retail':             'Retail stores, consumer goods, e-commerce',
+    'utility':            'Electric, water, gas utilities',
+    'cyclical':           'Industrials, manufacturing, materials',
+    'energy':             'Oil & gas, mining, energy exploration',
+    'bank':               'Banks, financial services, credit institutions',
+    'insurance':          'Insurance companies, reinsurance',
+    'asset_heavy':        'Infrastructure, capital-intensive businesses',
+    'reit':               'Real Estate Investment Trusts',
+    'distressed_company': 'Companies in financial difficulty, turnaround situations',
+    'default':            'General purpose, balanced approach',
+}
+
+
+def _recommend_preset(ticker: str, company_name: str, sector: str = '', industry: str = '') -> str:
+    """Use Bedrock to recommend the most appropriate valuation preset for a company."""
+    preset_list = '\n'.join(f'- {k}: {v}' for k, v in PRESET_DESCRIPTIONS.items())
+    prompt = (
+        f"You are a valuation analyst. Select the single most appropriate valuation preset for:\n"
+        f"Company: {company_name} ({ticker})\n"
+        f"Sector: {sector or 'Unknown'}\n"
+        f"Industry: {industry or 'Unknown'}\n\n"
+        f"Available presets:\n{preset_list}\n\n"
+        f"Respond with ONLY the preset key (e.g. \"technology\", \"bank\"). Nothing else."
+    )
+    try:
+        bedrock = boto3.client('bedrock-runtime', region_name='us-east-1')
+        body = json.dumps({
+            'anthropic_version': 'bedrock-2023-05-31',
+            'max_tokens': 20,
+            'messages': [{'role': 'user', 'content': prompt}]
+        })
+        response = bedrock.invoke_model(
+            modelId='us.anthropic.claude-haiku-4-5-20251001-v1:0',
+            contentType='application/json',
+            accept='application/json',
+            body=body
+        )
+        raw = json.loads(response['body'].read())['content'][0]['text'].strip().lower()
+        # Accept the key verbatim or with spaces→underscores
+        preset = raw.replace(' ', '_')
+        if preset in PRESET_WEIGHTS:
+            print(f"[Preset] LLM recommended '{preset}' for {ticker}")
+            return preset
+        # Partial match fallback
+        for key in PRESET_WEIGHTS:
+            if key in preset or preset in key:
+                print(f"[Preset] LLM partial match '{preset}' → '{key}' for {ticker}")
+                return key
+    except Exception as exc:
+        print(f"[WARN] Preset recommendation failed for {ticker}: {exc}")
+    return 'default'
+
+
+def _generate_ai_commentary(
+    ticker: str, company_name: str, sector: str, industry: str,
+    current_price: float, currency: str,
+    fair_value: float | None, margin_of_safety: float | None,
+    recommendation: str | None, resolved_preset: str | None,
+    inc: dict, bal: dict, cf: dict, km: dict,
+) -> str:
+    """
+    Generate a plain-language AI commentary on the stock: what's driving the
+    current price and whether buying is a good idea.  Returns a markdown string.
+    """
+    # Build a compact data summary for the prompt
+    def _fmt(v, decimals=2, pct=False, prefix=''):
+        if v is None or (isinstance(v, float) and not (v == v)):
+            return 'N/A'
+        s = f'{v:,.{decimals}f}'
+        if pct:
+            s += '%'
+        return f'{prefix}{s}'
+
+    rev   = inc.get('Total Revenue')
+    ni    = inc.get('Net Income')
+    ocf   = cf.get('Operating Cash Flow')
+    fcf   = cf.get('Free Cash Flow')
+    eq    = bal.get('Total Stockholder Equity')
+    debt  = bal.get('Long Term Debt')
+    cash  = bal.get('Cash And Cash Equivalents')
+    roe   = km.get('roe')
+    roa   = km.get('roa')
+    d2e   = km.get('debt_to_equity')
+    cr    = km.get('current_ratio')
+    pe    = km.get('pe_ratio')
+    eps   = inc.get('Diluted EPS') or inc.get('Basic EPS')
+
+    def _scale(v):
+        """Return human-readable scale (B/M) for large currency numbers."""
+        if v is None:
+            return 'N/A'
+        abs_v = abs(v)
+        if abs_v >= 1e9:
+            return f'{currency} {v/1e9:,.2f}B'
+        if abs_v >= 1e6:
+            return f'{currency} {v/1e6:,.2f}M'
+        return f'{currency} {v:,.2f}'
+
+    mos_str = f'{margin_of_safety:+.1f}%' if margin_of_safety is not None else 'N/A'
+    fv_str  = f'{currency} {fair_value:,.2f}' if fair_value else 'N/A'
+
+    prompt = (
+        f"You are a senior equity analyst. Write a concise investment commentary "
+        f"for {company_name} ({ticker}) in 3 short paragraphs:\n"
+        f"1. What key factors (sector trends, business model, recent performance) explain "
+        f"the current market price of {currency} {current_price:,.2f}.\n"
+        f"2. Whether the stock appears cheap or expensive given its fundamentals "
+        f"(our model estimates fair value of {fv_str}, margin of safety {mos_str}).\n"
+        f"3. A clear buy / hold / avoid recommendation with 1-2 key risks to watch.\n\n"
+        f"Available data:\n"
+        f"- Sector: {sector or 'N/A'} | Industry: {industry or 'N/A'}\n"
+        f"- Valuation preset: {resolved_preset or 'default'} | Model recommendation: {recommendation or 'N/A'}\n"
+        f"- Revenue: {_scale(rev)} | Net Income: {_scale(ni)}\n"
+        f"- Operating CF: {_scale(ocf)} | Free CF: {_scale(fcf)}\n"
+        f"- Equity: {_scale(eq)} | LT Debt: {_scale(debt)} | Cash: {_scale(cash)}\n"
+        f"- ROE: {_fmt(roe, pct=True)} | ROA: {_fmt(roa, pct=True)} | "
+        f"D/E: {_fmt(d2e)} | Current ratio: {_fmt(cr)} | P/E: {_fmt(pe)} | EPS: {_fmt(eps, prefix=currency+' ')}\n\n"
+        f"Write in plain English, 3 paragraphs, no bullet lists. "
+        f"Be direct about whether this stock is worth buying. "
+        f"Do not fabricate specific news events — stick to the numbers provided."
+    )
+    try:
+        text = _call_bedrock_claude(prompt, max_tokens=600)
+        return text.strip()
+    except Exception as exc:
+        print(f"[WARN] AI commentary failed for {ticker}: {exc}")
+        return ''
+
+
 def get_financial_data_with_ai(ticker: str, company_name: str) -> dict:
     """
     Use Claude (via AWS Bedrock) to retrieve the most recent known annual
@@ -973,7 +1130,7 @@ def analyze_stock_get(ticker: str, stream: bool, params: dict) -> dict:
             {'type': 'progress', 'step': step, 'total': total, 'task': task}
         )
 
-    total_steps = 7
+    total_steps = 8
 
     # ------------------------------------------------------------------
     # Step 1: Fetch live stock price
@@ -1005,8 +1162,44 @@ def analyze_stock_get(ticker: str, stream: bool, params: dict) -> dict:
             stock_body.get('companyName') or stock_body.get('name') or company_name
         )
         currency = stock_body.get('currency', 'USD')
+        sector   = stock_body.get('sector', '')
+        industry = stock_body.get('industry', '')
     except Exception:
-        pass
+        sector = ''
+        industry = ''
+
+    # ------------------------------------------------------------------
+    # Resolve valuation weights: explicit preset > custom JSON > auto-LLM
+    # ------------------------------------------------------------------
+    requested_preset = (params.get('business_type') or '').strip().lower().replace(' ', '_')
+    custom_weights_json = params.get('weights', '')
+
+    resolved_preset = None  # will be set below
+
+    if requested_preset and requested_preset != 'automatic' and requested_preset in PRESET_WEIGHTS:
+        # Caller specified a known preset
+        w = PRESET_WEIGHTS[requested_preset]
+        resolved_preset = requested_preset
+        print(f"[Preset] Using requested preset '{resolved_preset}' for {ticker}")
+    elif custom_weights_json:
+        # Caller passed raw JSON weights (legacy / manual config)
+        try:
+            cw = json.loads(custom_weights_json)
+            w = {
+                'dcf':   float(cw.get('dcf_weight', 0.40)),
+                'pe':    float(cw.get('pe_weight',  0.30)),
+                'epv':   float(cw.get('epv_weight', 0.20)),
+                'asset': float(cw.get('asset_weight', 0.10)),
+            }
+            resolved_preset = requested_preset or None
+        except Exception:
+            w = PRESET_WEIGHTS['default']
+            resolved_preset = 'default'
+    else:
+        # No preset specified or 'automatic' — ask LLM
+        progress_events.append(progress(1, total_steps, 'Auto-selecting valuation preset...'))
+        resolved_preset = _recommend_preset(ticker, company_name, sector, industry)
+        w = PRESET_WEIGHTS.get(resolved_preset, PRESET_WEIGHTS['default'])
 
     # ------------------------------------------------------------------
     # Step 2: Retrieve financial data (cache → SEC EDGAR → Yahoo Finance → Claude AI)
@@ -1161,12 +1354,12 @@ def analyze_stock_get(ticker: str, stream: bool, params: dict) -> dict:
     # ------------------------------------------------------------------
     progress_events.append(progress(6, total_steps, 'Calculating weighted fair value...'))
 
-    # Weights: DCF=40%, P/E=30%, Earnings Power=20%, Book Value=10%
+    # Use preset weights (resolved above from business_type param or LLM auto-selection)
     fair_value = weighted_fair_value([
-        (dcf_value, 0.40),
-        (pe_value, 0.30),
-        (earnings_power, 0.20),
-        (book_value, 0.10),
+        (dcf_value,      w['dcf']),
+        (pe_value,       w['pe']),
+        (earnings_power, w['epv']),
+        (book_value,     w['asset']),
     ])
 
     # Round values
@@ -1227,6 +1420,27 @@ def analyze_stock_get(ticker: str, stream: bool, params: dict) -> dict:
             'use manual data entry for a full analysis.'
         )
 
+    # ------------------------------------------------------------------
+    # Step 8: AI commentary — plain-language price & buy opinion
+    # ------------------------------------------------------------------
+    progress_events.append(progress(8, total_steps, 'Generating AI commentary...'))
+    ai_commentary = _generate_ai_commentary(
+        ticker=ticker,
+        company_name=company_name,
+        sector=sector,
+        industry=industry,
+        current_price=current_price,
+        currency=currency,
+        fair_value=fair_value,
+        margin_of_safety=margin_of_safety,
+        recommendation=recommendation,
+        resolved_preset=resolved_preset,
+        inc=inc,
+        bal=bal,
+        cf=cf,
+        km=km,
+    )
+
     # Financial health indicators from AI data
     health_metrics = {}
     if _safe(km.get('current_ratio')):
@@ -1277,8 +1491,17 @@ def analyze_stock_get(ticker: str, stream: bool, params: dict) -> dict:
             'cashflow': cf if cf else None,
             'keyMetrics': km if km else None,
         },
+        'aiCommentary': ai_commentary or None,
         'timestamp': datetime.now().isoformat(),
-        'dataSource': 'ai-bedrock-claude'
+        'dataSource': 'ai-bedrock-claude',
+        # Preset / weight info so the frontend can sync its dropdown
+        'businessType': resolved_preset,
+        'recommendedPreset': resolved_preset,
+        'analysisWeights': {
+            'dcf_weight':   w['dcf'],
+            'epv_weight':   w['epv'],
+            'asset_weight': w['asset'],
+        },
     }
 
     # Persist the analysis result so the ticker page can display it on load
@@ -1304,6 +1527,9 @@ def analyze_stock_get(ticker: str, stream: bool, params: dict) -> dict:
             'pe_ratio': float(pe_from_km) if pe_from_km is not None else None,
             'timestamp': analysis['timestamp'],
             'dataSource': analysis['dataSource'],
+            'businessType': analysis.get('businessType'),
+            'analysisWeights': analysis.get('analysisWeights'),
+            'aiCommentary': analysis.get('aiCommentary'),
         }
         dynamodb_res = boto3.resource('dynamodb', region_name='eu-west-1')
         table = dynamodb_res.Table(MANUAL_DATA_TABLE)

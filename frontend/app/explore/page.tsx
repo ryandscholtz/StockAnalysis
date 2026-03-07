@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import { stockApi, ExploreMarket, ExploreStock } from '@/lib/api'
 import { useAuth } from '@/components/AuthProvider'
@@ -17,9 +17,33 @@ import {
 type SortField = keyof ExploreStock | null
 type SortDir = 'asc' | 'desc'
 
-interface WatchlistSet {
-  tickers: Set<string>
-  adding: Set<string>
+interface FilterRange { min: string; max: string }
+interface FilterState {
+  price:         FilterRange
+  marketCap:     FilterRange  // in $B
+  peRatio:       FilterRange
+  forwardPE:     FilterRange
+  pbRatio:       FilterRange
+  psRatio:       FilterRange
+  evToEbitda:    FilterRange
+  dividendYield: FilterRange  // %
+  eps:           FilterRange
+  beta:          FilterRange
+  volume:        FilterRange  // in M
+}
+
+const EMPTY_FILTERS: FilterState = {
+  price:         { min: '', max: '' },
+  marketCap:     { min: '', max: '' },
+  peRatio:       { min: '', max: '' },
+  forwardPE:     { min: '', max: '' },
+  pbRatio:       { min: '', max: '' },
+  psRatio:       { min: '', max: '' },
+  evToEbitda:    { min: '', max: '' },
+  dividendYield: { min: '', max: '' },
+  eps:           { min: '', max: '' },
+  beta:          { min: '', max: '' },
+  volume:        { min: '', max: '' },
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -84,6 +108,9 @@ const SortIcon = ({ active, dir }: { active: boolean; dir: SortDir }) => (
 
 const SkeletonRow = () => (
   <tr>
+    <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+      <div style={{ height: '15px', width: '15px', borderRadius: '3px', backgroundColor: 'var(--bg-hover)', animation: 'pulse 1.4s ease-in-out infinite', margin: '0 auto' }} />
+    </td>
     {COLUMNS.map((col) => (
       <td key={String(col.key)} style={{ padding: '10px 12px' }}>
         <div style={{
@@ -96,9 +123,6 @@ const SkeletonRow = () => (
         }} />
       </td>
     ))}
-    <td style={{ padding: '10px 12px' }}>
-      <div style={{ height: '28px', width: '120px', borderRadius: '6px', backgroundColor: 'var(--bg-hover)', animation: 'pulse 1.4s ease-in-out infinite' }} />
-    </td>
   </tr>
 )
 
@@ -108,6 +132,7 @@ export default function ExplorePage() {
   const { isAuthenticated } = useAuth()
 
   const [markets, setMarkets] = useState<ExploreMarket[]>([])
+  const [selectedContinent, setSelectedContinent] = useState<string>('Americas')
   const [selectedMarket, setSelectedMarket] = useState<string>('SP500')
   const [stocks, setStocks] = useState<ExploreStock[]>([])
   const [loading, setLoading] = useState(false)
@@ -119,16 +144,43 @@ export default function ExplorePage() {
   const [sortField, setSortField] = useState<SortField>('marketCap')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
 
-  const [watchlist, setWatchlist] = useState<WatchlistSet>({ tickers: new Set(), adding: new Set() })
-  const [addedMessage, setAddedMessage] = useState<string>('')
+  const [watchlistTickers, setWatchlistTickers] = useState<Set<string>>(new Set())
+  const [toastMessage, setToastMessage] = useState<string>('')
 
   const [sectorFilter, setSectorFilter] = useState<string>('All')
+  const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS)
+  const [filterOpen, setFilterOpen] = useState(false)
+
+  // Selection state
+  const [selectedTickers, setSelectedTickers] = useState<Set<string>>(new Set())
+  const [bulkLoading, setBulkLoading] = useState(false)
+  const selectAllRef = useRef<HTMLInputElement>(null)
+
+  // Derived: ordered continent list + markets per continent
+  const continents = useMemo(() => {
+    const order = ['Americas', 'Europe', 'Asia Pacific', 'Middle East & Africa']
+    const seen = new Set(markets.map((m) => m.continent))
+    return order.filter((c) => seen.has(c))
+  }, [markets])
+
+  const marketsForContinent = useMemo(
+    () => markets.filter((m) => m.continent === selectedContinent),
+    [markets, selectedContinent]
+  )
+
+  const handleContinentSelect = (continent: string) => {
+    setSelectedContinent(continent)
+    const first = markets.find((m) => m.continent === continent)
+    if (first && !markets.find((m) => m.id === selectedMarket && m.continent === continent)) {
+      setSelectedMarket(first.id)
+    }
+  }
 
   // Load available markets once
   useEffect(() => {
     stockApi.getExploreMarkets()
       .then((res) => setMarkets(res.markets))
-      .catch(() => {/* fail silently, markets won't be shown */})
+      .catch(() => {/* fail silently */})
       .finally(() => setMarketsLoading(false))
   }, [])
 
@@ -138,10 +190,15 @@ export default function ExplorePage() {
     stockApi.getWatchlist()
       .then((res) => {
         const tickers = new Set<string>((res?.items || []).map((i: any) => i.ticker.toUpperCase()))
-        setWatchlist((prev) => ({ ...prev, tickers }))
+        setWatchlistTickers(tickers)
       })
       .catch(() => {/* ignore */})
   }, [isAuthenticated])
+
+  // Clear selection when market changes
+  useEffect(() => {
+    setSelectedTickers(new Set())
+  }, [selectedMarket])
 
   // Load stocks when market changes
   const loadStocks = useCallback(async (market: string, forceRefresh = false) => {
@@ -182,11 +239,38 @@ export default function ExplorePage() {
     return ['All', ...Array.from(set).sort()]
   }, [stocks])
 
+  // Active filter count
+  const activeFilterCount = useMemo(
+    () => Object.values(filters).filter(({ min, max }) => min !== '' || max !== '').length,
+    [filters]
+  )
+
   // Filtered + sorted stocks
   const displayStocks = useMemo(() => {
+    const inRange = (val: number | null | undefined, { min, max }: FilterRange): boolean => {
+      if (min === '' && max === '') return true
+      if (val == null || !isFinite(val)) return false
+      if (min !== '' && val < parseFloat(min)) return false
+      if (max !== '' && val > parseFloat(max)) return false
+      return true
+    }
     let filtered = sectorFilter === 'All' ? stocks : stocks.filter((s) => s.sector === sectorFilter)
+    if (activeFilterCount > 0) {
+      filtered = filtered.filter((s) =>
+        inRange(s.price, filters.price) &&
+        inRange(s.marketCap != null ? s.marketCap / 1e9 : null, filters.marketCap) &&
+        inRange(s.peRatio, filters.peRatio) &&
+        inRange(s.forwardPE, filters.forwardPE) &&
+        inRange(s.pbRatio, filters.pbRatio) &&
+        inRange(s.psRatio, filters.psRatio) &&
+        inRange(s.evToEbitda, filters.evToEbitda) &&
+        inRange(s.dividendYield, filters.dividendYield) &&
+        inRange(s.eps, filters.eps) &&
+        inRange(s.beta, filters.beta) &&
+        inRange(s.volume != null ? s.volume / 1e6 : null, filters.volume)
+      )
+    }
     if (!sortField) return filtered
-
     return [...filtered].sort((a, b) => {
       const av = getSortValue(a, sortField)
       const bv = getSortValue(b, sortField)
@@ -196,30 +280,83 @@ export default function ExplorePage() {
       const cmp = av < bv ? -1 : 1
       return sortDir === 'asc' ? cmp : -cmp
     })
-  }, [stocks, sortField, sortDir, sectorFilter])
+  }, [stocks, sortField, sortDir, sectorFilter, filters, activeFilterCount])
 
-  // Add to watchlist
-  const handleAddToWatchlist = async (stock: ExploreStock) => {
-    if (!isAuthenticated) return
-    const ticker = stock.ticker.toUpperCase()
-    setWatchlist((prev) => ({ ...prev, adding: new Set([...prev.adding, ticker]) }))
+  // Selection helpers
+  const visibleTickers = useMemo(() => displayStocks.map((s) => s.ticker), [displayStocks])
+  const allSelected = visibleTickers.length > 0 && visibleTickers.every((t) => selectedTickers.has(t))
+  const someSelected = !allSelected && visibleTickers.some((t) => selectedTickers.has(t))
+
+  // Sync header checkbox indeterminate state
+  useEffect(() => {
+    if (selectAllRef.current) selectAllRef.current.indeterminate = someSelected
+  }, [someSelected])
+
+  const handleToggleSelect = useCallback((ticker: string) => {
+    setSelectedTickers((prev) => {
+      const next = new Set(prev)
+      if (next.has(ticker)) next.delete(ticker)
+      else next.add(ticker)
+      return next
+    })
+  }, [])
+
+  const handleToggleAll = () => {
+    if (allSelected || someSelected) {
+      setSelectedTickers(new Set())
+    } else {
+      setSelectedTickers(new Set(visibleTickers))
+    }
+  }
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg)
+    setTimeout(() => setToastMessage(''), 3500)
+  }
+
+  // Bulk add to watchlist
+  const handleBulkAdd = async () => {
+    if (!isAuthenticated || bulkLoading) return
+    const toAdd = [...selectedTickers].filter((t) => !watchlistTickers.has(t))
+    if (!toAdd.length) { showToast('All selected stocks are already on your watchlist'); return }
+    setBulkLoading(true)
     try {
-      await stockApi.addToWatchlist(ticker, stock.companyName, stock.exchange)
-      setWatchlist((prev) => ({
-        tickers: new Set([...prev.tickers, ticker]),
-        adding: new Set([...prev.adding].filter((t) => t !== ticker)),
+      await Promise.all(toAdd.map((ticker) => {
+        const s = stocks.find((x) => x.ticker === ticker)
+        return stockApi.addToWatchlist(ticker, s?.companyName || ticker, s?.exchange || '')
       }))
-      setAddedMessage(`${ticker} added to watchlist`)
-      setTimeout(() => setAddedMessage(''), 3000)
+      setWatchlistTickers((prev) => new Set([...prev, ...toAdd]))
+      setSelectedTickers(new Set())
+      showToast(`${toAdd.length} stock${toAdd.length !== 1 ? 's' : ''} added to watchlist`)
     } catch {
-      setWatchlist((prev) => ({
-        ...prev,
-        adding: new Set([...prev.adding].filter((t) => t !== ticker)),
-      }))
+      showToast('Some stocks could not be added. Please try again.')
+    } finally {
+      setBulkLoading(false)
+    }
+  }
+
+  // Bulk remove from watchlist
+  const handleBulkRemove = async () => {
+    if (!isAuthenticated || bulkLoading) return
+    const toRemove = [...selectedTickers].filter((t) => watchlistTickers.has(t))
+    if (!toRemove.length) { showToast('None of the selected stocks are on your watchlist'); return }
+    setBulkLoading(true)
+    try {
+      await Promise.all(toRemove.map((ticker) => stockApi.removeFromWatchlist(ticker)))
+      setWatchlistTickers((prev) => new Set([...prev].filter((t) => !toRemove.includes(t))))
+      setSelectedTickers(new Set())
+      showToast(`${toRemove.length} stock${toRemove.length !== 1 ? 's' : ''} removed from watchlist`)
+    } catch {
+      showToast('Some stocks could not be removed. Please try again.')
+    } finally {
+      setBulkLoading(false)
     }
   }
 
   const currentMarket = markets.find((m) => m.id === selectedMarket)
+  const numSelected = selectedTickers.size
+  const canAdd    = [...selectedTickers].some((t) => !watchlistTickers.has(t))
+  const canRemove = [...selectedTickers].some((t) => watchlistTickers.has(t))
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
@@ -239,26 +376,54 @@ export default function ExplorePage() {
         </p>
       </div>
 
-      {/* Market selector */}
-      <div style={{
-        display: 'flex',
-        flexWrap: 'wrap',
-        gap: '8px',
-        marginBottom: '20px',
-      }}>
-        {marketsLoading
-          ? Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} style={{
-                height: '34px', width: '100px', borderRadius: '6px',
-                backgroundColor: 'var(--bg-hover)', animation: 'pulse 1.4s ease-in-out infinite',
-              }} />
-            ))
-          : markets.map((m) => (
+      {/* Market selector — two-tier: continents → markets */}
+      {marketsLoading ? (
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} style={{ height: '34px', width: '110px', borderRadius: '8px', backgroundColor: 'var(--bg-hover)', animation: 'pulse 1.4s ease-in-out infinite' }} />
+          ))}
+        </div>
+      ) : (
+        <>
+          {/* Continent tabs */}
+          <div style={{
+            display: 'flex',
+            gap: '4px',
+            marginBottom: '10px',
+            borderBottom: '2px solid var(--border-default)',
+            paddingBottom: '0',
+          }}>
+            {continents.map((c) => (
+              <button
+                key={c}
+                onClick={() => handleContinentSelect(c)}
+                style={{
+                  padding: '7px 16px',
+                  border: 'none',
+                  borderBottom: selectedContinent === c ? '2px solid var(--color-primary)' : '2px solid transparent',
+                  marginBottom: '-2px',
+                  backgroundColor: 'transparent',
+                  color: selectedContinent === c ? 'var(--color-primary)' : 'var(--text-muted)',
+                  fontSize: '13px',
+                  fontWeight: selectedContinent === c ? '600' : '400',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  transition: 'color 0.15s',
+                }}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+
+          {/* Market pills for selected continent */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '16px' }}>
+            {marketsForContinent.map((m) => (
               <button
                 key={m.id}
                 onClick={() => setSelectedMarket(m.id)}
                 style={{
-                  padding: '6px 14px',
+                  padding: '5px 12px',
                   borderRadius: '6px',
                   border: '1px solid',
                   borderColor: selectedMarket === m.id ? 'var(--color-primary)' : 'var(--border-default)',
@@ -272,18 +437,18 @@ export default function ExplorePage() {
                 }}
               >
                 {m.name}
-                <span style={{
-                  marginLeft: '6px',
-                  fontSize: '11px',
-                  opacity: 0.6,
-                }}>
-                  {m.ticker_count}
+                <span style={{ marginLeft: '5px', fontSize: '11px', opacity: 0.55 }}>
+                  {m.screener_based
+                    ? (m.ticker_count != null ? m.ticker_count : 'all')
+                    : m.ticker_count}
                 </span>
               </button>
             ))}
-      </div>
+          </div>
+        </>
+      )}
 
-      {/* Market description + controls row */}
+      {/* Controls row */}
       <div style={{
         display: 'flex',
         flexWrap: 'wrap',
@@ -291,6 +456,7 @@ export default function ExplorePage() {
         gap: '12px',
         marginBottom: '16px',
       }}>
+        {/* Market description */}
         <div style={{ flex: 1, minWidth: '200px' }}>
           {currentMarket && (
             <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
@@ -323,6 +489,38 @@ export default function ExplorePage() {
           </div>
         )}
 
+        {/* Filter button */}
+        <button
+          onClick={() => setFilterOpen(true)}
+          style={{
+            position: 'relative',
+            padding: '6px 14px',
+            borderRadius: '6px',
+            border: `1px solid ${activeFilterCount > 0 ? 'var(--color-primary)' : 'var(--border-input)'}`,
+            backgroundColor: activeFilterCount > 0 ? 'var(--color-primary-bg)' : 'var(--bg-surface)',
+            color: activeFilterCount > 0 ? 'var(--color-primary)' : 'var(--text-secondary)',
+            fontSize: '13px',
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+            fontWeight: activeFilterCount > 0 ? '600' : '400',
+          }}
+        >
+          ⚙ Filters
+          {activeFilterCount > 0 && (
+            <span style={{
+              marginLeft: '6px',
+              backgroundColor: 'var(--color-primary)',
+              color: '#fff',
+              borderRadius: '10px',
+              fontSize: '11px',
+              padding: '1px 6px',
+              fontWeight: '700',
+            }}>
+              {activeFilterCount}
+            </span>
+          )}
+        </button>
+
         {/* Refresh button */}
         <button
           onClick={() => loadStocks(selectedMarket, true)}
@@ -343,8 +541,104 @@ export default function ExplorePage() {
         </button>
       </div>
 
-      {/* Watchlist feedback toast */}
-      {addedMessage && (
+      {/* Advanced filter modal */}
+      {filterOpen && (
+        <FilterModal
+          filters={filters}
+          onChange={setFilters}
+          onClose={() => setFilterOpen(false)}
+          onClear={() => setFilters(EMPTY_FILTERS)}
+          activeCount={activeFilterCount}
+        />
+      )}
+
+      {/* Bulk action bar — slides in when stocks are selected */}
+      {numSelected > 0 && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          padding: '10px 14px',
+          marginBottom: '12px',
+          borderRadius: '8px',
+          backgroundColor: 'var(--color-primary-bg)',
+          border: '1px solid var(--color-primary)',
+          flexWrap: 'wrap',
+        }}>
+          <span style={{ fontSize: '13px', fontWeight: '500', color: 'var(--color-primary)', whiteSpace: 'nowrap' }}>
+            {numSelected} selected
+          </span>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+            {!isAuthenticated ? (
+              <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+                Sign in to add to watchlist
+              </span>
+            ) : (
+              <>
+                {canAdd && (
+                  <button
+                    onClick={handleBulkAdd}
+                    disabled={bulkLoading}
+                    style={{
+                      padding: '5px 14px',
+                      borderRadius: '6px',
+                      border: '1px solid var(--color-primary)',
+                      backgroundColor: 'var(--color-primary)',
+                      color: '#fff',
+                      fontSize: '13px',
+                      fontWeight: '500',
+                      cursor: bulkLoading ? 'not-allowed' : 'pointer',
+                      opacity: bulkLoading ? 0.6 : 1,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {bulkLoading ? '…' : '+ Add to Watchlist'}
+                  </button>
+                )}
+                {canRemove && (
+                  <button
+                    onClick={handleBulkRemove}
+                    disabled={bulkLoading}
+                    style={{
+                      padding: '5px 14px',
+                      borderRadius: '6px',
+                      border: '1px solid var(--border-input)',
+                      backgroundColor: 'var(--bg-surface)',
+                      color: 'var(--text-secondary)',
+                      fontSize: '13px',
+                      fontWeight: '500',
+                      cursor: bulkLoading ? 'not-allowed' : 'pointer',
+                      opacity: bulkLoading ? 0.6 : 1,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {bulkLoading ? '…' : '− Remove from Watchlist'}
+                  </button>
+                )}
+              </>
+            )}
+            <button
+              onClick={() => setSelectedTickers(new Set())}
+              disabled={bulkLoading}
+              style={{
+                padding: '5px 10px',
+                borderRadius: '6px',
+                border: 'none',
+                backgroundColor: 'transparent',
+                color: 'var(--text-muted)',
+                fontSize: '13px',
+                cursor: bulkLoading ? 'not-allowed' : 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Toast notification */}
+      {toastMessage && (
         <div style={{
           position: 'fixed',
           bottom: '24px',
@@ -359,7 +653,7 @@ export default function ExplorePage() {
           zIndex: 1000,
           boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
         }}>
-          ✓ {addedMessage}
+          ✓ {toastMessage}
         </div>
       )}
 
@@ -386,7 +680,7 @@ export default function ExplorePage() {
         </p>
       )}
 
-      {/* Table container — horizontal scroll on mobile */}
+      {/* Table */}
       <div style={{
         overflowX: 'auto',
         WebkitOverflowScrolling: 'touch',
@@ -402,6 +696,28 @@ export default function ExplorePage() {
         }}>
           <thead>
             <tr style={{ backgroundColor: 'var(--bg-surface-subtle)' }}>
+              {/* Select-all checkbox */}
+              <th style={{
+                padding: '10px 12px',
+                textAlign: 'center',
+                borderBottom: '2px solid var(--border-default)',
+                position: 'sticky',
+                top: 0,
+                backgroundColor: 'var(--bg-surface-subtle)',
+                zIndex: 2,
+                minWidth: 40,
+                width: 40,
+              }}>
+                <input
+                  ref={selectAllRef}
+                  type="checkbox"
+                  checked={allSelected}
+                  onChange={handleToggleAll}
+                  disabled={loading || displayStocks.length === 0}
+                  title={allSelected ? 'Deselect all' : 'Select all'}
+                  style={{ cursor: 'pointer', width: '15px', height: '15px', accentColor: 'var(--color-primary)' }}
+                />
+              </th>
               {COLUMNS.map((col, colIdx) => (
                 <th
                   key={String(col.key)}
@@ -430,25 +746,6 @@ export default function ExplorePage() {
                   {col.key && <SortIcon active={sortField === col.key} dir={sortDir} />}
                 </th>
               ))}
-              {/* Action column — sticky right */}
-              <th style={{
-                padding: '10px 12px',
-                textAlign: 'right',
-                fontWeight: '600',
-                fontSize: '12px',
-                color: 'var(--text-muted)',
-                borderBottom: '2px solid var(--border-default)',
-                position: 'sticky',
-                top: 0,
-                right: 0,
-                backgroundColor: 'var(--bg-surface-subtle)',
-                zIndex: 3,
-                minWidth: 140,
-                whiteSpace: 'nowrap',
-                boxShadow: '-2px 0 6px -2px rgba(0,0,0,0.08)',
-              }}>
-                Watchlist
-              </th>
             </tr>
           </thead>
           <tbody>
@@ -459,10 +756,9 @@ export default function ExplorePage() {
                     key={stock.ticker}
                     stock={stock}
                     idx={idx}
-                    isAuthenticated={isAuthenticated}
-                    onWatchlist={watchlist.tickers.has(stock.ticker.toUpperCase())}
-                    adding={watchlist.adding.has(stock.ticker.toUpperCase())}
-                    onAdd={handleAddToWatchlist}
+                    selected={selectedTickers.has(stock.ticker)}
+                    onToggle={handleToggleSelect}
+                    onWatchlist={watchlistTickers.has(stock.ticker.toUpperCase())}
                   />
                 ))}
             {!loading && !error && displayStocks.length === 0 && (
@@ -500,19 +796,18 @@ export default function ExplorePage() {
 interface StockRowProps {
   stock: ExploreStock
   idx: number
-  isAuthenticated: boolean
+  selected: boolean
+  onToggle: (ticker: string) => void
   onWatchlist: boolean
-  adding: boolean
-  onAdd: (stock: ExploreStock) => void
 }
 
-function StockRow({ stock, idx, isAuthenticated, onWatchlist, adding, onAdd }: StockRowProps) {
+function StockRow({ stock, idx, selected, onToggle, onWatchlist }: StockRowProps) {
   const changePositive = (stock.priceChangePct ?? 0) >= 0
   const currency = stock.currency || 'USD'
 
-  const rowBg = idx % 2 === 0 ? 'var(--bg-surface)' : 'var(--bg-surface-subtle)'
-  const [hover, setHover] = useState(false)
-  const stickyBg = hover ? 'var(--bg-hover)' : rowBg
+  const rowBg = selected
+    ? 'var(--color-primary-bg)'
+    : idx % 2 === 0 ? 'var(--bg-surface)' : 'var(--bg-surface-subtle)'
 
   const cell = (content: React.ReactNode, align: 'left' | 'right' = 'right', style?: React.CSSProperties) => (
     <td style={{
@@ -528,21 +823,33 @@ function StockRow({ stock, idx, isAuthenticated, onWatchlist, adding, onAdd }: S
 
   return (
     <tr
-      style={{ backgroundColor: stickyBg, transition: 'background-color 0.1s' }}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
+      style={{ backgroundColor: rowBg, transition: 'background-color 0.1s', cursor: 'pointer' }}
+      onClick={() => onToggle(stock.ticker)}
+      onMouseEnter={(e) => {
+        if (!selected) e.currentTarget.style.backgroundColor = 'var(--bg-hover)'
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.backgroundColor = rowBg
+      }}
     >
-      {/* Symbol — sticky left */}
-      <td style={{
-        padding: '9px 12px',
-        textAlign: 'left',
-        whiteSpace: 'nowrap',
-        position: 'sticky',
-        left: 0,
-        backgroundColor: stickyBg,
-        zIndex: 1,
-        boxShadow: '2px 0 6px -2px rgba(0,0,0,0.08)',
-      }}>
+      {/* Checkbox */}
+      <td
+        style={{ padding: '9px 12px', textAlign: 'center', whiteSpace: 'nowrap' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={() => onToggle(stock.ticker)}
+          style={{ cursor: 'pointer', width: '15px', height: '15px', accentColor: 'var(--color-primary)' }}
+        />
+      </td>
+
+      {/* Symbol */}
+      <td
+        style={{ padding: '9px 12px', textAlign: 'left', whiteSpace: 'nowrap' }}
+        onClick={(e) => e.stopPropagation()}
+      >
         <Link
           href={`/ticker?ticker=${stock.ticker}`}
           style={{
@@ -555,6 +862,9 @@ function StockRow({ stock, idx, isAuthenticated, onWatchlist, adding, onAdd }: S
         >
           {stock.ticker}
         </Link>
+        {onWatchlist && (
+          <span title="On watchlist" style={{ marginLeft: '5px', fontSize: '10px', color: '#16a34a' }}>★</span>
+        )}
       </td>
 
       {/* Company name */}
@@ -597,29 +907,19 @@ function StockRow({ stock, idx, isAuthenticated, onWatchlist, adding, onAdd }: S
       )}
 
       {/* P/E */}
-      {cell(
-        <RatioCell value={stock.peRatio} />
-      )}
+      {cell(<RatioCell value={stock.peRatio} />)}
 
       {/* Fwd P/E */}
-      {cell(
-        <RatioCell value={stock.forwardPE} />
-      )}
+      {cell(<RatioCell value={stock.forwardPE} />)}
 
       {/* P/B */}
-      {cell(
-        <RatioCell value={stock.pbRatio} />
-      )}
+      {cell(<RatioCell value={stock.pbRatio} />)}
 
       {/* P/S */}
-      {cell(
-        <RatioCell value={stock.psRatio} />
-      )}
+      {cell(<RatioCell value={stock.psRatio} />)}
 
       {/* EV/EBITDA */}
-      {cell(
-        <RatioCell value={stock.evToEbitda} />
-      )}
+      {cell(<RatioCell value={stock.evToEbitda} />)}
 
       {/* Dividend Yield */}
       {cell(
@@ -682,78 +982,241 @@ function StockRow({ stock, idx, isAuthenticated, onWatchlist, adding, onAdd }: S
           </span>
         ) : '-'}
       </td>
-
-      {/* Add to Watchlist — sticky right */}
-      <td style={{
-        padding: '9px 12px',
-        textAlign: 'right',
-        whiteSpace: 'nowrap',
-        position: 'sticky',
-        right: 0,
-        backgroundColor: stickyBg,
-        zIndex: 1,
-        boxShadow: '-2px 0 6px -2px rgba(0,0,0,0.08)',
-      }}>
-        {!isAuthenticated ? (
-          <Link
-            href="/auth/signin"
-            style={{
-              fontSize: '12px',
-              color: 'var(--text-subtle)',
-              textDecoration: 'none',
-              padding: '4px 10px',
-              border: '1px solid var(--border-default)',
-              borderRadius: '5px',
-            }}
-          >
-            Sign in
-          </Link>
-        ) : onWatchlist ? (
-          <span style={{
-            fontSize: '12px',
-            padding: '4px 10px',
-            border: '1px solid #86efac',
-            borderRadius: '5px',
-            backgroundColor: 'var(--status-success-bg, #f0fdf4)',
-            color: '#16a34a',
-            fontWeight: '500',
-          }}>
-            ✓ Watchlist
-          </span>
-        ) : (
-          <button
-            onClick={() => onAdd(stock)}
-            disabled={adding}
-            style={{
-              fontSize: '12px',
-              padding: '4px 10px',
-              border: '1px solid var(--color-primary)',
-              borderRadius: '5px',
-              backgroundColor: adding ? 'var(--bg-hover)' : 'transparent',
-              color: adding ? 'var(--text-muted)' : 'var(--color-primary)',
-              cursor: adding ? 'not-allowed' : 'pointer',
-              fontWeight: '500',
-              transition: 'all 0.15s',
-              whiteSpace: 'nowrap',
-            }}
-            onMouseEnter={(e) => {
-              if (!adding) {
-                e.currentTarget.style.backgroundColor = 'var(--color-primary)'
-                e.currentTarget.style.color = 'white'
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (!adding) {
-                e.currentTarget.style.backgroundColor = 'transparent'
-                e.currentTarget.style.color = 'var(--color-primary)'
-              }
-            }}
-          >
-            {adding ? '…' : '+ Watchlist'}
-          </button>
-        )}
-      </td>
     </tr>
+  )
+}
+
+// ─── Filter Modal ─────────────────────────────────────────────────────────────
+
+interface FilterModalProps {
+  filters: FilterState
+  onChange: (f: FilterState) => void
+  onClose: () => void
+  onClear: () => void
+  activeCount: number
+}
+
+const FILTER_GROUPS: {
+  label: string
+  rows: { key: keyof FilterState; label: string; unit?: string; placeholder?: string }[]
+}[] = [
+  {
+    label: 'Valuation',
+    rows: [
+      { key: 'peRatio',    label: 'P/E Ratio',    placeholder: 'e.g. 15' },
+      { key: 'forwardPE',  label: 'Forward P/E',  placeholder: 'e.g. 12' },
+      { key: 'pbRatio',    label: 'P/B Ratio',    placeholder: 'e.g. 2' },
+      { key: 'psRatio',    label: 'P/S Ratio',    placeholder: 'e.g. 3' },
+      { key: 'evToEbitda', label: 'EV / EBITDA',  placeholder: 'e.g. 10' },
+    ],
+  },
+  {
+    label: 'Income',
+    rows: [
+      { key: 'dividendYield', label: 'Dividend Yield', unit: '%',  placeholder: 'e.g. 2' },
+      { key: 'eps',           label: 'EPS',            unit: '$',  placeholder: 'e.g. 5' },
+    ],
+  },
+  {
+    label: 'Size & Price',
+    rows: [
+      { key: 'marketCap', label: 'Market Cap', unit: '$B', placeholder: 'e.g. 100' },
+      { key: 'price',     label: 'Price',      unit: '$',  placeholder: 'e.g. 50' },
+    ],
+  },
+  {
+    label: 'Risk & Volume',
+    rows: [
+      { key: 'beta',   label: 'Beta',   placeholder: 'e.g. 0.8' },
+      { key: 'volume', label: 'Volume', unit: 'M shares', placeholder: 'e.g. 1' },
+    ],
+  },
+]
+
+function FilterModal({ filters, onChange, onClose, onClear, activeCount }: FilterModalProps) {
+  const set = (key: keyof FilterState, side: 'min' | 'max', val: string) => {
+    onChange({ ...filters, [key]: { ...filters[key], [side]: val } })
+  }
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 1000,
+        backgroundColor: 'rgba(0,0,0,0.45)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '16px',
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          backgroundColor: 'var(--bg-surface)',
+          border: '1px solid var(--border-default)',
+          borderRadius: '12px',
+          width: '100%',
+          maxWidth: '560px',
+          maxHeight: '90vh',
+          display: 'flex',
+          flexDirection: 'column',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+        }}
+      >
+        {/* Header */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '18px 20px 14px',
+          borderBottom: '1px solid var(--border-default)',
+          flexShrink: 0,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-primary)' }}>
+              Advanced Filters
+            </span>
+            {activeCount > 0 && (
+              <span style={{
+                backgroundColor: 'var(--color-primary)',
+                color: '#fff',
+                borderRadius: '10px',
+                fontSize: '11px',
+                padding: '2px 8px',
+                fontWeight: '700',
+              }}>
+                {activeCount} active
+              </span>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            {activeCount > 0 && (
+              <button
+                onClick={onClear}
+                style={{
+                  padding: '4px 12px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border-input)',
+                  backgroundColor: 'transparent',
+                  color: 'var(--text-muted)',
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                }}
+              >
+                Clear all
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              style={{
+                width: '28px', height: '28px',
+                borderRadius: '6px',
+                border: 'none',
+                backgroundColor: 'var(--bg-hover)',
+                color: 'var(--text-muted)',
+                fontSize: '16px',
+                cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              ×
+            </button>
+          </div>
+        </div>
+
+        {/* Column labels */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 120px 120px',
+          gap: '8px',
+          padding: '10px 20px 4px',
+          flexShrink: 0,
+        }}>
+          <div />
+          <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600', textAlign: 'center' }}>MIN</span>
+          <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600', textAlign: 'center' }}>MAX</span>
+        </div>
+
+        {/* Scrollable filter body */}
+        <div style={{ overflowY: 'auto', padding: '0 20px 20px', flexGrow: 1 }}>
+          {FILTER_GROUPS.map((group, gi) => (
+            <div key={gi} style={{ marginBottom: '20px' }}>
+              <div style={{
+                fontSize: '11px',
+                fontWeight: '700',
+                color: 'var(--text-muted)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.06em',
+                marginBottom: '8px',
+                paddingTop: gi > 0 ? '12px' : '8px',
+                borderTop: gi > 0 ? '1px solid var(--border-default)' : 'none',
+              }}>
+                {group.label}
+              </div>
+              {group.rows.map(({ key, label, unit, placeholder }) => (
+                <div
+                  key={key}
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 120px 120px',
+                    gap: '8px',
+                    alignItems: 'center',
+                    marginBottom: '6px',
+                  }}
+                >
+                  <label style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                    {label}
+                    {unit && <span style={{ color: 'var(--text-muted)', fontSize: '11px', marginLeft: '4px' }}>{unit}</span>}
+                  </label>
+                  {(['min', 'max'] as const).map((side) => (
+                    <input
+                      key={side}
+                      type="number"
+                      value={filters[key][side]}
+                      onChange={(e) => set(key, side, e.target.value)}
+                      placeholder={side === 'min' ? (placeholder || '—') : '—'}
+                      style={{
+                        padding: '5px 8px',
+                        borderRadius: '6px',
+                        border: `1px solid ${filters[key][side] ? 'var(--color-primary)' : 'var(--border-input)'}`,
+                        backgroundColor: 'var(--bg-surface)',
+                        color: 'var(--text-primary)',
+                        fontSize: '13px',
+                        width: '100%',
+                        boxSizing: 'border-box',
+                        outline: 'none',
+                      }}
+                    />
+                  ))}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+
+        {/* Footer */}
+        <div style={{
+          padding: '12px 20px',
+          borderTop: '1px solid var(--border-default)',
+          flexShrink: 0,
+          display: 'flex',
+          justifyContent: 'flex-end',
+        }}>
+          <button
+            onClick={onClose}
+            style={{
+              padding: '8px 24px',
+              borderRadius: '7px',
+              border: 'none',
+              backgroundColor: 'var(--color-primary)',
+              color: '#fff',
+              fontSize: '14px',
+              fontWeight: '600',
+              cursor: 'pointer',
+            }}
+          >
+            Done
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 

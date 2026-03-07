@@ -128,6 +128,7 @@ def add_to_watchlist(user_id: str, ticker: str, data: dict) -> dict:
             'ticker': ticker,
             'addedAt': datetime.now().isoformat(),
             'companyName': data.get('companyName', ticker),
+            'exchange': data.get('exchange', ''),
             'currentPrice': Decimal(str(data.get('currentPrice', 0))),
             'notes': data.get('notes', '')
         }
@@ -286,11 +287,27 @@ def lambda_handler(event, context):
     # Extract user ID from headers — API Gateway lowercases headers, so check both cases
     _headers = event.get('headers', {}) or {}
     user_id = _headers.get('X-User-Id') or _headers.get('x-user-id')
+
+    # Fallback: extract sub from the Cognito JWT in Authorization header
+    if not user_id:
+        auth_header = _headers.get('Authorization') or _headers.get('authorization', '')
+        if auth_header.startswith('Bearer '):
+            try:
+                import base64
+                token = auth_header[7:]
+                payload_b64 = token.split('.')[1]
+                # Fix padding for base64
+                payload_b64 += '=' * (-len(payload_b64) % 4)
+                payload = json.loads(base64.b64decode(payload_b64).decode('utf-8'))
+                user_id = payload.get('sub')
+            except Exception:
+                pass
+
     if not user_id and ('/api/watchlist' in path or '/api/manual-data' in path):
         return {
             'statusCode': 401,
             'headers': headers,
-            'body': json.dumps({'error': 'Unauthorized: missing X-User-Id header'})
+            'body': json.dumps({'error': 'Unauthorized: missing user identity'})
         }
 
     try:

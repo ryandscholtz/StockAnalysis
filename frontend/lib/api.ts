@@ -133,10 +133,26 @@ export interface InsuranceMetrics {
 export interface QuoteResponse {
   ticker: string
   companyName: string
+  price: number
   currentPrice: number
-  marketCap?: number
+  currency?: string
+  exchange?: string
   sector?: string
   industry?: string
+  priceChange?: number
+  priceChangePct?: number
+  marketCap?: number
+  peRatio?: number
+  forwardPE?: number
+  pbRatio?: number
+  psRatio?: number
+  evToEbitda?: number
+  dividendYield?: number
+  eps?: number
+  beta?: number
+  week52High?: number
+  week52Low?: number
+  volume?: number
 }
 
 export interface SearchResult {
@@ -955,8 +971,10 @@ export interface ExploreMarket {
   id: string
   name: string
   description: string
+  continent: string
   region: string
-  ticker_count: number
+  ticker_count: number | null
+  screener_based?: boolean
 }
 
 export interface ExploreStock {
