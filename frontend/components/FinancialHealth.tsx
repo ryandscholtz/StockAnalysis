@@ -105,10 +105,10 @@ export default function FinancialHealth({ analysis }: FinancialHealthProps) {
       ) : (
         <div style={{ 
           padding: '20px', 
-          backgroundColor: '#f9fafb', 
+          backgroundColor: 'var(--bg-surface-subtle)', 
           borderRadius: '8px', 
           textAlign: 'center',
-          color: '#6b7280'
+          color: 'var(--text-muted)'
         }}>
           <p style={{ margin: 0, fontSize: '14px' }}>
             Detailed financial metrics are available in the full analysis view.

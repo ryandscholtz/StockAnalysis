@@ -56,13 +56,13 @@ export default function PriceRatiosComponent({ priceRatios }: PriceRatiosProps) 
 
   return (
     <div style={{
-      background: 'white',
+      background: 'var(--bg-surface)',
       borderRadius: '8px',
       padding: '24px',
       boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
       marginBottom: '20px'
     }}>
-      <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '20px', color: '#111827' }}>
+      <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '20px', color: 'var(--text-primary)' }}>
         Valuation Ratios
       </h2>
 
@@ -72,12 +72,12 @@ export default function PriceRatiosComponent({ priceRatios }: PriceRatiosProps) 
             key={ratio.key}
             style={{
               padding: '16px',
-              background: '#f9fafb',
+              background: 'var(--bg-surface-subtle)',
               borderRadius: '6px',
-              border: '1px solid #e5e7eb'
+              border: '1px solid var(--border-default)'
             }}
           >
-            <div style={{ fontSize: '13px', color: '#6b7280', marginBottom: '8px' }}>
+            <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '8px' }}>
               {ratio.label}
             </div>
             <div style={{ fontSize: '24px', fontWeight: '700', color: getRatioColor(ratio.abbr, ratio.value) }}>

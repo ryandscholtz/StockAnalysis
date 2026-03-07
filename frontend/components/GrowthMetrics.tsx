@@ -28,37 +28,37 @@ export default function GrowthMetricsComponent({ growthMetrics, currency }: Grow
 
   return (
     <div style={{
-      background: 'white',
+      background: 'var(--bg-surface)',
       borderRadius: '8px',
       padding: '24px',
       boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
       marginBottom: '20px'
     }}>
-      <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '20px', color: '#111827' }}>
+      <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '20px', color: 'var(--text-primary)' }}>
         Growth Metrics
       </h2>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
         {/* Revenue Growth */}
         <div>
-          <h3 style={{ fontSize: '14px', fontWeight: '500', color: '#6b7280', marginBottom: '12px' }}>
+          <h3 style={{ fontSize: '14px', fontWeight: '500', color: 'var(--text-muted)', marginBottom: '12px' }}>
             Revenue Growth
           </h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '13px', color: '#6b7280' }}>1 Year:</span>
+              <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>1 Year:</span>
               <span style={{ fontSize: '16px', fontWeight: '600', color: getColor(growthMetrics.revenueGrowth1Y) }}>
                 {formatPercent(growthMetrics.revenueGrowth1Y)}
               </span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '13px', color: '#6b7280' }}>3 Year CAGR:</span>
+              <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>3 Year CAGR:</span>
               <span style={{ fontSize: '16px', fontWeight: '600', color: getColor(growthMetrics.revenueGrowth3Y) }}>
                 {formatPercent(growthMetrics.revenueGrowth3Y)}
               </span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '13px', color: '#6b7280' }}>5 Year CAGR:</span>
+              <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>5 Year CAGR:</span>
               <span style={{ fontSize: '16px', fontWeight: '600', color: getColor(growthMetrics.revenueGrowth5Y) }}>
                 {formatPercent(growthMetrics.revenueGrowth5Y)}
               </span>
@@ -68,24 +68,24 @@ export default function GrowthMetricsComponent({ growthMetrics, currency }: Grow
 
         {/* Earnings Growth */}
         <div>
-          <h3 style={{ fontSize: '14px', fontWeight: '500', color: '#6b7280', marginBottom: '12px' }}>
+          <h3 style={{ fontSize: '14px', fontWeight: '500', color: 'var(--text-muted)', marginBottom: '12px' }}>
             Earnings Growth
           </h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '13px', color: '#6b7280' }}>1 Year:</span>
+              <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>1 Year:</span>
               <span style={{ fontSize: '16px', fontWeight: '600', color: getColor(growthMetrics.earningsGrowth1Y) }}>
                 {formatPercent(growthMetrics.earningsGrowth1Y)}
               </span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '13px', color: '#6b7280' }}>3 Year CAGR:</span>
+              <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>3 Year CAGR:</span>
               <span style={{ fontSize: '16px', fontWeight: '600', color: getColor(growthMetrics.earningsGrowth3Y) }}>
                 {formatPercent(growthMetrics.earningsGrowth3Y)}
               </span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '13px', color: '#6b7280' }}>5 Year CAGR:</span>
+              <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>5 Year CAGR:</span>
               <span style={{ fontSize: '16px', fontWeight: '600', color: getColor(growthMetrics.earningsGrowth5Y) }}>
                 {formatPercent(growthMetrics.earningsGrowth5Y)}
               </span>
@@ -95,24 +95,24 @@ export default function GrowthMetricsComponent({ growthMetrics, currency }: Grow
 
         {/* FCF Growth */}
         <div>
-          <h3 style={{ fontSize: '14px', fontWeight: '500', color: '#6b7280', marginBottom: '12px' }}>
+          <h3 style={{ fontSize: '14px', fontWeight: '500', color: 'var(--text-muted)', marginBottom: '12px' }}>
             Free Cash Flow Growth
           </h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '13px', color: '#6b7280' }}>1 Year:</span>
+              <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>1 Year:</span>
               <span style={{ fontSize: '16px', fontWeight: '600', color: getColor(growthMetrics.fcfGrowth1Y) }}>
                 {formatPercent(growthMetrics.fcfGrowth1Y)}
               </span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '13px', color: '#6b7280' }}>3 Year CAGR:</span>
+              <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>3 Year CAGR:</span>
               <span style={{ fontSize: '16px', fontWeight: '600', color: getColor(growthMetrics.fcfGrowth3Y) }}>
                 {formatPercent(growthMetrics.fcfGrowth3Y)}
               </span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '13px', color: '#6b7280' }}>5 Year CAGR:</span>
+              <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>5 Year CAGR:</span>
               <span style={{ fontSize: '16px', fontWeight: '600', color: getColor(growthMetrics.fcfGrowth5Y) }}>
                 {formatPercent(growthMetrics.fcfGrowth5Y)}
               </span>

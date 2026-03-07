@@ -105,20 +105,20 @@ export default function AnalysisCard({ analysis }: AnalysisCardProps) {
       </div>
 
       {analysis.recommendation ? (
-        <div style={{ marginTop: '24px', padding: '16px', background: '#f9fafb', borderRadius: '6px' }}>
+        <div style={{ marginTop: '24px', padding: '16px', background: 'var(--bg-surface-subtle)', borderRadius: '6px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
             <span className="metric-label">Recommendation</span>
             <span className={getRecommendationClass(analysis.recommendation)} style={{ fontSize: '20px' }}>
               {analysis.recommendation}
             </span>
           </div>
-          <p style={{ fontSize: '14px', color: '#6b7280', lineHeight: '1.6' }}>
+          <p style={{ fontSize: '14px', color: 'var(--text-muted)', lineHeight: '1.6' }}>
             {analysis.recommendationReasoning}
           </p>
         </div>
       ) : (
-        <div style={{ marginTop: '24px', padding: '16px', background: '#f9fafb', borderRadius: '6px' }}>
-          <p style={{ fontSize: '14px', color: '#6b7280', lineHeight: '1.6', margin: 0 }}>
+        <div style={{ marginTop: '24px', padding: '16px', background: 'var(--bg-surface-subtle)', borderRadius: '6px' }}>
+          <p style={{ fontSize: '14px', color: 'var(--text-muted)', lineHeight: '1.6', margin: 0 }}>
             {analysis.recommendationReasoning}
           </p>
         </div>
