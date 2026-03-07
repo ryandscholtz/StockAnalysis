@@ -180,7 +180,7 @@ export default function FinancialDataDisplay({ ticker, financialData, metadata, 
         <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px' }}>
           Stored Financial Data
         </h2>
-        <p style={{ color: '#6b7280', fontSize: '14px', margin: 0 }}>
+        <p style={{ color: 'var(--text-muted)', fontSize: '14px', margin: 0 }}>
           No financial data stored yet. Run an analysis, upload a PDF, or use manual data entry to add data.
         </p>
       </div>
@@ -191,13 +191,13 @@ export default function FinancialDataDisplay({ ticker, financialData, metadata, 
     <div className="card" style={{ marginBottom: '24px' }}>
       <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>
         Stored Financial Data
-        <span style={{ fontSize: '13px', fontWeight: '400', color: '#6b7280', marginLeft: '8px' }}>
+        <span style={{ fontSize: '13px', fontWeight: '400', color: 'var(--text-muted)', marginLeft: '8px' }}>
           {ticker}
         </span>
         {financialCurrency && (
           <span style={{
-            fontSize: '12px', fontWeight: '500', color: '#374151',
-            backgroundColor: '#f3f4f6', border: '1px solid #e5e7eb',
+            fontSize: '12px', fontWeight: '500', color: 'var(--text-secondary)',
+            backgroundColor: 'var(--bg-hover)', border: '1px solid var(--border-default)',
             padding: '1px 7px', borderRadius: '10px', marginLeft: '8px'
           }}>
             {financialCurrency}
@@ -216,14 +216,14 @@ export default function FinancialDataDisplay({ ticker, financialData, metadata, 
           <div style={{
             display: 'flex', alignItems: 'flex-start', gap: '10px',
             padding: '10px 14px', borderRadius: '6px', marginBottom: '14px',
-            backgroundColor: '#fffbeb', border: '1px solid #fde68a',
+            backgroundColor: 'var(--status-warning-bg)', border: '1px solid var(--status-warning-border)',
           }}>
             <span style={{ fontSize: '15px', lineHeight: '1.5', flexShrink: 0 }}>⚠️</span>
             <div>
-              <span style={{ color: '#92400e', fontSize: '13px', fontWeight: '600' }}>
+              <span style={{ color: 'var(--status-warning-text)', fontSize: '13px', fontWeight: '600' }}>
                 Incomplete financial data —{' '}
               </span>
-              <span style={{ color: '#b45309', fontSize: '13px' }}>
+              <span style={{ color: 'var(--status-warning-text)', fontSize: '13px' }}>
                 {missingSections.join(', ')} could not be retrieved automatically.
                 Add the missing data manually or re-run the analysis to try again.
               </span>
@@ -245,7 +245,7 @@ export default function FinancialDataDisplay({ ticker, financialData, metadata, 
         return (
           <div key={sectionKey} style={{
             marginBottom: '10px',
-            border: `1px solid ${hasData ? '#e5e7eb' : '#fde68a'}`,
+            border: `1px solid ${hasData ? 'var(--border-default)' : 'var(--status-warning-border)'}`,
             borderRadius: '8px',
             overflow: 'hidden',
           }}>
@@ -254,7 +254,7 @@ export default function FinancialDataDisplay({ ticker, financialData, metadata, 
               onClick={() => toggle(sectionKey)}
               style={{
                 padding: '12px 16px',
-                backgroundColor: hasData ? '#f9fafb' : '#fffbeb',
+                backgroundColor: hasData ? 'var(--bg-surface-subtle)' : 'var(--status-warning-bg)',
                 cursor: 'pointer',
                 display: 'flex',
                 justifyContent: 'space-between',
@@ -265,26 +265,26 @@ export default function FinancialDataDisplay({ ticker, financialData, metadata, 
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <span style={{ fontSize: '18px' }}>{cfg.icon}</span>
                 <div>
-                  <span style={{ fontWeight: '600', fontSize: '15px', color: hasData ? '#111827' : '#92400e' }}>
+                  <span style={{ fontWeight: '600', fontSize: '15px', color: hasData ? 'var(--text-primary)' : 'var(--status-warning-text)' }}>
                     {cfg.title}
                   </span>
                   {hasData && meta ? (
-                    <span style={{ fontSize: '12px', color: '#6b7280', marginLeft: '10px' }}>
+                    <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: '10px' }}>
                       {periods.length} period{periods.length !== 1 ? 's' : ''}
                       {' · '}
-                      <span style={{ color: '#9ca3af' }}>
+                      <span style={{ color: 'var(--text-subtle)' }}>
                         Updated {formatDate(meta.last_updated)}
                       </span>
                       {' · '}
                       <span style={{
-                        backgroundColor: '#dbeafe', color: '#1d4ed8',
+                        backgroundColor: 'var(--color-primary-bg)', color: 'var(--color-primary)',
                         padding: '1px 6px', borderRadius: '10px', fontSize: '11px'
                       }}>
                         {SOURCE_LABELS[meta.source] ?? meta.source}
                       </span>
                     </span>
                   ) : (
-                    <span style={{ fontSize: '12px', color: '#b45309', marginLeft: '10px', fontWeight: '500' }}>
+                    <span style={{ fontSize: '12px', color: 'var(--status-warning-text)', marginLeft: '10px', fontWeight: '500' }}>
                       ⚠ Data unavailable — add manually
                     </span>
                   )}
@@ -293,13 +293,13 @@ export default function FinancialDataDisplay({ ticker, financialData, metadata, 
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 {hasData && (
                   <span style={{
-                    backgroundColor: '#d1fae5', color: '#065f46',
+                    backgroundColor: 'var(--status-success-bg)', color: 'var(--status-success-text)',
                     padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: '600'
                   }}>
                     {periods.length} period{periods.length !== 1 ? 's' : ''}
                   </span>
                 )}
-                <span style={{ color: '#6b7280', fontSize: '14px' }}>
+                <span style={{ color: 'var(--text-muted)', fontSize: '14px' }}>
                   {isOpen ? '▼' : '▶'}
                 </span>
               </div>
@@ -312,14 +312,14 @@ export default function FinancialDataDisplay({ ticker, financialData, metadata, 
                   <div style={{
                     display: 'flex', alignItems: 'flex-start', gap: '10px',
                     padding: '12px 14px', borderRadius: '6px',
-                    backgroundColor: '#fffbeb', border: '1px solid #fde68a',
+                    backgroundColor: 'var(--status-warning-bg)', border: '1px solid var(--status-warning-border)',
                   }}>
                     <span style={{ fontSize: '16px', lineHeight: '1.4' }}>⚠️</span>
                     <div>
-                      <p style={{ color: '#92400e', fontSize: '13px', fontWeight: '600', margin: '0 0 2px' }}>
+                      <p style={{ color: 'var(--status-warning-text)', fontSize: '13px', fontWeight: '600', margin: '0 0 2px' }}>
                         Data unavailable
                       </p>
-                      <p style={{ color: '#b45309', fontSize: '12px', margin: 0 }}>
+                      <p style={{ color: 'var(--status-warning-text)', fontSize: '12px', margin: 0 }}>
                         Could not be retrieved automatically from Yahoo Finance or AI.
                         Add it manually using the data entry form, or re-run the analysis to try again.
                       </p>
@@ -336,11 +336,11 @@ export default function FinancialDataDisplay({ ticker, financialData, metadata, 
                     return (
                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                         <thead>
-                          <tr style={{ backgroundColor: '#f3f4f6' }}>
+                          <tr style={{ backgroundColor: 'var(--bg-hover)' }}>
                             <th style={{
                               textAlign: 'left', padding: '8px 12px',
-                              fontWeight: '600', color: '#374151',
-                              borderBottom: '1px solid #e5e7eb', minWidth: '180px'
+                              fontWeight: '600', color: 'var(--text-secondary)',
+                              borderBottom: '1px solid var(--border-default)', minWidth: '180px'
                             }}>
                               Field
                             </th>
@@ -350,8 +350,8 @@ export default function FinancialDataDisplay({ ticker, financialData, metadata, 
                               return (
                                 <th key={p} style={{
                                   textAlign: 'right', padding: '8px 12px',
-                                  fontWeight: '600', color: '#374151',
-                                  borderBottom: '1px solid #e5e7eb', minWidth: '120px'
+                                  fontWeight: '600', color: 'var(--text-secondary)',
+                                  borderBottom: '1px solid var(--border-default)', minWidth: '120px'
                                 }}>
                                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
                                     {p}
@@ -378,10 +378,10 @@ export default function FinancialDataDisplay({ ticker, financialData, metadata, 
                         </thead>
                         <tbody>
                           {allFields.map((field, idx) => (
-                            <tr key={field} style={{ backgroundColor: idx % 2 === 0 ? 'white' : '#f9fafb' }}>
+                            <tr key={field} style={{ backgroundColor: idx % 2 === 0 ? 'var(--bg-surface)' : 'var(--bg-surface-subtle)' }}>
                               <td style={{
-                                padding: '7px 12px', color: '#374151', fontWeight: '500',
-                                borderBottom: '1px solid #f3f4f6'
+                                padding: '7px 12px', color: 'var(--text-secondary)', fontWeight: '500',
+                                borderBottom: '1px solid var(--border-default)'
                               }}>
                                 {FIELD_LABELS[field] ?? field}
                               </td>
@@ -390,8 +390,8 @@ export default function FinancialDataDisplay({ ticker, financialData, metadata, 
                                 return (
                                   <td key={p} style={{
                                     padding: '7px 12px', textAlign: 'right',
-                                    fontFamily: 'monospace', color: val !== undefined ? '#111827' : '#d1d5db',
-                                    borderBottom: '1px solid #f3f4f6'
+                                    fontFamily: 'monospace', color: val !== undefined ? 'var(--text-primary)' : 'var(--border-input)',
+                                    borderBottom: '1px solid var(--border-default)'
                                   }}>
                                     {val !== undefined ? formatValue(field, val, currencySymbol) : '—'}
                                   </td>

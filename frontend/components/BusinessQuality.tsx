@@ -47,7 +47,7 @@ export default function BusinessQuality({ analysis }: BusinessQualityProps) {
         <>
           <div style={{ marginBottom: '24px' }}>
             <h3 style={{ fontSize: '16px', marginBottom: '12px', color: '#6b7280' }}>Competitive Position</h3>
-            <p style={{ fontSize: '18px', fontWeight: '600', color: '#111827' }}>{position}</p>
+            <p style={{ fontSize: '18px', fontWeight: '600', color: 'var(--text-primary)' }}>{position}</p>
           </div>
 
           {moats.length > 0 ? (
@@ -59,8 +59,8 @@ export default function BusinessQuality({ analysis }: BusinessQualityProps) {
                     key={index}
                     style={{
                       padding: '6px 12px',
-                      background: '#d1fae5',
-                      color: '#065f46',
+                      background: 'var(--status-success-bg)',
+                      color: 'var(--status-success-text)',
                       borderRadius: '6px',
                       fontSize: '14px',
                       fontWeight: '500'
@@ -72,8 +72,8 @@ export default function BusinessQuality({ analysis }: BusinessQualityProps) {
               </div>
             </div>
           ) : (
-            <div style={{ padding: '16px', background: '#fef3c7', borderRadius: '6px' }}>
-              <p style={{ fontSize: '14px', color: '#92400e' }}>
+            <div style={{ padding: '16px', background: 'var(--status-warning-bg)', borderRadius: '6px' }}>
+              <p style={{ fontSize: '14px', color: 'var(--status-warning-text)' }}>
                 No significant competitive moats identified. This may indicate higher competition risk.
               </p>
             </div>
@@ -82,10 +82,10 @@ export default function BusinessQuality({ analysis }: BusinessQualityProps) {
       ) : (
         <div style={{ 
           padding: '20px', 
-          backgroundColor: '#f9fafb', 
+          backgroundColor: 'var(--bg-surface-subtle)', 
           borderRadius: '8px', 
           textAlign: 'center',
-          color: '#6b7280'
+          color: 'var(--text-muted)'
         }}>
           <p style={{ margin: 0, fontSize: '14px' }}>
             Detailed business quality analysis is available in the full analysis view.
@@ -96,8 +96,8 @@ export default function BusinessQuality({ analysis }: BusinessQualityProps) {
         </div>
       )}
 
-      <div style={{ marginTop: '24px', padding: '16px', background: '#f9fafb', borderRadius: '6px' }}>
-        <p style={{ fontSize: '14px', color: '#6b7280', lineHeight: '1.6' }}>
+      <div style={{ marginTop: '24px', padding: '16px', background: 'var(--bg-surface-subtle)', borderRadius: '6px' }}>
+        <p style={{ fontSize: '14px', color: 'var(--text-muted)', lineHeight: '1.6' }}>
           Business quality is assessed based on competitive moats (brand strength, network effects, 
           cost advantages, regulatory barriers), market position, business model quality, and 
           financial characteristics. Higher scores indicate more durable competitive advantages.
