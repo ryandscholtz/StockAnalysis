@@ -728,27 +728,20 @@ export default function TickerPage() {
             if (!hasAny) return null
 
             return (
-              <div style={{
-                backgroundColor: 'var(--bg-surface, #fff)',
-                border: '1px solid var(--border-default, #e5e7eb)',
-                borderRadius: '8px',
-                padding: '24px',
-                marginBottom: '20px',
-                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-              }}>
-                <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '20px', color: '#111827' }}>
+              <div className="card">
+                <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '20px', color: 'var(--text-primary)' }}>
                   Other Metrics
                 </h2>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '16px' }}>
                   {metrics.map(({ label, value }) => value !== '—' && (
                     <div key={label} style={{
                       padding: '16px',
-                      background: '#f9fafb',
+                      background: 'var(--bg-surface-subtle)',
                       borderRadius: '6px',
-                      border: '1px solid #e5e7eb',
+                      border: '1px solid var(--border-default)',
                     }}>
-                      <div style={{ fontSize: '13px', color: '#6b7280', marginBottom: '8px' }}>{label}</div>
-                      <div style={{ fontSize: '20px', fontWeight: '700', color: '#111827', fontFamily: 'monospace' }}>{value}</div>
+                      <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '8px' }}>{label}</div>
+                      <div style={{ fontSize: '20px', fontWeight: '700', color: 'var(--text-primary)', fontFamily: 'monospace' }}>{value}</div>
                     </div>
                   ))}
                 </div>
