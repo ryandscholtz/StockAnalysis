@@ -3,13 +3,15 @@ API routes for stock analysis
 """
 from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Depends
 from fastapi.responses import StreamingResponse, JSONResponse
-from typing import List, AsyncGenerator, Optional
+from typing import List, AsyncGenerator, Optional, Dict
 import json
 import asyncio
 import math
 import logging
 import base64
 import io
+import concurrent.futures
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 from app.api.models import StockAnalysis, QuoteResponse, CompareRequest, CompareResponse, MissingDataInfo, ManualDataEntry, ManualDataResponse, DataQualityWarning, GrowthMetrics, PriceRatios, PDFJobResponse, PDFJobStatusResponse
@@ -699,43 +701,65 @@ Return ONLY valid JSON with this exact structure (no explanation, no markdown fe
 
     try:
         response = bedrock.invoke_model(
-            modelId='anthropic.claude-3-haiku-20240307-v1:0',
+            modelId='anthropic.claude-3-sonnet-20240229-v1:0',
             body=json.dumps({
                 'anthropic_version': 'bedrock-2023-05-31',
-                'max_tokens': 1500,
+                'max_tokens': 2000,
                 'messages': [{'role': 'user', 'content': prompt}]
             })
         )
         body = json.loads(response['body'].read())
         ai_text = body['content'][0]['text']
 
-        # Extract JSON from response
-        start = ai_text.find('{')
-        end = ai_text.rfind('}') + 1
-        if start < 0 or end <= start:
-            logger.warning(f"No JSON found in Claude response for {ticker}")
-            return {}
-
-        raw = json.loads(ai_text[start:end])
+        # Strip markdown code fences then parse JSON
+        import re as _re
+        ai_text = _re.sub(r'```(?:json)?\s*', '', ai_text).strip()
+        try:
+            raw = json.loads(ai_text)
+        except json.JSONDecodeError:
+            start = ai_text.find('{')
+            end = ai_text.rfind('}') + 1
+            if start < 0 or end <= start:
+                logger.warning(f"No JSON found in Claude response for {ticker}")
+                return {}
+            try:
+                raw = json.loads(ai_text[start:end])
+            except json.JSONDecodeError as exc:
+                logger.warning(f"Could not parse Claude JSON for {ticker}: {exc}")
+                return {}
         fiscal_year = raw.get('fiscal_year_end', '')
         confidence = raw.get('data_confidence', 'low')
         logger.info(f"AI financial data for {ticker}: fiscal_year={fiscal_year}, confidence={confidence}")
 
         if not fiscal_year:
-            # Use a sensible default period
             from datetime import date
             fiscal_year = f"{date.today().year - 1}-12-31"
 
         def _clean(d: dict) -> dict:
-            """Remove null values so the analysis code can skip missing fields."""
-            return {k: v for k, v in d.items() if v is not None}
+            """Remove null values from a dict."""
+            return {k: v for k, v in (d or {}).items() if v is not None}
 
-        structured = {
-            'income_statement': {fiscal_year: _clean(raw.get('income_statement', {}))},
-            'balance_sheet':    {fiscal_year: _clean(raw.get('balance_sheet', {}))},
-            'cashflow':         {fiscal_year: _clean(raw.get('cashflow', {}))},
-            'key_metrics':      {'latest':    _clean(raw.get('key_metrics', {}))},
-        }
+        inc = _clean(raw.get('income_statement', {}))
+        bal = _clean(raw.get('balance_sheet', {}))
+        cf  = _clean(raw.get('cashflow', {}))
+        km  = _clean(raw.get('key_metrics', {}))
+
+        # Only include sections that actually have data — empty period dicts cause false positives
+        structured = {}
+        if inc:
+            structured['income_statement'] = {fiscal_year: inc}
+        if bal:
+            structured['balance_sheet'] = {fiscal_year: bal}
+        if cf:
+            structured['cashflow'] = {fiscal_year: cf}
+        if km:
+            structured['key_metrics'] = {'latest': km}
+
+        if not structured:
+            logger.warning(f"Claude returned no usable financial data for {ticker} (all nulls)")
+            return {}
+
+        logger.info(f"AI fetched data for {ticker}: sections={list(structured.keys())}, confidence={confidence}")
         return structured
 
     except Exception as e:
@@ -1142,6 +1166,26 @@ async def add_manual_data(entry: ManualDataEntry):
         logger.error(f"Error adding manual data: {e}")
         import traceback
         logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/manual-data/{ticker}")
+async def get_manual_data(ticker: str):
+    """
+    Get all stored financial data for a ticker, including timestamps and source info.
+    """
+    try:
+        from app.database.db_service import DatabaseService
+        db_service = DatabaseService(db_path="stock_analysis.db")
+        result = db_service.get_financial_data_with_metadata(ticker.upper())
+        return {
+            "ticker": ticker.upper(),
+            "financial_data": result["financial_data"],
+            "metadata": result["metadata"],
+            "has_data": result["has_data"],
+        }
+    except Exception as e:
+        logger.error(f"Error getting financial data for {ticker}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -3419,6 +3463,263 @@ async def update_watchlist_item(
         import traceback
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
+
+
+
+# ---------------------------------------------------------------------------
+# Explore Stocks – market/exchange browser
+# ---------------------------------------------------------------------------
+
+MARKET_TICKERS: Dict[str, Dict] = {
+    "SP500": {
+        "name": "S&P 500",
+        "description": "Top S&P 500 companies by market cap",
+        "region": "US",
+        "tickers": [
+            "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "BRK-B", "LLY", "JPM",
+            "V", "UNH", "XOM", "MA", "AVGO", "JNJ", "HD", "PG", "COST", "ABBV",
+            "MRK", "CVX", "KO", "WMT", "PEP", "BAC", "CRM", "NFLX", "TMO", "ORCL",
+            "AMD", "ABT", "ACN", "LIN", "MCD", "DHR", "CSCO", "TXN", "NEE", "PM",
+            "ADBE", "WFC", "MS", "RTX", "INTU", "DIS", "BMY", "UPS", "AMGN", "LOW",
+        ],
+    },
+    "NASDAQ100": {
+        "name": "NASDAQ 100",
+        "description": "Top NASDAQ 100 technology & growth companies",
+        "region": "US",
+        "tickers": [
+            "AAPL", "MSFT", "NVDA", "AMZN", "META", "TSLA", "GOOGL", "GOOG", "AVGO", "COST",
+            "NFLX", "TMUS", "AMD", "CSCO", "ADBE", "PEP", "TXN", "QCOM", "HON", "INTU",
+            "AMAT", "AMGN", "ISRG", "MU", "BKNG", "LRCX", "REGN", "ADI", "VRTX", "PANW",
+            "KLAC", "SNPS", "MRVL", "CDNS", "GILD", "SBUX", "ADP", "MDLZ", "PYPL", "CTAS",
+            "ABNB", "ORLY", "FTNT", "MELI", "MNST", "CRWD", "PCAR", "KDP", "INTC", "ASML",
+        ],
+    },
+    "DOW30": {
+        "name": "Dow Jones 30",
+        "description": "Dow Jones Industrial Average – 30 blue-chip stocks",
+        "region": "US",
+        "tickers": [
+            "AAPL", "AMGN", "AXP", "BA", "CAT", "CRM", "CSCO", "CVX", "DIS", "DOW",
+            "GS", "HD", "HON", "IBM", "INTC", "JNJ", "JPM", "KO", "MCD", "MMM",
+            "MRK", "MSFT", "NKE", "PG", "TRV", "UNH", "V", "VZ", "WBA", "WMT",
+        ],
+    },
+    "NYSE": {
+        "name": "NYSE",
+        "description": "Popular New York Stock Exchange stocks",
+        "region": "US",
+        "tickers": [
+            "JPM", "BAC", "V", "JNJ", "WMT", "PG", "XOM", "CVX", "KO", "PEP",
+            "MCD", "DIS", "MS", "GS", "WFC", "C", "ABT", "LLY", "UNH", "PFE",
+            "MRK", "ABBV", "TMO", "HD", "NKE", "TGT", "LOW", "CRM", "AXP", "MA",
+            "CAT", "BA", "HON", "MMM", "UPS", "GE", "NEE", "DUK", "AMT", "PLD",
+            "XOM", "COP", "EOG", "BRK-B", "RTX", "IBM", "T", "VZ", "FDX", "SLB",
+        ],
+    },
+    "NASDAQ": {
+        "name": "NASDAQ",
+        "description": "Popular NASDAQ-listed stocks",
+        "region": "US",
+        "tickers": [
+            "AAPL", "MSFT", "NVDA", "AMZN", "META", "TSLA", "GOOGL", "GOOG", "NFLX", "AMD",
+            "INTC", "CSCO", "ADBE", "PYPL", "INTU", "QCOM", "TXN", "HON", "AMGN", "SBUX",
+            "COST", "PEP", "TMUS", "AVGO", "ISRG", "MU", "LRCX", "REGN", "GILD", "VRTX",
+            "PANW", "CRWD", "FTNT", "ABNB", "MELI", "BKNG", "ORLY", "MNST", "KDP", "MDLZ",
+            "ADP", "CTAS", "CDNS", "SNPS", "PCAR", "KLAC", "AMAT", "MRVL", "ADI", "LYFT",
+        ],
+    },
+    "FTSE100": {
+        "name": "FTSE 100",
+        "description": "London Stock Exchange – top 100 UK companies",
+        "region": "UK",
+        "tickers": [
+            "AZN.L", "SHEL.L", "HSBA.L", "ULVR.L", "BP.L", "BATS.L", "GSK.L", "RIO.L",
+            "DGE.L", "REL.L", "BA.L", "LSEG.L", "PRU.L", "IMB.L", "NG.L", "VOD.L",
+            "BT-A.L", "LLOY.L", "BARC.L", "NWG.L", "STAN.L", "AAL.L", "ANTO.L", "ABF.L",
+            "CNA.L", "SSE.L", "WPP.L", "HLN.L", "MNDI.L", "RKT.L",
+        ],
+    },
+    "ASX200": {
+        "name": "ASX 200",
+        "description": "Australian Securities Exchange – top 200 Australian companies",
+        "region": "AU",
+        "tickers": [
+            "BHP.AX", "CSL.AX", "CBA.AX", "NAB.AX", "WBC.AX", "ANZ.AX", "WES.AX",
+            "MQG.AX", "RIO.AX", "TLS.AX", "WOW.AX", "FMG.AX", "AMC.AX",
+            "ALL.AX", "REA.AX", "QBE.AX", "SUN.AX", "IAG.AX", "MPL.AX", "ORG.AX",
+        ],
+    },
+    "TSX": {
+        "name": "TSX",
+        "description": "Toronto Stock Exchange – top Canadian companies",
+        "region": "CA",
+        "tickers": [
+            "RY.TO", "TD.TO", "BNS.TO", "BMO.TO", "CM.TO", "ENB.TO", "CNR.TO",
+            "TRP.TO", "SU.TO", "ABX.TO", "MFC.TO", "SLF.TO", "CP.TO", "BCE.TO",
+            "T.TO", "CNQ.TO", "PPL.TO", "ATD.TO", "GWO.TO", "AEM.TO",
+        ],
+    },
+    "DAX": {
+        "name": "DAX 40",
+        "description": "Frankfurt Stock Exchange – top 40 German companies",
+        "region": "DE",
+        "tickers": [
+            "SAP.DE", "SIE.DE", "ALV.DE", "MBG.DE", "DTE.DE", "BAYN.DE", "BMW.DE",
+            "VOW3.DE", "MUV2.DE", "DB1.DE", "RWE.DE", "BAS.DE", "MRK.DE", "HEI.DE",
+            "ADS.DE", "IFX.DE", "LIN.DE", "EOAN.DE", "HEN3.DE", "DHER.DE",
+        ],
+    },
+    "NIKKEI": {
+        "name": "Nikkei 225",
+        "description": "Tokyo Stock Exchange – top Japanese companies",
+        "region": "JP",
+        "tickers": [
+            "7203.T", "6758.T", "9984.T", "6861.T", "8306.T", "8316.T", "6902.T",
+            "9432.T", "9433.T", "4063.T", "6954.T", "7974.T", "8035.T", "4519.T",
+            "6367.T", "5108.T", "4661.T", "9022.T", "8591.T", "6098.T",
+        ],
+    },
+}
+
+# In-memory cache: {market_id: {"data": [...], "timestamp": datetime}}
+_explore_cache: Dict[str, Dict] = {}
+_EXPLORE_CACHE_TTL = 900  # 15 minutes
+
+
+def _fetch_single_stock_info(ticker_symbol: str) -> Optional[Dict]:
+    """Fetch comprehensive stock info for a single ticker using yfinance."""
+    try:
+        import yfinance as yf
+        t = yf.Ticker(ticker_symbol)
+        info = t.info
+
+        if not info or len(info) < 5:
+            return None
+
+        price = (
+            info.get("currentPrice")
+            or info.get("regularMarketPrice")
+            or info.get("previousClose")
+        )
+        if not price:
+            return None
+
+        prev_close = info.get("regularMarketPreviousClose") or info.get("previousClose")
+        change = info.get("regularMarketChange")
+        change_pct = info.get("regularMarketChangePercent")
+        if change is None and price and prev_close:
+            change = price - prev_close
+        if change_pct is None and change is not None and prev_close and prev_close != 0:
+            change_pct = (change / prev_close) * 100
+
+        div_yield = info.get("dividendYield")
+        if div_yield and div_yield < 1:
+            div_yield = div_yield * 100  # convert 0.03 → 3.0
+
+        return {
+            "ticker": ticker_symbol,
+            "companyName": info.get("shortName") or info.get("longName") or ticker_symbol,
+            "exchange": info.get("exchange") or info.get("fullExchangeName", ""),
+            "sector": info.get("sector", ""),
+            "industry": info.get("industry", ""),
+            "currency": info.get("currency", "USD"),
+            "price": price,
+            "priceChange": change,
+            "priceChangePct": change_pct,
+            "marketCap": info.get("marketCap"),
+            "peRatio": info.get("trailingPE"),
+            "forwardPE": info.get("forwardPE"),
+            "pbRatio": info.get("priceToBook"),
+            "psRatio": info.get("priceToSalesTrailing12Months"),
+            "evToEbitda": info.get("enterpriseToEbitda"),
+            "dividendYield": div_yield,
+            "week52High": info.get("fiftyTwoWeekHigh"),
+            "week52Low": info.get("fiftyTwoWeekLow"),
+            "volume": info.get("volume") or info.get("regularMarketVolume"),
+            "avgVolume": info.get("averageVolume"),
+            "beta": info.get("beta"),
+            "eps": info.get("trailingEps"),
+            "roe": info.get("returnOnEquity"),
+        }
+    except Exception as exc:
+        logger.debug(f"Failed to fetch explore data for {ticker_symbol}: {exc}")
+        return None
+
+
+def _fetch_stocks_batch(tickers: List[str], max_workers: int = 8) -> List[Dict]:
+    """Fetch stock data for a list of tickers with bounded concurrency."""
+    results: List[Dict] = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_map = {executor.submit(_fetch_single_stock_info, t): t for t in tickers}
+        for future in concurrent.futures.as_completed(future_map):
+            try:
+                result = future.result(timeout=15)
+                if result:
+                    results.append(result)
+            except Exception as exc:
+                logger.debug(f"Explore fetch error for {future_map[future]}: {exc}")
+    return results
+
+
+@router.get("/explore/markets")
+async def get_explore_markets():
+    """Return available markets/exchanges for the explore page."""
+    return {
+        "markets": [
+            {
+                "id": key,
+                "name": val["name"],
+                "description": val["description"],
+                "region": val["region"],
+                "ticker_count": len(val["tickers"]),
+            }
+            for key, val in MARKET_TICKERS.items()
+        ]
+    }
+
+
+@router.get("/explore/stocks")
+async def get_explore_stocks(
+    market: str = Query(..., description="Market/exchange ID (e.g. SP500, NASDAQ100)"),
+    force_refresh: bool = Query(False, description="Bypass cache and re-fetch"),
+):
+    """Return stocks for a specific market with key financial metrics."""
+    market_id = market.upper()
+    if market_id not in MARKET_TICKERS:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Market '{market}' not found. Valid options: {', '.join(MARKET_TICKERS.keys())}",
+        )
+
+    now = datetime.utcnow()
+    cache_entry = _explore_cache.get(market_id)
+    if not force_refresh and cache_entry:
+        age = (now - cache_entry["timestamp"]).total_seconds()
+        if age < _EXPLORE_CACHE_TTL:
+            return {
+                "market": market_id,
+                "market_name": MARKET_TICKERS[market_id]["name"],
+                "stocks": cache_entry["data"],
+                "cached": True,
+                "cache_age_seconds": int(age),
+            }
+
+    tickers = MARKET_TICKERS[market_id]["tickers"]
+    loop = asyncio.get_event_loop()
+    stocks = await loop.run_in_executor(None, _fetch_stocks_batch, tickers)
+
+    stocks.sort(key=lambda x: x.get("marketCap") or 0, reverse=True)
+
+    _explore_cache[market_id] = {"data": stocks, "timestamp": now}
+
+    return {
+        "market": market_id,
+        "market_name": MARKET_TICKERS[market_id]["name"],
+        "stocks": stocks,
+        "cached": False,
+        "cache_age_seconds": 0,
+    }
 
 
 @router.post("/auto-assign-business-type/{ticker}")

@@ -45,7 +45,43 @@ Invoke-RestMethod -Uri "https://dx0w31lbc1.execute-api.eu-west-1.amazonaws.com/p
 
 # Check version
 Invoke-RestMethod -Uri "https://dx0w31lbc1.execute-api.eu-west-1.amazonaws.com/production/api/version" -Method GET
+
+# Check Explore endpoints (markets list and stocks for a market)
+Invoke-RestMethod -Uri "https://dx0w31lbc1.execute-api.eu-west-1.amazonaws.com/production/api/explore/markets" -Method GET
+Invoke-RestMethod -Uri "https://dx0w31lbc1.execute-api.eu-west-1.amazonaws.com/production/api/explore/stocks?market=SP500" -Method GET
 ```
+
+**Note:** The **Explore** page (`/explore`) requires the backend to expose `/api/explore/markets` and `/api/explore/stocks`. These routes are included in `backend/lambda_build`. If the Explore page returns 404 for those URLs, rebuild the Lambda package from `lambda_build` and redeploy.
+
+### Deploy via container image (Docker) — when package exceeds 250 MB
+
+If the deployment package (or layer) exceeds Lambda’s 250 MB unzipped limit, use a **container image** (up to 10 GB).
+
+**Prerequisites**
+
+- **Docker** installed and running (Docker Desktop on Windows: https://docs.docker.com/desktop/install/windows-install/).
+
+**One-shot script (recommended)**
+
+From the repo root or `backend/`:
+
+```powershell
+cd backend
+.\deploy-lambda-docker-full.ps1
+```
+
+This script will:
+
+1. Check for Docker (exit with install instructions if missing).
+2. Build the image from `Dockerfile.lambda` and push it to ECR (`stock-analysis-api`).
+3. Create a new Lambda **stock-analysis-api-container** (PackageType Image) with the same role, timeout, memory, and env as `stock-analysis-api-production`, or update its code if it already exists.
+4. Add permission for API Gateway to invoke the new function.
+5. Update all API Gateway (dx0w31lbc1) integrations to use **stock-analysis-api-container**.
+6. Deploy the `production` stage and run a health check.
+
+So the live API will use the container-based Lambda. The existing Zip-based function (`stock-analysis-api-production` or `stock-analysis-gateway`) is no longer used by the API after a successful run.
+
+If you see `docker is not recognized`: install Docker Desktop, start it, and run the script again.
 
 ### Version Format
 Backend versions follow the pattern: `4.0.0-marketstack-YYMMDD-HHMM`
