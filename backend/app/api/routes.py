@@ -12,6 +12,9 @@ import base64
 import io
 import concurrent.futures
 from datetime import datetime
+import os
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
 
 logger = logging.getLogger(__name__)
 from app.api.models import StockAnalysis, QuoteResponse, CompareRequest, CompareResponse, MissingDataInfo, ManualDataEntry, ManualDataResponse, DataQualityWarning, GrowthMetrics, PriceRatios, PDFJobResponse, PDFJobStatusResponse
@@ -3580,11 +3583,102 @@ MARKET_TICKERS: Dict[str, Dict] = {
             "6367.T", "5108.T", "4661.T", "9022.T", "8591.T", "6098.T",
         ],
     },
+    "JSE": {
+        "name": "JSE",
+        "description": "Johannesburg Stock Exchange – all listed equities",
+        "region": "ZA",
+        "exchange_mic": "XJSE",
+        "yahoo_suffix": ".JO",
+        "tickers": [
+            "NPN.JO", "PRX.JO", "CPI.JO", "FSR.JO", "SBK.JO", "MTN.JO", "AGL.JO",
+            "SOL.JO", "SHP.JO", "WHL.JO", "REM.JO", "DSY.JO", "GRT.JO", "AMS.JO",
+            "ABG.JO", "NED.JO", "BID.JO", "IMP.JO", "SGL.JO", "GFI.JO", "HAR.JO",
+        ],
+    },
 }
 
 # In-memory cache: {market_id: {"data": [...], "timestamp": datetime}}
 _explore_cache: Dict[str, Dict] = {}
 _EXPLORE_CACHE_TTL = 900  # 15 minutes
+
+# Cache for API-sourced ticker lists (exchange_mic markets): {market_id: {"tickers": [...], "timestamp": datetime}}
+_explore_ticker_list_cache: Dict[str, Dict] = {}
+_EXPLORE_TICKER_LIST_CACHE_TTL = 86400  # 24 hours
+
+_MIC_TO_YAHOO_SUFFIX = {"XJSE": ".JO"}
+
+
+def _yahoo_symbol_explore(ticker: str) -> str:
+    """Convert MarketStack XJSE-style ticker to Yahoo format (.JO)."""
+    if ticker.upper().endswith(".XJSE"):
+        return ticker[:-5] + ".JO"
+    return ticker
+
+
+def _fetch_tickers_from_marketstack(mic: str, yahoo_suffix: str) -> List[str]:
+    """Fetch all ticker symbols for an exchange from MarketStack GET /v1/exchanges/{mic}/tickers."""
+    api_key = os.getenv("MARKETSTACK_API_KEY", "")
+    if not api_key:
+        return []
+    all_symbols: List[str] = []
+    limit = 1000
+    offset = 0
+    try:
+        while True:
+            url = (
+                f"https://api.marketstack.com/v1/exchanges/{mic}/tickers"
+                f"?{urlencode({'access_key': api_key, 'limit': limit, 'offset': offset})}"
+            )
+            req = Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urlopen(req, timeout=15) as resp:
+                data = json.loads(resp.read().decode())
+            if data.get("error"):
+                break
+            items = data.get("data", [])
+            pagination = data.get("pagination", {})
+            for item in items:
+                raw = (item.get("symbol") or "").strip()
+                if not raw:
+                    continue
+                sym = (
+                    _yahoo_symbol_explore(raw)
+                    if raw.upper().endswith(".XJSE")
+                    else (raw + yahoo_suffix if yahoo_suffix and not raw.endswith(yahoo_suffix) else raw)
+                )
+                if sym and sym not in all_symbols:
+                    all_symbols.append(sym)
+            count = pagination.get("count", 0)
+            total = pagination.get("total", 0)
+            offset += count
+            if count < limit or offset >= total:
+                break
+        return all_symbols
+    except Exception as e:
+        logger.debug("MarketStack tickers fetch failed for %s: %s", mic, e)
+        return []
+
+
+def _get_tickers_for_market(market_id: str, market_config: Dict) -> List[str]:
+    """Return ticker list for a market: from API when exchange_mic is set (with cache/fallback), else static."""
+    mic = market_config.get("exchange_mic")
+    yahoo_suffix = market_config.get("yahoo_suffix", _MIC_TO_YAHOO_SUFFIX.get(mic, ""))
+
+    if mic:
+        now = datetime.utcnow()
+        cache_entry = _explore_ticker_list_cache.get(market_id)
+        if cache_entry:
+            age = (now - cache_entry["timestamp"]).total_seconds()
+            if age < _EXPLORE_TICKER_LIST_CACHE_TTL:
+                return list(cache_entry["tickers"])
+        tickers = _fetch_tickers_from_marketstack(mic, yahoo_suffix)
+        if tickers:
+            _explore_ticker_list_cache[market_id] = {"tickers": tickers, "timestamp": now}
+            return tickers
+        static = market_config.get("tickers", [])
+        if static:
+            return list(static)
+        return []
+    return list(dict.fromkeys(market_config.get("tickers", [])))
 
 
 def _fetch_single_stock_info(ticker_symbol: str) -> Optional[Dict]:
@@ -3665,18 +3759,20 @@ def _fetch_stocks_batch(tickers: List[str], max_workers: int = 8) -> List[Dict]:
 @router.get("/explore/markets")
 async def get_explore_markets():
     """Return available markets/exchanges for the explore page."""
-    return {
-        "markets": [
-            {
-                "id": key,
-                "name": val["name"],
-                "description": val["description"],
-                "region": val["region"],
-                "ticker_count": len(val["tickers"]),
-            }
-            for key, val in MARKET_TICKERS.items()
-        ]
-    }
+    markets = []
+    for key, val in MARKET_TICKERS.items():
+        if val.get("exchange_mic") and key in _explore_ticker_list_cache:
+            ticker_count = len(_explore_ticker_list_cache[key]["tickers"])
+        else:
+            ticker_count = len(val.get("tickers") or [])
+        markets.append({
+            "id": key,
+            "name": val["name"],
+            "description": val["description"],
+            "region": val["region"],
+            "ticker_count": ticker_count,
+        })
+    return {"markets": markets}
 
 
 @router.get("/explore/stocks")
@@ -3705,7 +3801,8 @@ async def get_explore_stocks(
                 "cache_age_seconds": int(age),
             }
 
-    tickers = MARKET_TICKERS[market_id]["tickers"]
+    tickers = _get_tickers_for_market(market_id, MARKET_TICKERS[market_id])
+    tickers = list(dict.fromkeys(tickers))
     loop = asyncio.get_event_loop()
     stocks = await loop.run_in_executor(None, _fetch_stocks_batch, tickers)
 

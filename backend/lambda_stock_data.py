@@ -5,6 +5,7 @@ Dependencies: stdlib only (urllib), optional yfinance
 import json
 import os
 import boto3
+import concurrent.futures
 from datetime import datetime
 from urllib.request import urlopen
 from urllib.parse import urlencode
@@ -231,6 +232,744 @@ def search_stocks(query: str) -> dict:
         }
 
 
+# ---------------------------------------------------------------------------
+# Explore Stocks – fetch ticker lists from API when available
+# ---------------------------------------------------------------------------
+
+# Cache for API-sourced ticker lists: {market_id: {"tickers": [...], "timestamp": datetime}}
+_explore_ticker_list_cache = {}
+_EXPLORE_TICKER_LIST_CACHE_TTL = 86400  # 24 hours
+
+# MarketStack MIC -> Yahoo suffix for symbol conversion (e.g. XJSE -> .JO)
+_MIC_TO_YAHOO_SUFFIX = {
+    "XJSE": ".JO",   # Johannesburg
+}
+
+
+def _fetch_tickers_from_marketstack(mic: str, yahoo_suffix: str) -> list[str]:
+    """
+    Fetch all ticker symbols for an exchange from MarketStack GET /v1/exchanges/{mic}/tickers.
+    Returns list of symbols in Yahoo Finance format (e.g. NPN.JO for JSE).
+    """
+    api_key = os.getenv('MARKETSTACK_API_KEY', '')
+    if not api_key:
+        return []
+
+    all_symbols = []
+    limit = 1000
+    offset = 0
+
+    try:
+        while True:
+            url = (
+                f"https://api.marketstack.com/v1/exchanges/{mic}/tickers"
+                f"?{urlencode({'access_key': api_key, 'limit': limit, 'offset': offset})}"
+            )
+            data = _urllib_get(url)
+            if data.get('error'):
+                break
+            items = data.get('data', [])
+            pagination = data.get('pagination', {})
+            for item in items:
+                raw = (item.get('symbol') or '').strip()
+                if not raw:
+                    continue
+                # Convert to Yahoo format: BEL.XJSE -> BEL.JO, or plain NPN -> NPN.JO
+                sym = _yahoo_symbol(raw) if raw.upper().endswith('.XJSE') else (raw + yahoo_suffix if yahoo_suffix and not raw.endswith(yahoo_suffix) else raw)
+                if sym and sym not in all_symbols:
+                    all_symbols.append(sym)
+            count = pagination.get('count', 0)
+            total = pagination.get('total', 0)
+            offset += count
+            if count < limit or offset >= total:
+                break
+        return all_symbols
+    except Exception as e:
+        print(f"[DEBUG] MarketStack tickers fetch failed for {mic}: {e}")
+        return []
+
+
+def _get_tickers_for_market(market_id: str, market_config: dict) -> list[str]:
+    """
+    Return ticker list for a market: from API (when exchange_mic is set) with cache/fallback,
+    otherwise from static config.
+    """
+    mic = market_config.get('exchange_mic')
+    yahoo_suffix = market_config.get('yahoo_suffix', _MIC_TO_YAHOO_SUFFIX.get(mic, ''))
+
+    if mic:
+        now = datetime.utcnow()
+        cache_entry = _explore_ticker_list_cache.get(market_id)
+        if cache_entry:
+            age = (now - cache_entry["timestamp"]).total_seconds()
+            if age < _EXPLORE_TICKER_LIST_CACHE_TTL:
+                return list(cache_entry["tickers"])
+        tickers = _fetch_tickers_from_marketstack(mic, yahoo_suffix)
+        if tickers:
+            _explore_ticker_list_cache[market_id] = {"tickers": tickers, "timestamp": now}
+            return tickers
+        # Fallback to static list if API failed or no key
+        static = market_config.get('tickers', [])
+        if static:
+            return list(static)
+        return []
+
+    return list(dict.fromkeys(market_config.get('tickers', [])))
+
+
+# ---------------------------------------------------------------------------
+# Explore Stocks – market/exchange browser
+# ---------------------------------------------------------------------------
+
+MARKET_TICKERS = {
+    # ── Americas ────────────────────────────────────────────────────────────────
+    "SP500": {
+        "name": "S&P 500",
+        "description": "S&P 500 – 500 largest US public companies by market cap",
+        "region": "US", "continent": "Americas",
+        "tickers": [
+            # A
+            "A", "AAL", "AAPL", "ABBV", "ABNB", "ABT", "ACGL", "ACN", "ADBE", "ADI",
+            "ADM", "ADP", "ADSK", "AEE", "AEP", "AES", "AFL", "AIG", "AIZ", "AJG",
+            "AKAM", "ALB", "ALGN", "ALL", "ALLE", "AMAT", "AMCR", "AMD", "AME", "AMGN",
+            "AMP", "AMT", "AMZN", "ANET", "ANSS", "AON", "AOS", "APA", "APD", "APH",
+            "APTV", "ARE", "ATO", "AVB", "AVGO", "AVY", "AWK", "AXON", "AXP", "AZO",
+            # B
+            "BA", "BAC", "BALL", "BAX", "BBWI", "BBY", "BDX", "BEN", "BF-B", "BIIB",
+            "BIO", "BK", "BKNG", "BKR", "BLK", "BMY", "BR", "BRK-B", "BRO", "BSX",
+            "BWA", "BX", "BXP",
+            # C
+            "C", "CAG", "CAH", "CARR", "CAT", "CB", "CBOE", "CBRE", "CCI", "CCL",
+            "CDNS", "CDW", "CE", "CEG", "CF", "CFG", "CHD", "CHRW", "CHTR", "CI",
+            "CINF", "CL", "CLX", "CMA", "CMCSA", "CME", "CMG", "CMI", "CMS", "CNC",
+            "CNP", "COF", "COO", "COP", "COR", "COST", "CPAY", "CPB", "CPRT", "CPT",
+            "CRL", "CRM", "CRWD", "CSCO", "CSGP", "CSX", "CTAS", "CTLT", "CTSH", "CTVA",
+            "CVS", "CVX", "CZR",
+            # D
+            "D", "DAL", "DAY", "DD", "DE", "DECK", "DELL", "DFS", "DG", "DGX",
+            "DHI", "DHR", "DIS", "DLR", "DLTR", "DOC", "DOV", "DOW", "DPZ", "DRI",
+            "DTE", "DUK", "DVA", "DVN", "DXCM",
+            # E
+            "EA", "EBAY", "ECL", "ED", "EFX", "EG", "EIX", "EL", "ELV", "EMN",
+            "EMR", "ENPH", "EOG", "EPAM", "EQIX", "EQR", "EQT", "ES", "ESS", "ETN",
+            "ETR", "EVRG", "EW", "EXC", "EXPD", "EXPE", "EXR",
+            # F
+            "F", "FANG", "FAST", "FCX", "FDS", "FDX", "FE", "FFIV", "FI", "FICO",
+            "FIS", "FITB", "FLT", "FMC", "FOX", "FOXA", "FRT", "FSLR", "FTNT", "FTV",
+            # G
+            "GD", "GDDY", "GE", "GEHC", "GEN", "GILD", "GIS", "GL", "GLW", "GM",
+            "GOOGL", "GOOG", "GPC", "GPN", "GRMN", "GS", "GWW",
+            # H
+            "HAL", "HAS", "HBAN", "HCA", "HD", "HES", "HIG", "HII", "HLT", "HOLX",
+            "HON", "HPE", "HPQ", "HRL", "HSIC", "HST", "HSY", "HUBB", "HUM", "HWM",
+            # I
+            "IBM", "ICE", "IDXX", "IEX", "IFF", "ILMN", "INCY", "INTC", "INTU", "INVH",
+            "IP", "IPG", "IQV", "IR", "IRM", "ISRG", "IT", "ITW", "IVZ",
+            # J
+            "J", "JBHT", "JBL", "JCI", "JKHY", "JNJ", "JNPR", "JPM",
+            # K
+            "K", "KDP", "KEY", "KEYS", "KHC", "KIM", "KKR", "KLAC", "KMB", "KMI",
+            "KMX", "KO", "KR",
+            # L
+            "L", "LDOS", "LEN", "LH", "LHX", "LIN", "LKQ", "LLY", "LMT", "LNT",
+            "LOW", "LRCX", "LULU", "LUV", "LVS", "LW", "LYB", "LYV",
+            # M
+            "MA", "MAA", "MAR", "MAS", "MCD", "MCHP", "MCK", "MCO", "MDLZ", "MDT",
+            "MET", "META", "MGM", "MHK", "MKC", "MKTX", "MLM", "MMC", "MMM", "MNST",
+            "MO", "MOH", "MOS", "MPC", "MPWR", "MRK", "MRNA", "MRO", "MS", "MSCI",
+            "MSFT", "MSI", "MTB", "MTCH", "MTD", "MU",
+            # N
+            "NCLH", "NDAQ", "NEE", "NEM", "NFLX", "NI", "NKE", "NOC", "NOW", "NRG",
+            "NSC", "NTAP", "NTRS", "NUE", "NVDA", "NVR", "NWS", "NWSA", "NXPI",
+            # O
+            "O", "ODFL", "OKE", "OMC", "ON", "ORCL", "ORLY", "OTIS", "OXY",
+            # P
+            "PANW", "PARA", "PAYC", "PAYX", "PCAR", "PCG", "PEG", "PEP", "PFE", "PFG",
+            "PG", "PGR", "PH", "PHM", "PKG", "PLD", "PM", "PNC", "PNR", "PNW",
+            "PODD", "POOL", "PPG", "PPL", "PRU", "PSA", "PSX", "PTC", "PWR", "PYPL",
+            # Q
+            "QCOM", "QRVO",
+            # R
+            "RCL", "REG", "REGN", "RF", "RJF", "RL", "RMD", "ROK", "ROL", "ROP",
+            "ROST", "RSG", "RTX", "RVTY",
+            # S
+            "SBAC", "SBUX", "SCHW", "SHW", "SJM", "SLB", "SMCI", "SNA", "SNPS", "SO",
+            "SPG", "SPGI", "SRE", "STE", "STLD", "STT", "STX", "STZ", "SWK", "SWKS",
+            "SYF", "SYK", "SYY",
+            # T
+            "T", "TAP", "TDG", "TDY", "TECH", "TEL", "TER", "TFC", "TFX", "TGT",
+            "TJX", "TMO", "TMUS", "TPR", "TRGP", "TRMB", "TROW", "TRV", "TSCO", "TSLA",
+            "TSN", "TT", "TTWO", "TXN", "TXT", "TYL",
+            # U
+            "UAL", "UDR", "UHS", "ULTA", "UNH", "UNP", "UPS", "URI", "USB",
+            # V
+            "V", "VFC", "VICI", "VLO", "VLTO", "VMC", "VNO", "VRSK", "VRSN", "VRTX",
+            "VST", "VZ",
+            # W
+            "WAB", "WAT", "WBA", "WBD", "WDC", "WEC", "WELL", "WFC", "WM", "WMB",
+            "WMT", "WRB", "WST", "WTW", "WY", "WYNN",
+            # X–Z
+            "XEL", "XOM", "XYL", "YUM", "ZBH", "ZBRA", "ZTS",
+        ],
+    },
+    "NASDAQ100": {
+        "name": "NASDAQ 100",
+        "description": "NASDAQ 100 – top 100 non-financial companies listed on NASDAQ",
+        "region": "US", "continent": "Americas",
+        "tickers": [
+            "AAPL", "MSFT", "NVDA", "AMZN", "META", "TSLA", "GOOGL", "GOOG", "AVGO", "COST",
+            "NFLX", "TMUS", "AMD", "CSCO", "ADBE", "PEP", "TXN", "QCOM", "HON", "INTU",
+            "AMAT", "AMGN", "ISRG", "MU", "BKNG", "LRCX", "REGN", "ADI", "VRTX", "PANW",
+            "KLAC", "SNPS", "MRVL", "CDNS", "GILD", "SBUX", "ADP", "MDLZ", "PYPL", "CTAS",
+            "ABNB", "ORLY", "FTNT", "MELI", "MNST", "CRWD", "PCAR", "KDP", "INTC", "ASML",
+            "IDXX", "PAYX", "FAST", "ROP", "ROST", "ODFL", "DXCM", "ON", "CEG", "ANSS",
+            "GEHC", "FANG", "CSGP", "XEL", "CPRT", "KHC", "DLTR", "TTD", "EXC", "EA",
+            "BIIB", "VRSK", "NXPI", "BKR", "TTWO", "ADSK", "LULU", "CHTR", "AEP", "CSX",
+            "CMCSA", "NDAQ", "ILMN", "WBD", "MRNA", "CCEP", "CDW", "SIRI", "DASH", "ARM",
+            "SMCI", "MSTR", "GEHC", "ZS", "DDOG", "WDAY", "TEAM", "OKTA", "SPLK", "PDD",
+        ],
+    },
+    "DOW30": {
+        "name": "Dow Jones 30",
+        "description": "Dow Jones Industrial Average – 30 blue-chip stocks",
+        "region": "US", "continent": "Americas",
+        "tickers": [
+            "AAPL", "AMGN", "AXP", "BA", "CAT", "CRM", "CSCO", "CVX", "DIS", "DOW",
+            "GS", "HD", "HON", "IBM", "INTC", "JNJ", "JPM", "KO", "MCD", "MMM",
+            "MRK", "MSFT", "NKE", "PG", "TRV", "UNH", "V", "VZ", "WBA", "WMT",
+        ],
+    },
+    "NYSE": {
+        "name": "NYSE",
+        "description": "Popular New York Stock Exchange stocks",
+        "region": "US", "continent": "Americas",
+        "tickers": [
+            "JPM", "BAC", "V", "JNJ", "WMT", "PG", "XOM", "CVX", "KO", "PEP",
+            "MCD", "DIS", "MS", "GS", "WFC", "C", "ABT", "LLY", "UNH", "PFE",
+            "MRK", "ABBV", "TMO", "HD", "NKE", "TGT", "LOW", "CRM", "AXP", "MA",
+            "CAT", "BA", "HON", "MMM", "UPS", "GE", "NEE", "DUK", "AMT", "PLD",
+            "COP", "EOG", "BRK-B", "RTX", "IBM", "T", "VZ", "FDX", "SLB",
+        ],
+    },
+    "NASDAQ": {
+        "name": "NASDAQ",
+        "description": "Popular NASDAQ-listed stocks",
+        "region": "US", "continent": "Americas",
+        "tickers": [
+            "AAPL", "MSFT", "NVDA", "AMZN", "META", "TSLA", "GOOGL", "GOOG", "NFLX", "AMD",
+            "INTC", "CSCO", "ADBE", "PYPL", "INTU", "QCOM", "TXN", "HON", "AMGN", "SBUX",
+            "COST", "PEP", "TMUS", "AVGO", "ISRG", "MU", "LRCX", "REGN", "GILD", "VRTX",
+            "PANW", "CRWD", "FTNT", "ABNB", "MELI", "BKNG", "ORLY", "MNST", "KDP", "MDLZ",
+            "ADP", "CTAS", "CDNS", "SNPS", "PCAR", "KLAC", "AMAT", "MRVL", "ADI", "LYFT",
+        ],
+    },
+    "TSX": {
+        "name": "TSX",
+        "description": "Toronto Stock Exchange – top Canadian companies",
+        "region": "CA", "continent": "Americas",
+        "tickers": [
+            "RY.TO", "TD.TO", "BNS.TO", "BMO.TO", "CM.TO", "ENB.TO", "CNR.TO",
+            "TRP.TO", "SU.TO", "ABX.TO", "MFC.TO", "SLF.TO", "CP.TO", "BCE.TO",
+            "T.TO", "CNQ.TO", "PPL.TO", "ATD.TO", "GWO.TO", "AEM.TO",
+        ],
+    },
+    "BOVESPA": {
+        "name": "Ibovespa",
+        "description": "B3 São Paulo – top Brazilian companies",
+        "region": "BR", "continent": "Americas",
+        "tickers": [
+            "PETR4.SA", "VALE3.SA", "ITUB4.SA", "BBDC4.SA", "BBAS3.SA", "ABEV3.SA",
+            "WEGE3.SA", "RENT3.SA", "B3SA3.SA", "SUZB3.SA", "JBSS3.SA", "EQTL3.SA",
+            "ELET3.SA", "CMIG4.SA", "SBSP3.SA", "TOTS3.SA", "GGBR4.SA", "LREN3.SA",
+            "MGLU3.SA", "RAIL3.SA",
+        ],
+    },
+    "IPC": {
+        "name": "IPC Mexico",
+        "description": "Bolsa Mexicana – top Mexican companies",
+        "region": "MX", "continent": "Americas",
+        "tickers": [
+            "AMXL.MX", "WALMEXV.MX", "FEMSAUBD.MX", "GFNORTEO.MX", "CEMEXCPO.MX",
+            "BIMBOA.MX", "KOFL.MX", "GRUMAB.MX", "GMEXICOB.MX", "GAPB.MX",
+            "OMAB.MX", "ASURB.MX", "ALFAA.MX", "IENOVA.MX", "ALSEA.MX",
+        ],
+    },
+    # ── Europe ──────────────────────────────────────────────────────────────────
+    "FTSE100": {
+        "name": "FTSE 100",
+        "description": "London Stock Exchange – largest UK companies by market cap",
+        "region": "GB", "continent": "Europe",
+        "tickers": [
+            "AZN.L", "SHEL.L", "HSBA.L", "ULVR.L", "BP.L", "BATS.L", "GSK.L", "RIO.L",
+            "DGE.L", "REL.L", "BA.L", "LSEG.L", "PRU.L", "IMB.L", "NG.L", "VOD.L",
+            "BT-A.L", "LLOY.L", "BARC.L", "NWG.L", "STAN.L", "AAL.L", "ANTO.L", "ABF.L",
+            "CNA.L", "SSE.L", "WPP.L", "HLN.L", "MNDI.L", "RKT.L",
+        ],
+    },
+    "DAX": {
+        "name": "DAX 40",
+        "description": "Frankfurt Stock Exchange – largest German companies by market cap",
+        "region": "DE", "continent": "Europe",
+        "tickers": [
+            "SAP.DE", "SIE.DE", "ALV.DE", "MBG.DE", "DTE.DE", "BAYN.DE", "BMW.DE",
+            "VOW3.DE", "MUV2.DE", "DB1.DE", "RWE.DE", "BAS.DE", "MRK.DE", "HEI.DE",
+            "ADS.DE", "IFX.DE", "LIN.DE", "EOAN.DE", "HEN3.DE", "DHER.DE",
+        ],
+    },
+    "CAC40": {
+        "name": "CAC 40",
+        "description": "Euronext Paris – largest French companies by market cap",
+        "region": "FR", "continent": "Europe",
+        "tickers": [
+            "MC.PA", "TTE.PA", "SAN.PA", "OR.PA", "AIR.PA", "SU.PA", "BNP.PA", "AI.PA",
+            "KER.PA", "RMS.PA", "DSY.PA", "ACA.PA", "GLE.PA", "LR.PA", "CAP.PA", "SAF.PA",
+            "DG.PA", "VIE.PA", "ORA.PA", "HO.PA", "RI.PA", "BN.PA", "ML.PA", "STM.PA",
+            "RNO.PA", "SGO.PA", "EL.PA", "CS.PA", "PUB.PA", "EN.PA",
+        ],
+    },
+    "IBEX35": {
+        "name": "IBEX 35",
+        "description": "Bolsa de Madrid – largest Spanish companies by market cap",
+        "region": "ES", "continent": "Europe",
+        "tickers": [
+            "ITX.MC", "SAN.MC", "BBVA.MC", "IBE.MC", "TEF.MC", "REP.MC", "AMS.MC",
+            "CABK.MC", "SAB.MC", "ENG.MC", "GRF.MC", "ACS.MC", "FER.MC", "MAP.MC",
+            "IAG.MC", "ELE.MC", "NTGY.MC", "MTS.MC", "MEL.MC", "CLNX.MC",
+        ],
+    },
+    "FTSEMIB": {
+        "name": "FTSE MIB",
+        "description": "Borsa Italiana – top Italian companies",
+        "region": "IT", "continent": "Europe",
+        "tickers": [
+            "ENI.MI", "ENEL.MI", "ISP.MI", "UCG.MI", "STLAM.MI", "RACE.MI", "STM.MI",
+            "TIT.MI", "LDO.MI", "MONC.MI", "AMP.MI", "BAMI.MI", "MB.MI", "PRY.MI",
+            "A2A.MI", "G.MI", "SRG.MI", "TRN.MI", "CPR.MI", "PIRC.MI",
+        ],
+    },
+    "SMI": {
+        "name": "SMI",
+        "description": "SIX Swiss Exchange – largest Swiss companies by market cap",
+        "region": "CH", "continent": "Europe",
+        "tickers": [
+            "NOVN.SW", "NESN.SW", "ROG.SW", "ABBN.SW", "ZURN.SW", "CFR.SW", "SIKA.SW",
+            "ALC.SW", "LONN.SW", "SLHN.SW", "SREN.SW", "GIVN.SW", "UBSG.SW", "SOON.SW",
+            "PGHN.SW", "VACN.SW", "BAER.SW", "SCMN.SW", "KNIN.SW", "UHR.SW",
+        ],
+    },
+    "AEX": {
+        "name": "AEX",
+        "description": "Euronext Amsterdam – top Dutch companies",
+        "region": "NL", "continent": "Europe",
+        "tickers": [
+            "ASML.AS", "HEIA.AS", "PHIA.AS", "ABN.AS", "ING.AS", "NN.AS", "AKZA.AS",
+            "AD.AS", "WKL.AS", "RAND.AS", "IMCD.AS", "BESI.AS", "EXOR.AS", "AGN.AS",
+            "URW.AS", "OCI.AS", "FLOW.AS", "LIGHT.AS", "TKWY.AS", "DSFIR.AS",
+        ],
+    },
+    "OMXS30": {
+        "name": "OMX Stockholm",
+        "description": "Nasdaq Stockholm – largest Swedish companies by market cap",
+        "region": "SE", "continent": "Europe",
+        "tickers": [
+            "VOLV-B.ST", "ERIC-B.ST", "INVE-B.ST", "ATCO-A.ST", "HM-B.ST", "SEB-A.ST",
+            "SHB-A.ST", "SWED-A.ST", "NIBE-B.ST", "SAND.ST", "SKF-B.ST", "EVO.ST",
+            "ALFA.ST", "BOL.ST", "HEXA-B.ST", "NDA-SE.ST", "ESSITY-B.ST", "ASSA-B.ST",
+            "SSAB-B.ST", "KINV-B.ST",
+        ],
+    },
+    "OMXC25": {
+        "name": "OMX Copenhagen",
+        "description": "Nasdaq Copenhagen – largest Danish companies by market cap",
+        "region": "DK", "continent": "Europe",
+        "tickers": [
+            "NOVO-B.CO", "MAERSK-B.CO", "ORSTED.CO", "COLOB.CO", "GMAB.CO", "VWS.CO",
+            "DSV.CO", "CARL-B.CO", "NZYM-B.CO", "GN.CO", "TRYG.CO", "ISS.CO",
+            "CHR.CO", "PNDORA.CO", "DEMANT.CO",
+        ],
+    },
+    "OBX": {
+        "name": "Oslo Børs",
+        "description": "Oslo Stock Exchange – top Norwegian companies",
+        "region": "NO", "continent": "Europe",
+        "tickers": [
+            "EQNR.OL", "DNB.OL", "TEL.OL", "ORK.OL", "YAR.OL", "MOWI.OL", "SALM.OL",
+            "AKRBP.OL", "AKER.OL", "SUBC.OL", "FRO.OL", "NEL.OL", "ENTRA.OL",
+            "SCATC.OL", "KAHOT.OL",
+        ],
+    },
+    "BEL20": {
+        "name": "BEL 20",
+        "description": "Euronext Brussels – largest Belgian companies by market cap",
+        "region": "BE", "continent": "Europe",
+        "tickers": [
+            "ABI.BR", "UCB.BR", "SOLB.BR", "ACKB.BR", "GBLB.BR", "KBC.BR", "PROX.BR",
+            "COLR.BR", "BPOST.BR", "BARN.BR", "AGS.BR", "WDP.BR", "ONTEX.BR",
+            "BELIMO.BR", "SOFINA.BR",
+        ],
+    },
+    "PSI20": {
+        "name": "PSI 20",
+        "description": "Euronext Lisbon – largest Portuguese companies by market cap",
+        "region": "PT", "continent": "Europe",
+        "tickers": [
+            "EDP.LS", "GALP.LS", "JMT.LS", "NOS.LS", "BCP.LS", "EDPR.LS",
+            "CTT.LS", "SONC.LS", "NVG.LS", "RAM.LS",
+        ],
+    },
+    "WIG20": {
+        "name": "WIG 20",
+        "description": "Warsaw Stock Exchange – largest Polish companies by market cap",
+        "region": "PL", "continent": "Europe",
+        "tickers": [
+            "PKN.WA", "PKO.WA", "PZU.WA", "KGHM.WA", "PGE.WA", "OPL.WA", "CDR.WA",
+            "JSW.WA", "LPP.WA", "MBK.WA", "PEO.WA", "ALR.WA", "CCC.WA", "DNP.WA",
+            "ALE.WA",
+        ],
+    },
+    "ATX": {
+        "name": "ATX",
+        "description": "Vienna Stock Exchange – top Austrian companies",
+        "region": "AT", "continent": "Europe",
+        "tickers": [
+            "OMV.VI", "VOE.VI", "ANDR.VI", "EBS.VI", "RBI.VI", "ATS.VI",
+            "VIG.VI", "CAI.VI", "POST.VI", "EVN.VI",
+        ],
+    },
+    "OMXH25": {
+        "name": "OMX Helsinki",
+        "description": "Nasdaq Helsinki – largest Finnish companies by market cap",
+        "region": "FI", "continent": "Europe",
+        "tickers": [
+            "NOKIA.HE", "NESTE.HE", "SAMPO.HE", "KNEBV.HE", "WRT1V.HE",
+            "METSO.HE", "KESKO.HE", "FORTUM.HE", "STERV.HE", "ORNBV.HE",
+        ],
+    },
+    # ── Asia Pacific ────────────────────────────────────────────────────────────
+    "NIKKEI": {
+        "name": "Nikkei 225",
+        "description": "Tokyo Stock Exchange – top Japanese companies",
+        "region": "JP", "continent": "Asia Pacific",
+        "tickers": [
+            "7203.T", "6758.T", "9984.T", "6861.T", "8306.T", "8316.T", "6902.T",
+            "9432.T", "9433.T", "4063.T", "6954.T", "7974.T", "8035.T", "4519.T",
+            "6367.T", "5108.T", "4661.T", "9022.T", "8591.T", "6098.T",
+        ],
+    },
+    "ASX200": {
+        "name": "ASX 200",
+        "description": "Australian Securities Exchange – largest Australian companies by market cap",
+        "region": "AU", "continent": "Asia Pacific",
+        "tickers": [
+            "BHP.AX", "CSL.AX", "CBA.AX", "NAB.AX", "WBC.AX", "ANZ.AX", "WES.AX",
+            "MQG.AX", "RIO.AX", "TLS.AX", "WOW.AX", "FMG.AX", "AMC.AX",
+            "ALL.AX", "REA.AX", "QBE.AX", "SUN.AX", "IAG.AX", "MPL.AX", "ORG.AX",
+        ],
+    },
+    "HANGSENG": {
+        "name": "Hang Seng",
+        "description": "Hong Kong Stock Exchange – top HK companies",
+        "region": "HK", "continent": "Asia Pacific",
+        "tickers": [
+            "0700.HK", "9988.HK", "0939.HK", "1398.HK", "3988.HK", "0005.HK",
+            "0388.HK", "2318.HK", "0941.HK", "0883.HK", "0857.HK", "0688.HK",
+            "0011.HK", "0992.HK", "0027.HK", "0001.HK", "1177.HK", "0762.HK",
+            "0003.HK", "2020.HK",
+        ],
+    },
+    "NIFTY50": {
+        "name": "Nifty 50",
+        "description": "NSE India – largest Indian companies by market cap",
+        "region": "IN", "continent": "Asia Pacific",
+        "tickers": [
+            "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "HINDUNILVR.NS",
+            "ICICIBANK.NS", "KOTAKBANK.NS", "SBIN.NS", "BAJFINANCE.NS", "BHARTIARTL.NS",
+            "WIPRO.NS", "ITC.NS", "TATAMOTORS.NS", "HCLTECH.NS", "AXISBANK.NS",
+            "ASIANPAINT.NS", "MARUTI.NS", "NESTLEIND.NS", "ULTRACEMCO.NS", "LT.NS",
+            "ONGC.NS", "NTPC.NS", "POWERGRID.NS", "SUNPHARMA.NS", "TITAN.NS",
+        ],
+    },
+    "KOSPI": {
+        "name": "KOSPI",
+        "description": "Korea Exchange – top South Korean companies",
+        "region": "KR", "continent": "Asia Pacific",
+        "tickers": [
+            "005930.KS", "000660.KS", "035420.KS", "005380.KS", "000270.KS",
+            "051910.KS", "035720.KS", "006400.KS", "017670.KS", "015760.KS",
+            "012330.KS", "009150.KS", "028260.KS", "032830.KS", "033780.KS",
+        ],
+    },
+    "TWSE": {
+        "name": "TWSE",
+        "description": "Taiwan Stock Exchange – top Taiwanese companies",
+        "region": "TW", "continent": "Asia Pacific",
+        "tickers": [
+            "2330.TW", "2454.TW", "2317.TW", "2308.TW", "2303.TW", "2412.TW",
+            "2882.TW", "1303.TW", "1301.TW", "2886.TW", "2891.TW", "1326.TW",
+            "2881.TW", "2002.TW", "2207.TW",
+        ],
+    },
+    "STI": {
+        "name": "STI Singapore",
+        "description": "Singapore Exchange – top Singaporean companies",
+        "region": "SG", "continent": "Asia Pacific",
+        "tickers": [
+            "D05.SI", "O39.SI", "U11.SI", "Z74.SI", "C6L.SI", "BN4.SI", "J36.SI",
+            "S63.SI", "9CI.SI", "C38U.SI", "A17U.SI", "G13.SI", "V03.SI",
+            "BS6.SI", "F34.SI",
+        ],
+    },
+    "CSI300": {
+        "name": "CSI 300",
+        "description": "Shanghai/Shenzhen – top Chinese A-share companies",
+        "region": "CN", "continent": "Asia Pacific",
+        "tickers": [
+            "600519.SS", "000858.SZ", "300750.SZ", "601318.SS", "601398.SS",
+            "600036.SS", "601888.SS", "000333.SZ", "002415.SZ", "600900.SS",
+            "601166.SS", "600690.SS", "000001.SZ", "601857.SS", "002594.SZ",
+        ],
+    },
+    # ── Middle East & Africa ─────────────────────────────────────────────────────
+    "TADAWUL": {
+        "name": "Tadawul",
+        "description": "Saudi Exchange – top Saudi Arabian companies",
+        "region": "SA", "continent": "Middle East & Africa",
+        "tickers": [
+            "2222.SR", "1180.SR", "2010.SR", "4200.SR", "1050.SR", "2030.SR",
+            "1150.SR", "4005.SR", "8010.SR", "2350.SR", "4001.SR", "4030.SR",
+            "1111.SR", "2380.SR", "7010.SR",
+        ],
+    },
+    "TASE": {
+        "name": "Tel Aviv 35",
+        "description": "Tel Aviv Stock Exchange – top Israeli companies",
+        "region": "IL", "continent": "Middle East & Africa",
+        "tickers": [
+            "NICE.TA", "ESLT.TA", "ICL.TA", "TEVA.TA", "BEZQ.TA", "LUMI.TA",
+            "HAPO.TA", "MZTF.TA", "AZRG.TA", "FIBI.TA", "POLI.TA", "ENLT.TA",
+            "KRNT.TA", "DSCT.TA", "BIDI.TA",
+        ],
+    },
+    "JSE": {
+        "name": "JSE",
+        "description": "Johannesburg Stock Exchange – all listed equities",
+        "region": "ZA", "continent": "Middle East & Africa",
+        "exchange_mic": "XJSE",
+        "yahoo_suffix": ".JO",
+        "tickers": [
+            "NPN.JO", "PRX.JO", "CPI.JO", "FSR.JO", "SBK.JO", "MTN.JO", "AGL.JO",
+            "SOL.JO", "SHP.JO", "WHL.JO", "REM.JO", "DSY.JO", "GRT.JO", "AMS.JO",
+            "ABG.JO", "NED.JO", "BID.JO", "IMP.JO", "SGL.JO", "GFI.JO", "HAR.JO",
+        ],
+    },
+}
+
+# In-process cache: {market_id: {"data": [...], "timestamp": datetime}}
+_explore_cache = {}
+_EXPLORE_CACHE_TTL = 900  # 15 minutes
+
+
+# Module-level Yahoo Finance session cache (lives for Lambda container lifetime)
+_yahoo_session: dict = {"crumb": None, "cookie_str": None, "expires": 0}
+
+_YF_FIELDS = (
+    "regularMarketPrice,regularMarketChange,regularMarketChangePercent,"
+    "marketCap,trailingPE,forwardPE,priceToBook,priceToSalesTrailing12Months,"
+    "enterpriseToEbitda,trailingAnnualDividendYield,trailingEps,"
+    "fiftyTwoWeekHigh,fiftyTwoWeekLow,regularMarketVolume,beta,"
+    "sector,industry,shortName,longName,currency,fullExchangeName"
+)
+
+
+def _get_yahoo_session():
+    """Return (crumb, cookie_str) for authenticated Yahoo Finance API calls.
+    Performs the fc.yahoo.com → getcrumb handshake once per cold start.
+    Returns plain strings — safe to pass across threads.
+    """
+    import time
+    import http.cookiejar
+    from urllib.request import build_opener, HTTPCookieProcessor, Request as _Req
+
+    now = time.time()
+    if _yahoo_session["crumb"] and now < _yahoo_session["expires"]:
+        return _yahoo_session["crumb"], _yahoo_session["cookie_str"]
+
+    jar = http.cookiejar.CookieJar()
+    opener = build_opener(HTTPCookieProcessor(jar))
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    }
+
+    # Step 1: visit fc.yahoo.com to collect session cookies
+    try:
+        opener.open(_Req("https://fc.yahoo.com", headers=headers), timeout=10)
+    except Exception as e:
+        print(f"[DEBUG] fc.yahoo.com step: {e}")  # expected — may 404/redirect
+
+    # Step 2: fetch crumb
+    req = _Req("https://query1.finance.yahoo.com/v1/test/getcrumb", headers=headers)
+    with opener.open(req, timeout=10) as resp:
+        crumb = resp.read().decode().strip()
+
+    # Extract cookies as a plain string for thread-safe concurrent use
+    cookie_str = "; ".join(f"{c.name}={c.value}" for c in jar)
+
+    print(f"[DEBUG] Yahoo crumb obtained: {crumb!r}, cookies: {len(cookie_str)} chars")
+    _yahoo_session["crumb"] = crumb
+    _yahoo_session["cookie_str"] = cookie_str
+    _yahoo_session["expires"] = now + 3600
+    return crumb, cookie_str
+
+
+def _fetch_one_batch(batch, crumb, cookie_str):
+    """Fetch one batch of tickers. Designed to be called concurrently across threads."""
+    from urllib.request import Request as _Request, urlopen as _urlopen
+    symbols = ','.join(batch)
+    url = (
+        f"https://query1.finance.yahoo.com/v7/finance/quote"
+        f"?symbols={symbols}&crumb={crumb}&fields={_YF_FIELDS}"
+    )
+    req = _Request(url, headers={
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Accept": "application/json",
+        "Cookie": cookie_str,
+    })
+    with _urlopen(req, timeout=25) as resp:
+        data = json.loads(resp.read().decode())
+    results = []
+    for s in data.get('quoteResponse', {}).get('result', []):
+        price = s.get('regularMarketPrice')
+        if not price:
+            continue
+        div_yield = s.get('trailingAnnualDividendYield')
+        if div_yield and div_yield < 1:
+            div_yield = div_yield * 100  # convert 0.03 → 3.0 %
+        results.append({
+            "ticker": s.get('symbol', ''),
+            "companyName": (s.get('shortName') or s.get('longName') or s.get('symbol', '')).strip(),
+            "exchange": s.get('fullExchangeName', ''),
+            "sector": s.get('sector', ''),
+            "industry": s.get('industry', ''),
+            "currency": s.get('currency', 'USD'),
+            "price": price,
+            "priceChange": s.get('regularMarketChange'),
+            "priceChangePct": s.get('regularMarketChangePercent'),
+            "marketCap": s.get('marketCap'),
+            "peRatio": s.get('trailingPE'),
+            "forwardPE": s.get('forwardPE'),
+            "pbRatio": s.get('priceToBook'),
+            "psRatio": s.get('priceToSalesTrailing12Months'),
+            "evToEbitda": s.get('enterpriseToEbitda'),
+            "dividendYield": div_yield,
+            "week52High": s.get('fiftyTwoWeekHigh'),
+            "week52Low": s.get('fiftyTwoWeekLow'),
+            "volume": s.get('regularMarketVolume'),
+            "beta": s.get('beta'),
+            "eps": s.get('trailingEps'),
+        })
+    return results
+
+
+def _fetch_stocks_batch(tickers, batch_size=50):
+    """Fetch stock data using Yahoo Finance v7 quote API (concurrent batches).
+    Uses crumb/cookie auth with ThreadPoolExecutor — all batches run in parallel.
+    """
+    try:
+        crumb, cookie_str = _get_yahoo_session()
+    except Exception as e:
+        print(f"[DEBUG] Yahoo session error: {e}")
+        return []
+
+    batches = [tickers[i:i + batch_size] for i in range(0, len(tickers), batch_size)]
+    print(f"[DEBUG] Fetching {len(tickers)} tickers in {len(batches)} concurrent batches")
+
+    all_results = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=min(10, len(batches))) as executor:
+        futures = {
+            executor.submit(_fetch_one_batch, batch, crumb, cookie_str): idx
+            for idx, batch in enumerate(batches)
+        }
+        for future in concurrent.futures.as_completed(futures):
+            idx = futures[future]
+            try:
+                batch_results = future.result()
+                all_results.extend(batch_results)
+                print(f"[DEBUG] Batch {idx}: {len(batch_results)} stocks")
+            except Exception as exc:
+                print(f"[DEBUG] v7 batch fetch error (batch {idx}): {exc}")
+
+    return all_results
+
+
+def get_explore_markets():
+    """Return available markets for the explore page."""
+    markets = []
+    for key, val in MARKET_TICKERS.items():
+        if val.get("exchange_mic") and key in _explore_ticker_list_cache:
+            ticker_count = len(_explore_ticker_list_cache[key]["tickers"])
+        else:
+            ticker_count = len(val.get("tickers") or [])
+        markets.append({
+            "id": key,
+            "name": val["name"],
+            "description": val["description"],
+            "region": val["region"],
+            "continent": val.get("continent", "Other"),
+            "ticker_count": ticker_count,
+        })
+    return {
+        "statusCode": 200,
+        "body": json.dumps({"markets": markets}),
+    }
+
+
+def get_explore_stocks(market, force_refresh=False):
+    """Return stocks for a specific market with key financial metrics."""
+    market_id = market.upper()
+    if market_id not in MARKET_TICKERS:
+        return {
+            "statusCode": 404,
+            "body": json.dumps({"error": f"Market '{market}' not found"}),
+        }
+
+    now = datetime.utcnow()
+    cache_entry = _explore_cache.get(market_id)
+    if not force_refresh and cache_entry:
+        age = (now - cache_entry["timestamp"]).total_seconds()
+        if age < _EXPLORE_CACHE_TTL:
+            return {
+                "statusCode": 200,
+                "body": json.dumps({
+                    "market": market_id,
+                    "market_name": MARKET_TICKERS[market_id]["name"],
+                    "stocks": cache_entry["data"],
+                    "cached": True,
+                    "cache_age_seconds": int(age),
+                }),
+            }
+
+    tickers = _get_tickers_for_market(market_id, MARKET_TICKERS[market_id])
+    tickers = list(dict.fromkeys(tickers))  # deduplicate, preserve order
+    stocks = _fetch_stocks_batch(tickers)
+    seen = set()
+    stocks = [s for s in stocks if s["ticker"] not in seen and not seen.add(s["ticker"])]
+    stocks.sort(key=lambda x: x.get("marketCap") or 0, reverse=True)
+
+    _explore_cache[market_id] = {"data": stocks, "timestamp": now}
+
+    return {
+        "statusCode": 200,
+        "body": json.dumps({
+            "market": market_id,
+            "market_name": MARKET_TICKERS[market_id]["name"],
+            "stocks": stocks,
+            "cached": False,
+            "cache_age_seconds": 0,
+        }),
+    }
+
+
 def lambda_handler(event, context):
     """AWS Lambda handler for stock data operations"""
     
@@ -262,6 +1001,13 @@ def lambda_handler(event, context):
             params = event.get('queryStringParameters', {}) or {}
             query = params.get('q', '')
             result = search_stocks(query)
+        elif path == '/api/explore/markets':
+            result = get_explore_markets()
+        elif '/api/explore/stocks' in path:
+            params = event.get('queryStringParameters', {}) or {}
+            market = params.get('market', 'SP500')
+            force_refresh = params.get('force_refresh', '').lower() == 'true'
+            result = get_explore_stocks(market, force_refresh)
         else:
             result = {
                 'statusCode': 404,
