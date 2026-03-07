@@ -703,8 +703,9 @@ export default function ExplorePage() {
                 borderBottom: '2px solid var(--border-default)',
                 position: 'sticky',
                 top: 0,
+                left: 0,
                 backgroundColor: 'var(--bg-surface-subtle)',
-                zIndex: 2,
+                zIndex: 3,
                 minWidth: 40,
                 width: 40,
               }}>
@@ -734,7 +735,7 @@ export default function ExplorePage() {
                     whiteSpace: 'nowrap',
                     position: 'sticky',
                     top: 0,
-                    left: colIdx === 0 ? 0 : undefined,
+                    left: colIdx === 0 ? 40 : undefined,
                     backgroundColor: 'var(--bg-surface-subtle)',
                     zIndex: colIdx === 0 ? 3 : 2,
                     minWidth: col.minWidth,
@@ -804,10 +805,17 @@ interface StockRowProps {
 function StockRow({ stock, idx, selected, onToggle, onWatchlist }: StockRowProps) {
   const changePositive = (stock.priceChangePct ?? 0) >= 0
   const currency = stock.currency || 'USD'
+  const checkboxCellRef = useRef<HTMLTableCellElement>(null)
+  const symbolCellRef = useRef<HTMLTableCellElement>(null)
 
   const rowBg = selected
     ? 'var(--color-primary-bg)'
     : idx % 2 === 0 ? 'var(--bg-surface)' : 'var(--bg-surface-subtle)'
+
+  const setStickyBg = (bg: string) => {
+    if (checkboxCellRef.current) checkboxCellRef.current.style.backgroundColor = bg
+    if (symbolCellRef.current) symbolCellRef.current.style.backgroundColor = bg
+  }
 
   const cell = (content: React.ReactNode, align: 'left' | 'right' = 'right', style?: React.CSSProperties) => (
     <td style={{
@@ -826,15 +834,28 @@ function StockRow({ stock, idx, selected, onToggle, onWatchlist }: StockRowProps
       style={{ backgroundColor: rowBg, transition: 'background-color 0.1s', cursor: 'pointer' }}
       onClick={() => onToggle(stock.ticker)}
       onMouseEnter={(e) => {
-        if (!selected) e.currentTarget.style.backgroundColor = 'var(--bg-hover)'
+        if (!selected) {
+          e.currentTarget.style.backgroundColor = 'var(--bg-hover)'
+          setStickyBg('var(--bg-hover)')
+        }
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.backgroundColor = rowBg
+        setStickyBg(rowBg)
       }}
     >
       {/* Checkbox */}
       <td
-        style={{ padding: '9px 12px', textAlign: 'center', whiteSpace: 'nowrap' }}
+        ref={checkboxCellRef}
+        style={{
+          padding: '9px 12px',
+          textAlign: 'center',
+          whiteSpace: 'nowrap',
+          position: 'sticky',
+          left: 0,
+          zIndex: 1,
+          backgroundColor: rowBg,
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         <input
@@ -847,7 +868,17 @@ function StockRow({ stock, idx, selected, onToggle, onWatchlist }: StockRowProps
 
       {/* Symbol */}
       <td
-        style={{ padding: '9px 12px', textAlign: 'left', whiteSpace: 'nowrap' }}
+        ref={symbolCellRef}
+        style={{
+          padding: '9px 12px',
+          textAlign: 'left',
+          whiteSpace: 'nowrap',
+          position: 'sticky',
+          left: 40,
+          zIndex: 1,
+          backgroundColor: rowBg,
+          boxShadow: '2px 0 6px -2px rgba(0,0,0,0.08)',
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         <Link
