@@ -20,7 +20,9 @@ export interface StockAnalysis {
   marginOfSafety: number
   upsidePotential: number
   priceToIntrinsicValue: number
-  recommendation: 'Strong Buy' | 'Buy' | 'Hold' | 'Reduce' | 'Avoid' | null
+  recommendation: 'Strong Buy' | 'Buy' | 'Hold' | 'Reduce' | 'Avoid' | 'AI Conflict' | null
+  modelRecommendation?: 'Strong Buy' | 'Buy' | 'Hold' | 'Reduce' | 'Avoid' | null
+  aiRecommendation?: 'Buy' | 'Hold' | 'Avoid' | null
   recommendationReasoning: string
   valuation: ValuationBreakdown
   financialHealth: FinancialHealth

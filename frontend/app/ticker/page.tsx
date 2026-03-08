@@ -47,6 +47,12 @@ export default function TickerPage() {
   const [showPDFUpload, setShowPDFUpload] = useState(false)
   const [marketQuote, setMarketQuote] = useState<QuoteResponse | null>(null)
 
+  // Private company URL params (set by watchlist navigation)
+  const privatePrice = searchParams.get('price') ? parseFloat(searchParams.get('price')!) : undefined
+  const privateCurrency = searchParams.get('currency') || undefined
+  const privateCompanyName = searchParams.get('company_name') || undefined
+  const privateSector = searchParams.get('sector') || undefined
+
   // Get ticker from URL parameters or hash
   useEffect(() => {
     const tickerParam = searchParams.get('symbol') || searchParams.get('ticker')
@@ -63,10 +69,11 @@ export default function TickerPage() {
 
   useEffect(() => {
     if (ticker) {
+      const priv = ticker.startsWith('PRIVATE#')
       loadWatchlistData()
       loadFinancialData()
       fetchAvailableModels()
-      loadMarketQuote()
+      if (!priv) loadMarketQuote()
     }
   }, [ticker])
 
@@ -148,6 +155,8 @@ export default function TickerPage() {
   }
 
   const normalizeTicker = (t: string): string => {
+    // Preserve PRIVATE# prefix for private companies
+    if (t.startsWith('PRIVATE#')) return t
     // Only strip exchange prefix like "NYSE: AAPL" -> "AAPL"
     // Keep dots as-is (e.g. PPE.XJSE, BP.L, AAPL.TO)
     return t.replace(/^[A-Z]+:\s*/i, '').toUpperCase()
@@ -223,6 +232,7 @@ export default function TickerPage() {
 
       // Try to get existing analysis first
       const normalizedTicker = normalizeTicker(ticker)
+      const isPrivateCompany = normalizedTicker.startsWith('PRIVATE#')
       const data = await stockApi.analyzeStock(
         normalizedTicker,
         (update) => {
@@ -237,7 +247,13 @@ export default function TickerPage() {
         undefined,
         forceRefresh,
         overrideBusinessType !== undefined ? overrideBusinessType : businessType,
-        overrideWeights !== undefined ? overrideWeights : analysisWeights
+        overrideWeights !== undefined ? overrideWeights : analysisWeights,
+        isPrivateCompany ? {
+          priceOverride: privatePrice,
+          companyName: privateCompanyName,
+          currency: privateCurrency,
+          sector: privateSector,
+        } : undefined
       )
       setAnalysis(data)
       // Sync preset from the backend response — always resolve to a real preset so
@@ -291,6 +307,8 @@ export default function TickerPage() {
         return '#f59e0b'
       case 'Avoid':
         return '#ef4444'
+      case 'AI Conflict':
+        return '#f97316'
       default:
         return '#6b7280'
     }
@@ -340,8 +358,8 @@ export default function TickerPage() {
             onClick={() => router.push('/watchlist')}
             style={{
               padding: '8px 16px',
-              backgroundColor: '#f3f4f6',
-              color: '#374151',
+              backgroundColor: 'var(--bg-hover)',
+              color: 'var(--text-secondary)',
               border: 'none',
               borderRadius: '6px',
               fontSize: '14px',
@@ -352,60 +370,61 @@ export default function TickerPage() {
           >
             ← Back to Watchlist
           </button>
-          <h1 style={{ fontSize: '32px', fontWeight: '700', color: '#111827', margin: 0 }}>
+          <h1 style={{ fontSize: '32px', fontWeight: '700', color: 'var(--text-primary)', margin: 0 }}>
             {ticker}
           </h1>
         </div>
 
-        <div style={{ 
-          maxWidth: '600px', 
+        <div style={{
+          maxWidth: '600px',
           margin: '40px auto',
-          background: 'white',
-          padding: '24px',
-          borderRadius: '8px',
-          boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
+          background: 'var(--bg-surface)',
+          border: '1px solid var(--border-default)',
+          padding: '32px 24px',
+          borderRadius: '10px',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.12)'
         }}>
-          <h2 style={{ fontSize: '24px', marginBottom: '20px', textAlign: 'center' }}>
-            {analyzing ? 'Analyzing...' : 'Loading...'}
+          <h2 style={{ fontSize: '22px', fontWeight: '600', marginBottom: '24px', textAlign: 'center', color: 'var(--text-primary)' }}>
+            {analyzing ? 'Analysing...' : 'Loading...'}
           </h2>
-          
+
           {progress && (
             <div style={{ marginBottom: '16px' }}>
-              <div style={{ 
-                display: 'flex', 
-                justifyContent: 'space-between', 
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
                 marginBottom: '8px',
-                fontSize: '14px',
-                color: '#6b7280'
+                fontSize: '13px',
+                color: 'var(--text-muted)'
               }}>
                 <span>Step {progress.step} of {progress.total || 8}</span>
                 <span>{Math.round((progress.step / (progress.total || 8)) * 100)}%</span>
               </div>
               <div style={{
                 width: '100%',
-                height: '8px',
-                background: '#e5e7eb',
-                borderRadius: '4px',
+                height: '6px',
+                background: 'var(--bg-hover)',
+                borderRadius: '3px',
                 overflow: 'hidden'
               }}>
                 <div style={{
                   width: `${(progress.step / (progress.total || 8)) * 100}%`,
                   height: '100%',
-                  background: '#2563eb',
+                  background: 'var(--color-primary)',
                   transition: 'width 0.3s ease'
                 }} />
               </div>
             </div>
           )}
-          
-          <p style={{ 
-            fontSize: '16px', 
-            color: '#111827',
+
+          <p style={{
+            fontSize: '14px',
+            color: 'var(--text-muted)',
             fontWeight: '500',
             margin: 0,
             textAlign: 'center'
           }}>
-            {progress?.task || 'Initializing...'}
+            {progress?.task || 'Initialising...'}
           </p>
         </div>
       </div>
@@ -444,13 +463,43 @@ export default function TickerPage() {
     )
   }
 
+  const isPrivateCompany = ticker.startsWith('PRIVATE#')
+
   // Prefer analysis company name (from MarketStack API) over stored watchlist name
-  const companyName = analysis?.companyName || watchlistData?.watchlist_item?.company_name || ticker
-  const rawPrice = analysis?.currentPrice || watchlistData?.current_quote?.currentPrice || watchlistData?.watchlist_item?.current_price
+  const companyName = analysis?.companyName || privateCompanyName || watchlistData?.watchlist_item?.company_name || ticker
+
+  // For private companies: stored/URL price is authoritative (no market feed).
+  // For public companies: analysis price > live quote > stored price.
+  const storedWatchlistPrice = watchlistData?.watchlist_item?.current_price
+  const rawPrice = isPrivateCompany
+    ? (storedWatchlistPrice || privatePrice || analysis?.currentPrice)
+    : (analysis?.currentPrice || watchlistData?.current_quote?.currentPrice || storedWatchlistPrice)
   // Hide price if it's exactly 1.0 (placeholder value when price cannot be fetched)
   const currentPrice = (rawPrice && Math.abs(rawPrice - 1.0) > 0.01) ? rawPrice : null
   const priceError = watchlistData?.price_error || null
-  const recommendation = analysis?.recommendation || watchlistData?.watchlist_item?.recommendation
+
+  // For private companies: the URL-supplied or watchlist-stored currency is authoritative.
+  // Analysis may have stored 'USD' as a default before private params were wired through.
+  const storedWatchlistCurrency = watchlistData?.watchlist_item?.currency
+  const displayCurrency = isPrivateCompany
+    ? (privateCurrency || storedWatchlistCurrency || analysis?.currency)
+    : (analysis?.currency || storedWatchlistCurrency)
+
+  // Worst-of recommendation for the header badge (most cautious of model vs AI)
+  const recSeverity = (rec?: string | null): number => {
+    const map: Record<string, number> = { 'Strong Buy': 1, 'Buy': 2, 'Hold': 3, 'Reduce': 4, 'Avoid': 5 }
+    return rec ? (map[rec] ?? 0) : 0
+  }
+  const modelRec = analysis?.modelRecommendation ?? (analysis?.recommendation !== 'AI Conflict' ? analysis?.recommendation : null)
+    ?? watchlistData?.latest_analysis?.modelRecommendation
+    ?? watchlistData?.watchlist_item?.recommendation ?? null
+  const aiRec = analysis?.aiRecommendation ?? watchlistData?.latest_analysis?.aiRecommendation ?? null
+  const recommendation = (() => {
+    if (!modelRec && !aiRec) return null
+    if (!modelRec) return aiRec
+    if (!aiRec) return modelRec
+    return recSeverity(modelRec) >= recSeverity(aiRec) ? modelRec : aiRec
+  })()
 
   // Incomplete financial data: some core sections have data but at least one is missing
   const hasIncompleteFinancialData = (() => {
@@ -469,8 +518,8 @@ export default function TickerPage() {
           onClick={() => router.push('/watchlist')}
           style={{
             padding: '8px 16px',
-            backgroundColor: '#f3f4f6',
-            color: '#374151',
+            backgroundColor: 'var(--bg-hover)',
+            color: 'var(--text-secondary)',
             border: 'none',
             borderRadius: '6px',
             fontSize: '14px',
@@ -484,18 +533,23 @@ export default function TickerPage() {
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
           <div>
-            <div style={{ marginBottom: '8px' }}>
-              <h1 style={{ fontSize: '36px', fontWeight: '700', color: '#111827', margin: 0 }}>
-                {companyName} ({ticker})
+            <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+              <h1 style={{ fontSize: '36px', fontWeight: '700', color: 'var(--text-primary)', margin: 0 }}>
+                {companyName} ({ticker.startsWith('PRIVATE#') ? ticker.slice('PRIVATE#'.length) : ticker})
               </h1>
+              {ticker.startsWith('PRIVATE#') && (
+                <span style={{ padding: '4px 12px', borderRadius: '10px', fontSize: '13px', fontWeight: '700', color: '#7c3aed', backgroundColor: 'rgba(124,58,237,0.12)', border: '1px solid rgba(124,58,237,0.3)', letterSpacing: '0.03em', whiteSpace: 'nowrap' }}>
+                  PRIVATE COMPANY
+                </span>
+              )}
             </div>
             {currentPrice ? (
               <div>
                 <p style={{ fontSize: '20px', color: '#6b7280', margin: 0 }}>
-                  Current Price: {formatPrice(currentPrice, analysis?.currency)}
-                  {analysis?.currency && analysis.currency !== 'USD' && (
+                  {isPrivateCompany ? 'Stored Price' : 'Current Price'}: {formatPrice(currentPrice, displayCurrency)}
+                  {displayCurrency && displayCurrency !== 'USD' && (
                     <span style={{ fontSize: '14px', marginLeft: '8px', color: '#9ca3af' }}>
-                      ({analysis.currency})
+                      ({displayCurrency})
                     </span>
                   )}
                 </p>

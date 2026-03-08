@@ -17,8 +17,16 @@ export default function AnalysisCard({ analysis }: AnalysisCardProps) {
       'Buy': 'recommendation-buy',
       'Hold': 'recommendation-hold',
       'Avoid': 'recommendation-avoid',
+      'AI Conflict': 'recommendation-ai-conflict',
     }
     return classes[rec] || ''
+  }
+
+  const getAiRecColor = (rec?: string | null) => {
+    if (rec === 'Buy') return '#3b82f6'
+    if (rec === 'Hold') return '#f59e0b'
+    if (rec === 'Avoid') return '#ef4444'
+    return '#6b7280'
   }
 
   return (
@@ -28,7 +36,7 @@ export default function AnalysisCard({ analysis }: AnalysisCardProps) {
       <div className="metric">
         <span className="metric-label">Fair Value Per Share</span>
         <span className="metric-value" style={{ color: analysis.fairValue && analysis.fairValue > 0 ? (analysis.marginOfSafety && analysis.marginOfSafety > 0 ? '#059669' : '#dc2626') : '#6b7280', fontSize: '28px' }}>
-          {analysis.fairValue && analysis.fairValue > 0 
+          {analysis.fairValue && analysis.fairValue > 0
             ? formatPrice(analysis.fairValue, analysis.currency)
             : 'Not available'}
         </span>
@@ -104,6 +112,15 @@ export default function AnalysisCard({ analysis }: AnalysisCardProps) {
         </span>
       </div>
 
+      {analysis.aiRecommendation && (
+        <div className="metric">
+          <span className="metric-label">AI Recommendation</span>
+          <span className="metric-value" style={{ color: getAiRecColor(analysis.aiRecommendation) }}>
+            {analysis.aiRecommendation}
+          </span>
+        </div>
+      )}
+
       {analysis.recommendation ? (
         <div style={{ marginTop: '24px', padding: '16px', background: 'var(--bg-surface-subtle)', borderRadius: '6px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
@@ -112,7 +129,12 @@ export default function AnalysisCard({ analysis }: AnalysisCardProps) {
               {analysis.recommendation}
             </span>
           </div>
-          <p style={{ fontSize: '14px', color: 'var(--text-muted)', lineHeight: '1.6' }}>
+          {analysis.recommendation === 'AI Conflict' && (
+            <p style={{ fontSize: '13px', color: 'var(--status-warning-text)', backgroundColor: 'var(--status-warning-bg)', padding: '8px 10px', borderRadius: '4px', marginBottom: '10px', lineHeight: '1.5' }}>
+              The quantitative model and AI analyst disagree on direction. Review the AI commentary below before acting.
+            </p>
+          )}
+          <p style={{ fontSize: '14px', color: 'var(--text-muted)', lineHeight: '1.6', margin: 0 }}>
             {analysis.recommendationReasoning}
           </p>
         </div>

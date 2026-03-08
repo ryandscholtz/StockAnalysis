@@ -28,7 +28,7 @@ export default function Navigation() {
   const navItems = [
     { href: '/explore', label: 'Explore', requireAuth: false },
     { href: '/watchlist', label: 'Watchlist', requireAuth: true },
-    { href: '/docs', label: 'Docs', requireAuth: false },
+    { href: '/about', label: 'About', requireAuth: false },
   ]
 
   const handleSignOut = () => {

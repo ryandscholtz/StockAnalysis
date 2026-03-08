@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import { stockApi, ExploreMarket, ExploreStock } from '@/lib/api'
 import { useAuth } from '@/components/AuthProvider'
+import { useSessionState } from '@/lib/useSessionState'
 import {
   formatPrice,
   formatLargeNumber,
@@ -132,8 +133,8 @@ export default function ExplorePage() {
   const { isAuthenticated } = useAuth()
 
   const [markets, setMarkets] = useState<ExploreMarket[]>([])
-  const [selectedContinent, setSelectedContinent] = useState<string>('Americas')
-  const [selectedMarket, setSelectedMarket] = useState<string>('SP500')
+  const [selectedContinent, setSelectedContinent] = useSessionState<string>('explore_continent', 'Americas')
+  const [selectedMarket, setSelectedMarket] = useSessionState<string>('explore_market', 'SP500')
   const [stocks, setStocks] = useState<ExploreStock[]>([])
   const [loading, setLoading] = useState(false)
   const [marketsLoading, setMarketsLoading] = useState(true)
@@ -141,14 +142,14 @@ export default function ExplorePage() {
   const [cached, setCached] = useState(false)
   const [cacheAge, setCacheAge] = useState(0)
 
-  const [sortField, setSortField] = useState<SortField>('marketCap')
-  const [sortDir, setSortDir] = useState<SortDir>('desc')
+  const [sortField, setSortField] = useSessionState<SortField>('explore_sortField', 'marketCap')
+  const [sortDir, setSortDir] = useSessionState<SortDir>('explore_sortDir', 'desc')
 
   const [watchlistTickers, setWatchlistTickers] = useState<Set<string>>(new Set())
   const [toastMessage, setToastMessage] = useState<string>('')
 
-  const [sectorFilter, setSectorFilter] = useState<string>('All')
-  const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS)
+  const [sectorFilter, setSectorFilter] = useSessionState<string>('explore_sectorFilter', 'All')
+  const [filters, setFilters] = useSessionState<FilterState>('explore_filters', EMPTY_FILTERS)
   const [filterOpen, setFilterOpen] = useState(false)
 
   // Selection state

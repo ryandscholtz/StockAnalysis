@@ -7,6 +7,7 @@ import os
 import boto3
 from datetime import datetime
 from decimal import Decimal
+from urllib.parse import unquote
 
 # DynamoDB client
 dynamodb = boto3.resource('dynamodb', region_name='eu-west-1')
@@ -123,16 +124,21 @@ def add_to_watchlist(user_id: str, ticker: str, data: dict) -> dict:
     try:
         table = dynamodb.Table(WATCHLIST_TABLE)
         
+        price_val = data.get('currentPrice') or data.get('pricePerShare') or 0
         item = {
             'userId': user_id,
             'ticker': ticker,
             'addedAt': datetime.now().isoformat(),
             'companyName': data.get('companyName', ticker),
             'exchange': data.get('exchange', ''),
-            'currentPrice': Decimal(str(data.get('currentPrice', 0))),
+            'currentPrice': Decimal(str(price_val)),
             'notes': data.get('notes', '')
         }
-        
+        # Optional fields — store only when provided
+        for field in ('companyType', 'sector', 'currency'):
+            if data.get(field):
+                item[field] = data[field]
+
         table.put_item(Item=item)
         
         return {
@@ -316,13 +322,13 @@ def lambda_handler(event, context):
             if method == 'GET' and path == '/api/watchlist':
                 result = get_watchlist(user_id)
             elif method == 'GET' and '/api/watchlist/' in path:
-                ticker = path.split('/api/watchlist/')[-1]
+                ticker = unquote(path.split('/api/watchlist/')[-1])
                 result = get_watchlist_item(user_id, ticker)
             elif method == 'POST':
                 body = json.loads(event.get('body', '{}') or '{}')
                 # Extract ticker from path (/api/watchlist/{ticker}) or body
                 if '/api/watchlist/' in path:
-                    ticker = path.split('/api/watchlist/')[-1].split('?')[0]
+                    ticker = unquote(path.split('/api/watchlist/')[-1].split('?')[0])
                 else:
                     ticker = body.get('ticker', '')
                 # Merge query string params into body for company_name/exchange/notes
@@ -335,7 +341,7 @@ def lambda_handler(event, context):
                     body['notes'] = query_params['notes']
                 result = add_to_watchlist(user_id, ticker, body)
             elif method == 'DELETE':
-                ticker = path.split('/api/watchlist/')[-1]
+                ticker = unquote(path.split('/api/watchlist/')[-1])
                 result = remove_from_watchlist(user_id, ticker)
             else:
                 result = {

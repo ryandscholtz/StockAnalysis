@@ -178,7 +178,7 @@ export interface ProgressUpdate {
 export const stockApi = {
   async autoAssignBusinessType(ticker: string): Promise<{ detected_business_type: string; weights: AnalysisWeights; business_type_display: string }> {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-    const response = await api.post(`/api/auto-assign-business-type/${ticker}`)
+    const response = await api.post(`/api/auto-assign-business-type/${encodeURIComponent(ticker)}`)
     return response.data
   },
   async analyzeStock(
@@ -187,7 +187,8 @@ export const stockApi = {
     signal?: AbortSignal,
     forceRefresh?: boolean,
     businessType?: string | null,
-    weights?: AnalysisWeights | null
+    weights?: AnalysisWeights | null,
+    privateParams?: { priceOverride?: number; companyName?: string; currency?: string; sector?: string }
   ): Promise<StockAnalysis> {
     if (onProgress) {
       // Use streaming endpoint with progress updates using fetch
@@ -196,11 +197,11 @@ export const stockApi = {
           const forceParam = forceRefresh ? '&force_refresh=true' : ''
           console.log(`Fetching analysis for ${ticker} with streaming...`)
           console.log(`URL: ${API_BASE_URL}/api/analyze/${ticker}?stream=true${forceParam}`)
-          
+
           // Add timeout to detect if fetch hangs (but reset on each chunk)
           const controller = signal ? { signal, abort: () => {} } : new AbortController()
           let timeoutId: NodeJS.Timeout | null = null
-          
+
           const resetTimeout = () => {
             if (timeoutId) {
               clearTimeout(timeoutId)
@@ -214,22 +215,26 @@ export const stockApi = {
               }
             }, 300000) // 5 minutes of inactivity before timeout (long analyses can take time)
           }
-          
+
           resetTimeout() // Start initial timeout
-          
+
           // Check if already aborted
           if (signal?.aborted) {
             reject(new DOMException('Request aborted', 'AbortError'))
             return
           }
-          
+
           try {
             const params = new URLSearchParams()
             if (forceRefresh) params.append('force_refresh', 'true')
             if (businessType) params.append('business_type', businessType)
             if (weights) params.append('weights', JSON.stringify(weights))
+            if (privateParams?.priceOverride != null) params.append('price_override', String(privateParams.priceOverride))
+            if (privateParams?.companyName) params.append('company_name', privateParams.companyName)
+            if (privateParams?.currency) params.append('currency', privateParams.currency)
+            if (privateParams?.sector) params.append('sector', privateParams.sector)
             const paramString = params.toString()
-            const url = `${API_BASE_URL}/api/analyze/${ticker}?stream=true${paramString ? '&' + paramString : ''}`
+            const url = `${API_BASE_URL}/api/analyze/${encodeURIComponent(ticker)}?stream=true${paramString ? '&' + paramString : ''}`
             const response = await fetch(url, {
               headers: {
                 'Accept': 'text/event-stream',
@@ -469,7 +474,7 @@ export const stockApi = {
       
       console.log(`📡 Calling: /api/analyze/${ticker} with params:`, params);
       try {
-        const response = await api.get<StockAnalysis>(`/api/analyze/${ticker}`, { params })
+        const response = await api.get<StockAnalysis>(`/api/analyze/${encodeURIComponent(ticker)}`, { params })
         console.log('✅ Standard endpoint response received:', response.data);
         return response.data
       } catch (error: any) {
@@ -653,6 +658,16 @@ export const stockApi = {
     return response.data
   },
 
+  async startBulkAnalysis(tickers: string[]): Promise<{ jobId: string; total: number }> {
+    const response = await api.post('/api/bulk-analyze', { tickers })
+    return response.data
+  },
+
+  async getBulkStatus(jobId: string): Promise<{ jobId: string; status: string; total: number; completed: number; failed: number }> {
+    const response = await api.get(`/api/bulk-status?jobId=${jobId}`)
+    return response.data
+  },
+
   async batchAnalyze(tickers: string[], exchangeName: string = 'Custom', skipExisting: boolean = true): Promise<{ success: boolean; summary: any; message: string }> {
     const response = await api.post('/api/batch-analyze', {
       tickers,
@@ -696,11 +711,14 @@ export const stockApi = {
         ...item,
         company_name: item.company_name || item.companyName || undefined,
         current_price: item.current_price ?? item.currentPrice ?? undefined,
+        currency: item.currency || undefined,
         fair_value: item.fair_value ?? item.fairValue ?? undefined,
         margin_of_safety_pct: item.margin_of_safety_pct ?? item.marginOfSafety ?? undefined,
         recommendation: item.recommendation ?? undefined,
         last_analyzed_at: item.last_analyzed_at ?? item.last_updated ?? undefined,
         pe_ratio: item.pe_ratio ?? item.priceToEarnings ?? undefined,
+        companyType: item.companyType || undefined,
+        sector: item.sector || undefined,
       }))
 
       return {
@@ -720,18 +738,36 @@ export const stockApi = {
     return response.data
   },
 
-  async addToWatchlist(ticker: string, companyName?: string, exchange?: string, notes?: string): Promise<{ success: boolean; message: string }> {
+  async addToWatchlist(
+    ticker: string,
+    companyName?: string,
+    exchange?: string,
+    notes?: string,
+    privateOptions?: { companyType?: string; pricePerShare?: number; sector?: string; currency?: string }
+  ): Promise<{ success: boolean; message: string }> {
     console.log('=== API addToWatchlist DEBUG ===')
-    console.log('Input params:', { ticker, companyName, exchange, notes })
-    
+    console.log('Input params:', { ticker, companyName, exchange, notes, privateOptions })
+
     try {
       const params = new URLSearchParams()
       if (companyName) params.append('company_name', companyName)
       if (exchange) params.append('exchange', exchange)
       if (notes) params.append('notes', notes)
-      
+
+      // Build body — includes private company fields when present
+      const body: Record<string, unknown> = {}
+      if (companyName) body.companyName = companyName
+      if (exchange) body.exchange = exchange
+      if (notes) body.notes = notes
+      if (privateOptions) {
+        if (privateOptions.companyType) body.companyType = privateOptions.companyType
+        if (privateOptions.pricePerShare != null) body.pricePerShare = privateOptions.pricePerShare
+        if (privateOptions.sector) body.sector = privateOptions.sector
+        if (privateOptions.currency) body.currency = privateOptions.currency
+      }
+
       console.log('Trying API POST request...')
-      const response = await api.post<any>(`/api/watchlist/${ticker}?${params.toString()}`)
+      const response = await api.post<any>(`/api/watchlist/${encodeURIComponent(ticker)}`, body)
       console.log('API POST response:', response.data)
       
       // Handle both response formats
@@ -816,7 +852,7 @@ export const stockApi = {
 
   async removeFromWatchlist(ticker: string): Promise<{ success: boolean; message: string }> {
     try {
-      const response = await api.delete<{ success: boolean; message: string }>(`/api/watchlist/${ticker}`)
+      const response = await api.delete<{ success: boolean; message: string }>(`/api/watchlist/${encodeURIComponent(ticker)}`)
       // Always remove from client-side simulation so merged getWatchlist doesn't resurface the item
       WatchlistSimulation.removeFromWatchlist(ticker)
       return response.data
@@ -838,8 +874,22 @@ export const stockApi = {
   async getWatchlistItem(ticker: string, forceRefresh: boolean = false): Promise<WatchlistItemDetail> {
     const params = forceRefresh ? { force_refresh: true } : {}
     try {
-      const response = await api.get<WatchlistItemDetail>(`/api/watchlist/${ticker}`, { params })
-      return response.data
+      const response = await api.get<any>(`/api/watchlist/${encodeURIComponent(ticker)}`, { params })
+      const data = response.data
+      // Lambda returns { item: {...} } but interface expects { watchlist_item: {...} }
+      // Normalise so callers can use watchlist_item consistently
+      if (data?.item && !data?.watchlist_item) {
+        const raw = data.item
+        data.watchlist_item = {
+          ...raw,
+          company_name: raw.company_name || raw.companyName || undefined,
+          current_price: raw.current_price ?? raw.currentPrice ?? undefined,
+          currency: raw.currency || undefined,
+          companyType: raw.companyType || undefined,
+          sector: raw.sector || undefined,
+        }
+      }
+      return data as WatchlistItemDetail
     } catch (error: any) {
       // On 404, fall back to client-side WatchlistSimulation
       if (error?.response?.status === 404) {
@@ -875,11 +925,11 @@ export const stockApi = {
     // If notes is null, we still want to update (to clear it), so we pass notes=null
     // The backend will handle converting string "null" to None
     
-    const url = notes === null 
-      ? `/api/watchlist/${ticker}?notes=null`
-      : params.toString() 
-        ? `/api/watchlist/${ticker}?${params.toString()}`
-        : `/api/watchlist/${ticker}`
+    const url = notes === null
+      ? `/api/watchlist/${encodeURIComponent(ticker)}?notes=null`
+      : params.toString()
+        ? `/api/watchlist/${encodeURIComponent(ticker)}?${params.toString()}`
+        : `/api/watchlist/${encodeURIComponent(ticker)}`
     
     const response = await api.put<{ success: boolean; message: string }>(url)
     return response.data
@@ -899,7 +949,7 @@ export const stockApi = {
     latest_analysis?: StockAnalysis
   }> {
     try {
-      const response = await api.get(`/api/manual-data/${ticker}`)
+      const response = await api.get(`/api/manual-data/${encodeURIComponent(ticker)}`)
       return response.data
     } catch (error) {
       // Return empty result on error — no mock data

@@ -182,10 +182,12 @@ export default function ValuationChart({
 
       <Bar label="Current Price" value={currentPrice > 0 ? currentPrice : 0} color="#334155" />
       <StackedFairValueBar />
-      <Bar label="DCF Model"            weight={w.dcf_weight}   value={dcfValue}           color={MODEL_COLORS.dcf} />
-      <Bar label="P/E Model"            weight={peWeight}       value={peValue}            color={MODEL_COLORS.pe} />
-      <Bar label="Earnings Power Value" weight={w.epv_weight}   value={earningsPowerValue} color={MODEL_COLORS.epv} />
-      <Bar label="Book Value"           weight={w.asset_weight} value={bookValue}          color={MODEL_COLORS.book} />
+      <div style={{ borderLeft: '3px solid #e5e7eb', marginLeft: '12px', paddingLeft: '16px' }}>
+        <Bar label="DCF Model"            weight={w.dcf_weight}   value={dcfValue}           color={MODEL_COLORS.dcf} />
+        <Bar label="P/E Model"            weight={peWeight}       value={peValue}            color={MODEL_COLORS.pe} />
+        <Bar label="Earnings Power Value" weight={w.epv_weight}   value={earningsPowerValue} color={MODEL_COLORS.epv} />
+        <Bar label="Book Value"           weight={w.asset_weight} value={bookValue}          color={MODEL_COLORS.book} />
+      </div>
 
       <div style={{ marginTop: '24px', padding: '16px', background: '#f9fafb', borderRadius: '6px' }}>
         <p style={{ fontSize: '14px', color: '#6b7280', lineHeight: '1.6', margin: 0 }}>

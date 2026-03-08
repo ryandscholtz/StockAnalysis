@@ -326,6 +326,11 @@ a {
   font-weight: 600;
 }
 
+.recommendation-ai-conflict {
+  color: #ea580c;
+  font-weight: 600;
+}
+
 .score {
   display: inline-block;
   padding: 4px 12px;

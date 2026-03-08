@@ -1,10 +1,140 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { stockApi } from '@/lib/api'
 import { formatPrice } from '@/lib/currency'
 import { useAuth } from '@/components/AuthProvider'
+import { useSessionState } from '@/lib/useSessionState'
+
+interface FilterRange { min: string; max: string }
+interface WatchlistFilterState {
+  peRatio:        FilterRange
+  pbRatio:        FilterRange
+  psRatio:        FilterRange
+  evToEbitda:     FilterRange
+  marginOfSafety: FilterRange
+  upsidePotential: FilterRange
+  price:          FilterRange
+  fairValue:      FilterRange
+}
+const EMPTY_FILTERS: WatchlistFilterState = {
+  peRatio:         { min: '', max: '' },
+  pbRatio:         { min: '', max: '' },
+  psRatio:         { min: '', max: '' },
+  evToEbitda:      { min: '', max: '' },
+  marginOfSafety:  { min: '', max: '' },
+  upsidePotential: { min: '', max: '' },
+  price:           { min: '', max: '' },
+  fairValue:       { min: '', max: '' },
+}
+const FILTER_GROUPS: { label: string; rows: { key: keyof WatchlistFilterState; label: string; unit?: string; placeholder?: string }[] }[] = [
+  { label: 'Valuation Ratios', rows: [
+    { key: 'peRatio',    label: 'P/E Ratio',   placeholder: 'e.g. 15' },
+    { key: 'pbRatio',    label: 'P/B Ratio',   placeholder: 'e.g. 2' },
+    { key: 'psRatio',    label: 'P/S Ratio',   placeholder: 'e.g. 3' },
+    { key: 'evToEbitda', label: 'EV / EBITDA', placeholder: 'e.g. 10' },
+  ]},
+  { label: 'Intrinsic Value', rows: [
+    { key: 'marginOfSafety',  label: 'Margin of Safety',  unit: '%', placeholder: 'e.g. 20' },
+    { key: 'upsidePotential', label: 'Upside Potential',  unit: '%', placeholder: 'e.g. 30' },
+    { key: 'fairValue',       label: 'Fair Value',                   placeholder: 'e.g. 100' },
+  ]},
+  { label: 'Price', rows: [
+    { key: 'price', label: 'Current Price', placeholder: 'e.g. 50' },
+  ]},
+]
+
+const REC_OPTIONS = ['Strong Buy', 'Buy', 'Hold', 'Reduce', 'Avoid'] as const
+
+function WatchlistFilterModal({ filters, onChange, onClose, onClear, activeCount, selectedRecs, onRecsChange }: {
+  filters: WatchlistFilterState
+  onChange: (f: WatchlistFilterState) => void
+  onClose: () => void
+  onClear: () => void
+  activeCount: number
+  selectedRecs: string[]
+  onRecsChange: (recs: string[]) => void
+}) {
+  const set = (key: keyof WatchlistFilterState, side: 'min' | 'max', val: string) =>
+    onChange({ ...filters, [key]: { ...filters[key], [side]: val } })
+  const toggleRec = (rec: string) =>
+    onRecsChange(selectedRecs.includes(rec) ? selectedRecs.filter(r => r !== rec) : [...selectedRecs, rec])
+  const REC_COLOR: Record<string, string> = {
+    'Strong Buy': '#10b981', 'Buy': '#3b82f6', 'Hold': '#f59e0b', 'Reduce': '#f97316', 'Avoid': '#ef4444',
+  }
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 1000, backgroundColor: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: '12px', width: '100%', maxWidth: '500px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 20px 14px', borderBottom: '1px solid var(--border-default)', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-primary)' }}>Filters</span>
+            {activeCount > 0 && <span style={{ backgroundColor: 'var(--color-primary)', color: '#fff', borderRadius: '10px', fontSize: '11px', padding: '2px 8px', fontWeight: '700' }}>{activeCount} active</span>}
+          </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            {activeCount > 0 && <button onClick={onClear} style={{ padding: '4px 12px', borderRadius: '6px', border: '1px solid var(--border-input)', backgroundColor: 'transparent', color: 'var(--text-muted)', fontSize: '12px', cursor: 'pointer' }}>Clear all</button>}
+            <button onClick={onClose} style={{ width: '28px', height: '28px', borderRadius: '6px', border: 'none', backgroundColor: 'var(--bg-hover)', color: 'var(--text-muted)', fontSize: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+          </div>
+        </div>
+        <div style={{ overflowY: 'auto', padding: '0 20px 20px', flexGrow: 1 }}>
+          {/* Recommendation multi-select */}
+          <div style={{ marginBottom: '20px' }}>
+            <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '10px', paddingTop: '12px' }}>Recommendation</div>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              {REC_OPTIONS.map((rec) => {
+                const active = selectedRecs.includes(rec)
+                return (
+                  <button
+                    key={rec}
+                    onClick={() => toggleRec(rec)}
+                    style={{
+                      padding: '5px 12px',
+                      borderRadius: '20px',
+                      border: `2px solid ${active ? REC_COLOR[rec] : 'var(--border-input)'}`,
+                      backgroundColor: active ? REC_COLOR[rec] : 'transparent',
+                      color: active ? '#fff' : 'var(--text-secondary)',
+                      fontSize: '12px',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    {rec}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Numeric filter groups */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 110px 110px', gap: '8px', marginBottom: '4px' }}>
+            <div /><span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600', textAlign: 'center' }}>MIN</span><span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600', textAlign: 'center' }}>MAX</span>
+          </div>
+          {FILTER_GROUPS.map((group, gi) => (
+            <div key={gi} style={{ marginBottom: '20px' }}>
+              <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px', paddingTop: '12px', borderTop: '1px solid var(--border-default)' }}>{group.label}</div>
+              {group.rows.map(({ key, label, unit, placeholder }) => (
+                <div key={key} style={{ display: 'grid', gridTemplateColumns: '1fr 110px 110px', gap: '8px', alignItems: 'center', marginBottom: '6px' }}>
+                  <label style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{label}{unit && <span style={{ color: 'var(--text-muted)', fontSize: '11px', marginLeft: '4px' }}>{unit}</span>}</label>
+                  {(['min', 'max'] as const).map((side) => {
+                    const range = filters[key] as FilterRange
+                    return (
+                      <input key={side} type="number" value={range[side]} onChange={(e) => set(key, side, e.target.value)} placeholder={side === 'min' ? (placeholder || '—') : '—'}
+                        style={{ padding: '5px 8px', borderRadius: '6px', border: `1px solid ${range[side] ? 'var(--color-primary)' : 'var(--border-input)'}`, backgroundColor: 'var(--bg-surface)', color: 'var(--text-primary)', fontSize: '13px', width: '100%', boxSizing: 'border-box', outline: 'none' }} />
+                    )
+                  })}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+        <div style={{ padding: '14px 20px', borderTop: '1px solid var(--border-default)', flexShrink: 0 }}>
+          <button onClick={onClose} style={{ width: '100%', padding: '8px', borderRadius: '8px', border: 'none', backgroundColor: 'var(--color-primary)', color: '#fff', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}>Apply</button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 interface WatchlistItem {
   ticker: string
@@ -23,7 +153,17 @@ interface WatchlistItem {
   last_analyzed_at?: string
   analysis_date?: string
   pe_ratio?: number
+  pb_ratio?: number
+  ps_ratio?: number
+  ev_to_ebitda?: number
+  upside_potential?: number
+  companyType?: string
+  sector?: string
 }
+
+// Helpers for private companies
+const isPrivate = (ticker: string) => ticker.startsWith('PRIVATE#')
+const displayTicker = (ticker: string) => isPrivate(ticker) ? ticker.slice('PRIVATE#'.length) : ticker
 
 // Simple loading spinner component
 const LoadingSpinner = () => (
@@ -53,7 +193,13 @@ export default function WatchlistPage() {
   const [error, setError] = useState<string>('')
   const [bulkAnalyzing, setBulkAnalyzing] = useState(false)
   const [bulkResult, setBulkResult] = useState<{ success: boolean; message: string } | null>(null)
-  const [sortBy, setSortBy] = useState<'name' | 'undervalued'>('name')
+  const [bulkProgress, setBulkProgress] = useState<{ current: number; total: number; ticker: string } | null>(null)
+  const [sortBy, setSortBy] = useSessionState<'name' | 'undervalued'>('watchlist_sortBy', 'name')
+  const [recommendationFilter, setRecommendationFilter] = useSessionState<string[]>('watchlist_recFilter', [])
+  const [filters, setFilters] = useSessionState<WatchlistFilterState>('watchlist_filters', EMPTY_FILTERS)
+  const [filterOpen, setFilterOpen] = useState(false)
+  const [selectedTickers, setSelectedTickers] = useState<Set<string>>(new Set())
+  const [confirmRemoveOpen, setConfirmRemoveOpen] = useState(false)
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -92,8 +238,20 @@ export default function WatchlistPage() {
                 currency: la.currency ?? item.currency,
                 fair_value: la.fairValue ?? la.fair_value ?? item.fair_value,
                 margin_of_safety_pct: la.marginOfSafety ?? la.margin_of_safety_pct ?? item.margin_of_safety_pct,
-                recommendation: la.recommendation ?? item.recommendation,
-                pe_ratio: la.aiFinancialData?.keyMetrics?.pe_ratio ?? la.pe_ratio ?? item.pe_ratio,
+                recommendation: (() => {
+                  const recSev = (r?: string | null) => ({ 'Strong Buy': 1, 'Buy': 2, 'Hold': 3, 'Reduce': 4, 'Avoid': 5 } as Record<string, number>)[r ?? ''] ?? 0
+                  const m = la.modelRecommendation ?? (la.recommendation !== 'AI Conflict' ? la.recommendation : null)
+                  const a = la.aiRecommendation ?? null
+                  if (!m && !a) return item.recommendation
+                  if (!m) return a
+                  if (!a) return m
+                  return recSev(m) >= recSev(a) ? m : a
+                })(),
+                pe_ratio:        la.priceRatios?.priceToEarnings ?? la.aiFinancialData?.keyMetrics?.pe_ratio ?? la.pe_ratio ?? item.pe_ratio,
+                pb_ratio:        la.priceRatios?.priceToBook ?? null,
+                ps_ratio:        la.priceRatios?.priceToSales ?? null,
+                ev_to_ebitda:    la.priceRatios?.enterpriseValueToEBITDA ?? null,
+                upside_potential: la.upsidePotential ?? null,
                 last_analyzed_at: la.timestamp ?? item.last_analyzed_at,
               }
             } catch {
@@ -123,8 +281,17 @@ export default function WatchlistPage() {
     }
   }
 
-  const handleStockClick = (ticker: string) => {
-    router.push(`/ticker?ticker=${ticker}`)
+  const handleStockClick = (stock: WatchlistItem) => {
+    if (isPrivate(stock.ticker)) {
+      const params = new URLSearchParams({ symbol: stock.ticker })
+      if (stock.current_price) params.set('price', String(stock.current_price))
+      if (stock.currency) params.set('currency', stock.currency)
+      if (stock.company_name) params.set('company_name', stock.company_name)
+      if (stock.sector) params.set('sector', stock.sector)
+      router.push(`/ticker?${params.toString()}`)
+    } else {
+      router.push(`/ticker?ticker=${stock.ticker}`)
+    }
   }
 
   const getRecommendationColor = (recommendation?: string) => {
@@ -137,6 +304,8 @@ export default function WatchlistPage() {
         return '#f59e0b'
       case 'Avoid':
         return '#ef4444'
+      case 'AI Conflict':
+        return '#f97316'
       default:
         return '#6b7280'
     }
@@ -153,27 +322,72 @@ export default function WatchlistPage() {
       setTimeout(() => setBulkResult(null), 5000)
       return
     }
+    setBulkAnalyzing(true)
+    setBulkResult(null)
+    setError('')
+    const tickers = selectedTickers.size > 0
+      ? watchlistItems.map((i) => i.ticker).filter((t) => selectedTickers.has(t))
+      : watchlistItems.map((item) => item.ticker)
+    setBulkProgress({ current: 0, total: tickers.length, ticker: '' })
+
     try {
-      setBulkAnalyzing(true)
-      setBulkResult(null)
-      setError('')
-      const tickers = watchlistItems.map((item) => item.ticker)
-      const exchangeName = watchlistItems[0]?.exchange || 'Custom'
-      const result = await stockApi.batchAnalyze(tickers, exchangeName, true)
-      setBulkResult({
-        success: result.success,
-        message: result.message || (result.summary ? `Processed ${result.summary.successful ?? 0} successfully, ${result.summary.failed ?? 0} failed.` : 'Done.')
+      // Start the bulk job — Lambda fans out async invocations per ticker
+      const { jobId, total } = await stockApi.startBulkAnalysis(tickers)
+
+      // Poll for progress every 2 seconds
+      await new Promise<void>((resolve) => {
+        const poll = setInterval(async () => {
+          try {
+            const status = await stockApi.getBulkStatus(jobId)
+            setBulkProgress({ current: status.completed + status.failed, total: status.total, ticker: '' })
+            if (status.status === 'complete') {
+              clearInterval(poll)
+              setBulkProgress(null)
+              setBulkAnalyzing(false)
+              setBulkResult({
+                success: status.failed === 0,
+                message: `Completed: ${status.completed} analysed${status.failed > 0 ? `, ${status.failed} failed` : ''}.`,
+              })
+              setTimeout(() => setBulkResult(null), 6000)
+              await loadWatchlist()
+              resolve()
+            }
+          } catch {
+            // keep polling on transient errors
+          }
+        }, 2000)
       })
-      setTimeout(() => setBulkResult(null), 5000)
-      if (result.success) await loadWatchlist()
     } catch (err: any) {
-      setBulkResult({
-        success: false,
-        message: err?.response?.data?.detail || err?.message || 'Bulk analysis failed.'
-      })
-      setTimeout(() => setBulkResult(null), 5000)
-    } finally {
+      setBulkProgress(null)
       setBulkAnalyzing(false)
+      setBulkResult({ success: false, message: err?.message || 'Failed to start bulk analysis.' })
+      setTimeout(() => setBulkResult(null), 6000)
+    }
+  }
+
+  const removeSelected = async () => {
+    if (selectedTickers.size === 0) return
+    const tickers = [...selectedTickers]
+    setConfirmRemoveOpen(false)
+    await Promise.allSettled(tickers.map((t) => stockApi.removeFromWatchlist(t)))
+    setSelectedTickers(new Set())
+    await loadWatchlist()
+  }
+
+  const toggleSelect = (ticker: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setSelectedTickers((prev) => {
+      const next = new Set(prev)
+      next.has(ticker) ? next.delete(ticker) : next.add(ticker)
+      return next
+    })
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedTickers.size === displayItems.length && displayItems.length > 0) {
+      setSelectedTickers(new Set())
+    } else {
+      setSelectedTickers(new Set(displayItems.map((s) => s.ticker)))
     }
   }
 
@@ -189,15 +403,42 @@ export default function WatchlistPage() {
     return { text: `${absMargin.toFixed(0)}% Overvalued`, color: '#dc2626' }
   }
 
-  const sortedItems = [...watchlistItems].sort((a, b) => {
-    if (sortBy === 'undervalued') {
-      // Items with margin data first, sorted descending (most undervalued first)
-      const aVal = a.margin_of_safety_pct ?? -Infinity
-      const bVal = b.margin_of_safety_pct ?? -Infinity
-      return bVal - aVal
+  const activeFilterCount = useMemo(
+    () => Object.values(filters).filter(({ min, max }) => min !== '' || max !== '').length
+        + (recommendationFilter.length > 0 ? 1 : 0),
+    [filters, recommendationFilter]
+  )
+
+  const displayItems = useMemo(() => {
+    const inRange = (val: number | null | undefined, { min, max }: FilterRange): boolean => {
+      if (min === '' && max === '') return true
+      if (val == null || !isFinite(val)) return false
+      if (min !== '' && val < parseFloat(min)) return false
+      if (max !== '' && val > parseFloat(max)) return false
+      return true
     }
-    return (a.company_name || a.ticker).localeCompare(b.company_name || b.ticker)
-  })
+    let items = recommendationFilter.length === 0
+      ? watchlistItems
+      : watchlistItems.filter((s) => s.recommendation && recommendationFilter.includes(s.recommendation))
+    if (activeFilterCount > 0) {
+      items = items.filter((s) =>
+        inRange(s.pe_ratio,          filters.peRatio) &&
+        inRange(s.pb_ratio,          filters.pbRatio) &&
+        inRange(s.ps_ratio,          filters.psRatio) &&
+        inRange(s.ev_to_ebitda,      filters.evToEbitda) &&
+        inRange(s.margin_of_safety_pct, filters.marginOfSafety) &&
+        inRange(s.upside_potential,  filters.upsidePotential) &&
+        inRange(s.current_price,     filters.price) &&
+        inRange(s.fair_value,        filters.fairValue)
+      )
+    }
+    return [...items].sort((a, b) => {
+      if (sortBy === 'undervalued') {
+        return (b.margin_of_safety_pct ?? -Infinity) - (a.margin_of_safety_pct ?? -Infinity)
+      }
+      return (a.company_name || a.ticker).localeCompare(b.company_name || b.ticker)
+    })
+  }, [watchlistItems, sortBy, recommendationFilter, filters, activeFilterCount])
 
   if (authLoading || (!isAuthenticated && !authLoading)) {
     return (
@@ -254,7 +495,7 @@ export default function WatchlistPage() {
           marginBottom: '32px'
         }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: selectedTickers.size > 0 ? '12px' : '24px', flexWrap: 'wrap', gap: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
             <h2 style={{ fontSize: '24px', fontWeight: '600', color: 'var(--text-primary)', margin: 0 }}>
               📊 Your Stocks
@@ -281,6 +522,18 @@ export default function WatchlistPage() {
               ))}
             </div>
           </div>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+            <button
+              onClick={() => setFilterOpen(true)}
+              style={{ position: 'relative', padding: '6px 14px', borderRadius: '6px', border: `1px solid ${activeFilterCount > 0 ? 'var(--color-primary)' : 'var(--border-input)'}`, backgroundColor: activeFilterCount > 0 ? 'var(--color-primary-bg)' : 'var(--bg-surface)', color: activeFilterCount > 0 ? 'var(--color-primary)' : 'var(--text-secondary)', fontSize: '13px', cursor: 'pointer', fontWeight: activeFilterCount > 0 ? '600' : '400', whiteSpace: 'nowrap' }}
+            >
+              ⚙ Filters
+              {activeFilterCount > 0 && (
+                <span style={{ marginLeft: '6px', backgroundColor: 'var(--color-primary)', color: '#fff', borderRadius: '10px', fontSize: '11px', padding: '1px 6px', fontWeight: '700' }}>{activeFilterCount}</span>
+              )}
+            </button>
+          </div>
+
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             <button
               onClick={runBulkAnalysis}
@@ -296,7 +549,13 @@ export default function WatchlistPage() {
                 cursor: bulkAnalyzing ? 'not-allowed' : 'pointer'
               }}
             >
-              {bulkAnalyzing ? '⏳ Analyzing…' : '📈 Run bulk analysis'}
+              {bulkProgress
+                ? `⏳ ${bulkProgress.current}/${bulkProgress.total} done`
+                : bulkAnalyzing
+                  ? '⏳ Starting…'
+                  : selectedTickers.size > 0
+                    ? `📈 Analyse ${selectedTickers.size} selected`
+                    : '📈 Analyse all'}
             </button>
             <button
               onClick={loadWatchlist}
@@ -330,6 +589,42 @@ export default function WatchlistPage() {
             </button>
           </div>
         </div>
+
+        {/* Selection action bar */}
+        {displayItems.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px', padding: selectedTickers.size > 0 ? '10px 14px' : '0 2px', borderRadius: '8px', backgroundColor: selectedTickers.size > 0 ? 'var(--bg-hover)' : 'transparent', border: selectedTickers.size > 0 ? '1px solid var(--border-default)' : 'none', transition: 'all 0.15s ease', flexWrap: 'wrap' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none', fontSize: '13px', color: 'var(--text-secondary)', fontWeight: '500' }}>
+              <input
+                type="checkbox"
+                checked={displayItems.length > 0 && selectedTickers.size === displayItems.length}
+                ref={(el) => { if (el) el.indeterminate = selectedTickers.size > 0 && selectedTickers.size < displayItems.length }}
+                onChange={toggleSelectAll}
+                style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: 'var(--color-primary)' }}
+              />
+              {selectedTickers.size === 0 ? 'Select all' : selectedTickers.size === displayItems.length ? 'Deselect all' : `${selectedTickers.size} selected`}
+            </label>
+            {selectedTickers.size > 0 && (
+              <button
+                onClick={() => setConfirmRemoveOpen(true)}
+                style={{ padding: '4px 12px', borderRadius: '6px', border: '1px solid #ef4444', backgroundColor: 'transparent', color: '#ef4444', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
+              >
+                🗑 Remove {selectedTickers.size}
+              </button>
+            )}
+          </div>
+        )}
+
+        {filterOpen && (
+          <WatchlistFilterModal
+            filters={filters}
+            onChange={setFilters}
+            onClose={() => setFilterOpen(false)}
+            onClear={() => { setFilters(EMPTY_FILTERS); setRecommendationFilter([]) }}
+            activeCount={activeFilterCount}
+            selectedRecs={recommendationFilter}
+            onRecsChange={setRecommendationFilter}
+          />
+        )}
 
         {bulkResult && (
           <div style={{
@@ -366,40 +661,65 @@ export default function WatchlistPage() {
           </div>
         ) : (
           <div className="watchlist-cards-grid" style={{ display: 'grid', gap: '16px' }}>
-            {sortedItems.map((stock) => {
+            {displayItems.length === 0 && (
+              <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '14px' }}>
+                No stocks match the current filters.{' '}
+                <button onClick={() => { setFilters(EMPTY_FILTERS); setRecommendationFilter([]) }} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', fontSize: '14px', fontWeight: '500' }}>Clear filters</button>
+              </div>
+            )}
+            {displayItems.map((stock) => {
               const valuation = getValuationDisplay(stock)
+              const isSelected = selectedTickers.has(stock.ticker)
               return (
               <div
                 key={stock.ticker}
                 className="watchlist-stock-card"
                 style={{
                   padding: '20px',
-                  border: '1px solid var(--border-default)',
+                  border: `1px solid ${isSelected ? 'var(--color-primary)' : 'var(--border-default)'}`,
                   borderRadius: '8px',
-                  backgroundColor: 'var(--bg-surface-subtle)',
+                  backgroundColor: isSelected ? 'var(--color-primary-bg)' : 'var(--bg-surface-subtle)',
                   cursor: 'pointer',
                   transition: 'all 0.2s ease'
                 }}
-                onClick={() => handleStockClick(stock.ticker)}
+                onClick={() => handleStockClick(stock)}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--bg-hover)'
-                  e.currentTarget.style.borderColor = '#3b82f6'
+                  if (!isSelected) {
+                    e.currentTarget.style.backgroundColor = 'var(--bg-hover)'
+                    e.currentTarget.style.borderColor = '#3b82f6'
+                  }
                   e.currentTarget.style.transform = 'translateY(-2px)'
                   e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.2)'
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--bg-surface-subtle)'
-                  e.currentTarget.style.borderColor = 'var(--border-default)'
+                  if (!isSelected) {
+                    e.currentTarget.style.backgroundColor = 'var(--bg-surface-subtle)'
+                    e.currentTarget.style.borderColor = 'var(--border-default)'
+                  }
                   e.currentTarget.style.transform = 'translateY(0)'
                   e.currentTarget.style.boxShadow = 'none'
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px' }}>
+                  {/* Checkbox */}
+                  <div onClick={(e) => toggleSelect(stock.ticker, e)} style={{ paddingTop: '2px', flexShrink: 0 }}>
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => {}}
+                      style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: 'var(--color-primary)' }}
+                    />
+                  </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px', flexWrap: 'wrap' }}>
                       <h3 style={{ fontSize: '18px', fontWeight: '600', color: 'var(--text-primary)', margin: 0 }}>
                         {stock.company_name || `${stock.ticker} Corporation`}
                       </h3>
+                      {isPrivate(stock.ticker) && (
+                        <span style={{ padding: '3px 10px', borderRadius: '10px', fontSize: '11px', fontWeight: '700', color: '#7c3aed', backgroundColor: 'rgba(124,58,237,0.12)', border: '1px solid rgba(124,58,237,0.25)', letterSpacing: '0.03em' }}>
+                          PRIVATE
+                        </span>
+                      )}
                       {stock.recommendation && (
                         <span style={{
                           padding: '4px 12px',
@@ -439,8 +759,9 @@ export default function WatchlistPage() {
                         </span>
                       )}
                     </div>
-                    <p style={{ fontSize: '14px', color: 'var(--text-muted)', margin: '0 0 4px 0' }}>
-                      {stock.ticker}
+                    <p style={{ fontSize: '14px', color: 'var(--text-muted)', margin: '0 0 4px 0', fontFamily: isPrivate(stock.ticker) ? 'monospace' : undefined }}>
+                      {displayTicker(stock.ticker)}
+                      {stock.exchange && !isPrivate(stock.ticker) && <span style={{ marginLeft: '6px', fontSize: '12px' }}>· {stock.exchange}</span>}
                     </p>
                     <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginTop: '6px', alignItems: 'center' }}>
                       {stock.fair_value != null && !isNaN(stock.fair_value) && (
@@ -474,7 +795,7 @@ export default function WatchlistPage() {
                         <div style={{ fontSize: '20px', fontWeight: '700', color: 'var(--text-primary)' }}>
                           {formatPrice(stock.current_price, stock.currency)}
                         </div>
-                        {stock.price_change !== undefined && (
+                        {stock.price_change !== undefined && !isPrivate(stock.ticker) && (
                           <div style={{
                             fontSize: '14px',
                             fontWeight: '500',
@@ -516,6 +837,37 @@ export default function WatchlistPage() {
           </div>
         )}
       </div>
+
+      {/* Confirm remove modal */}
+      {confirmRemoveOpen && (
+        <div onClick={() => setConfirmRemoveOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 1000, backgroundColor: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: '12px', width: '100%', maxWidth: '400px', padding: '28px 24px 20px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
+            <div style={{ fontSize: '20px', marginBottom: '8px' }}>🗑 Remove from watchlist</div>
+            <p style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: '1.6', margin: '0 0 20px 0' }}>
+              Remove <strong>{selectedTickers.size} stock{selectedTickers.size !== 1 ? 's' : ''}</strong> from your watchlist?
+              {selectedTickers.size <= 5 && (
+                <span style={{ display: 'block', marginTop: '8px', color: 'var(--text-muted)', fontSize: '13px' }}>
+                  {[...selectedTickers].join(', ')}
+                </span>
+              )}
+            </p>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setConfirmRemoveOpen(false)}
+                style={{ padding: '8px 18px', borderRadius: '7px', border: '1px solid var(--border-input)', backgroundColor: 'transparent', color: 'var(--text-secondary)', fontSize: '14px', cursor: 'pointer', fontWeight: '500' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={removeSelected}
+                style={{ padding: '8px 18px', borderRadius: '7px', border: 'none', backgroundColor: '#ef4444', color: '#fff', fontSize: '14px', cursor: 'pointer', fontWeight: '600' }}
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   )

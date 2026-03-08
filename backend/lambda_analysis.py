@@ -5,9 +5,11 @@ Uses Claude AI via Bedrock to fetch real financial data for each stock
 import json
 import os
 import base64
+import uuid
 import boto3
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
+from urllib.parse import unquote
 
 MANUAL_DATA_TABLE = os.environ.get('MANUAL_DATA_TABLE', 'stock-analysis-manual-data')
 
@@ -832,14 +834,31 @@ def _generate_ai_commentary(
         f"D/E: {_fmt(d2e)} | Current ratio: {_fmt(cr)} | P/E: {_fmt(pe)} | EPS: {_fmt(eps, prefix=currency+' ')}\n\n"
         f"Write in plain English, 3 paragraphs, no bullet lists. "
         f"Be direct about whether this stock is worth buying. "
-        f"Do not fabricate specific news events — stick to the numbers provided."
+        f"Do not fabricate specific news events — stick to the numbers provided.\n\n"
+        f"After the 3 paragraphs, on a new line write exactly one of:\n"
+        f"ANALYST RECOMMENDATION: Buy\n"
+        f"ANALYST RECOMMENDATION: Hold\n"
+        f"ANALYST RECOMMENDATION: Avoid"
     )
     try:
-        text = _call_bedrock_claude(prompt, max_tokens=600)
-        return text.strip()
+        text = _call_bedrock_claude(prompt, max_tokens=650)
+        text = text.strip()
+        # Extract structured AI recommendation from the final line
+        ai_rec = None
+        lines = text.split('\n')
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if stripped.startswith('ANALYST RECOMMENDATION:'):
+                raw = stripped.replace('ANALYST RECOMMENDATION:', '').strip()
+                if raw in ('Buy', 'Hold', 'Avoid'):
+                    ai_rec = raw
+                # Remove the tag line from the displayed commentary
+                text = '\n'.join(lines[:i] + lines[i+1:]).strip()
+                break
+        return text, ai_rec
     except Exception as exc:
         print(f"[WARN] AI commentary failed for {ticker}: {exc}")
-        return ''
+        return '', None
 
 
 def get_financial_data_with_ai(ticker: str, company_name: str) -> dict:
@@ -1134,39 +1153,54 @@ def analyze_stock_get(ticker: str, stream: bool, params: dict) -> dict:
 
     # ------------------------------------------------------------------
     # Step 1: Fetch live stock price
+    # Private companies (PRIVATE# prefix) skip external APIs entirely and
+    # use the price / metadata supplied by the caller.
     # ------------------------------------------------------------------
-    progress_events.append(progress(1, total_steps, 'Fetching live stock price...'))
-
+    is_private = ticker.startswith('PRIVATE#')
     current_price = 0
     company_name = f'{ticker} Corporation'
     currency = 'USD'
-    try:
-        lambda_client = boto3.client('lambda', region_name='eu-west-1')
-        stock_data_lambda = os.getenv('STOCK_DATA_LAMBDA', 'stock-analysis-stock-data')
-        payload = {
-            'path': f'/api/ticker/{ticker}',
-            'httpMethod': 'GET',
-            'queryStringParameters': {},
-            'headers': {}
-        }
-        resp = lambda_client.invoke(
-            FunctionName=stock_data_lambda,
-            InvocationType='RequestResponse',
-            Payload=json.dumps(payload)
-        )
-        stock_body = json.loads(
-            json.loads(resp['Payload'].read()).get('body', '{}')
-        )
-        current_price = stock_body.get('currentPrice') or stock_body.get('price') or 0
-        company_name = (
-            stock_body.get('companyName') or stock_body.get('name') or company_name
-        )
-        currency = stock_body.get('currency', 'USD')
-        sector   = stock_body.get('sector', '')
-        industry = stock_body.get('industry', '')
-    except Exception:
-        sector = ''
-        industry = ''
+    sector = ''
+    industry = ''
+
+    if is_private:
+        progress_events.append(progress(1, total_steps, 'Loading private company details...'))
+        display_name = ticker[len('PRIVATE#'):]
+        company_name = params.get('company_name', display_name) or display_name
+        currency = params.get('currency', 'USD') or 'USD'
+        sector = params.get('sector', '') or ''
+        try:
+            current_price = float(params.get('price_override', 0) or 0)
+        except (TypeError, ValueError):
+            current_price = 0
+    else:
+        progress_events.append(progress(1, total_steps, 'Fetching live stock price...'))
+        try:
+            lambda_client = boto3.client('lambda', region_name='eu-west-1')
+            stock_data_lambda = os.getenv('STOCK_DATA_LAMBDA', 'stock-analysis-stock-data')
+            payload = {
+                'path': f'/api/ticker/{ticker}',
+                'httpMethod': 'GET',
+                'queryStringParameters': {},
+                'headers': {}
+            }
+            resp = lambda_client.invoke(
+                FunctionName=stock_data_lambda,
+                InvocationType='RequestResponse',
+                Payload=json.dumps(payload)
+            )
+            stock_body = json.loads(
+                json.loads(resp['Payload'].read()).get('body', '{}')
+            )
+            current_price = stock_body.get('currentPrice') or stock_body.get('price') or 0
+            company_name = (
+                stock_body.get('companyName') or stock_body.get('name') or company_name
+            )
+            currency = stock_body.get('currency', 'USD')
+            sector   = stock_body.get('sector', '')
+            industry = stock_body.get('industry', '')
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Resolve valuation weights: explicit preset > custom JSON > auto-LLM
@@ -1210,53 +1244,64 @@ def analyze_stock_get(ticker: str, stream: bool, params: dict) -> dict:
     fin = None if force_refresh else _load_cached_financial_data(ticker)
     from_cache = fin is not None
 
-    # On a fresh fetch, scrub any empty period stubs left by previous failed AI calls
-    if not from_cache:
-        _cleanup_empty_financial_periods(ticker)
+    fin_source = 'manual_data' if is_private else 'ai_bedrock'
+    section_sources: dict = {}
 
-    fin_source = 'ai_bedrock'  # updated below based on which fetcher succeeds
-    section_sources: dict = {}  # per-section source when a hybrid fetch is used
-    if from_cache:
-        progress_events.append(progress(2, total_steps, 'Loading stored financial data...'))
-    else:
-        # Try SEC EDGAR first for US-listed stocks (official filings, always current)
-        sec_fin = get_financial_data_from_sec(ticker)
-        if sec_fin:
-            progress_events.append(progress(2, total_steps, 'Fetching latest SEC EDGAR filings...'))
-            fin = sec_fin
-            fin_source = 'sec_edgar'
+    if is_private:
+        # Private companies: only use manually-entered data stored in DynamoDB.
+        # Never call external market data APIs or AI knowledge fetch for these.
+        if from_cache:
+            progress_events.append(progress(2, total_steps, 'Loading stored financial data...'))
         else:
-            # Try Yahoo Finance for non-US stocks (JSE, LSE, etc.)
-            yf_fin = get_financial_data_from_yahoo(ticker)
-            if yf_fin:
-                progress_events.append(progress(2, total_steps, 'Fetching financial data from Yahoo Finance...'))
-                fin = dict(yf_fin)  # mutable copy so we can fill in gaps
-                fin_source = 'yahoo_finance'
+            progress_events.append(progress(2, total_steps, 'No financial data stored yet — enter data manually.'))
+            fin = {'income_statement': {}, 'balance_sheet': {}, 'cashflow': {}, 'key_metrics': {},
+                   'error': 'No financial data stored for this private company. Use Manual Data Entry to add figures.'}
+    else:
+        # On a fresh fetch, scrub any empty period stubs left by previous failed AI calls
+        if not from_cache:
+            _cleanup_empty_financial_periods(ticker)
 
-                # Identify sections Yahoo Finance could not provide
-                missing_sections = [
-                    s for s in ('income_statement', 'balance_sheet', 'cashflow')
-                    if not _has_real_values(fin.get(s) or {})
-                ]
-                if missing_sections:
-                    print(f"[Hybrid] Yahoo missing {missing_sections} for {ticker} — supplementing with AI")
-                    progress_events.append(progress(2, total_steps,
-                        f'Supplementing {len(missing_sections)} missing section(s) with AI...'))
-                    ai_supp = get_financial_data_with_ai(ticker, company_name)
-                    if ai_supp and not ai_supp.get('error'):
-                        for section in missing_sections:
-                            ai_data = ai_supp.get(section) or {}
-                            if _has_real_values(ai_data):
-                                fin[section] = ai_data
-                                section_sources[section] = 'ai_bedrock'
-                                print(f"[Hybrid] AI filled {section} for {ticker}")
-                            else:
-                                print(f"[Hybrid] AI also has no data for {section} ({ticker})")
+        if from_cache:
+            progress_events.append(progress(2, total_steps, 'Loading stored financial data...'))
+        else:
+            # Try SEC EDGAR first for US-listed stocks (official filings, always current)
+            sec_fin = get_financial_data_from_sec(ticker)
+            if sec_fin:
+                progress_events.append(progress(2, total_steps, 'Fetching latest SEC EDGAR filings...'))
+                fin = sec_fin
+                fin_source = 'sec_edgar'
             else:
-                # Final fallback: Claude AI (last resort for unknown tickers)
-                progress_events.append(progress(2, total_steps, 'Retrieving financial data with AI...'))
-                fin = get_financial_data_with_ai(ticker, company_name)
-                fin_source = 'ai_bedrock'
+                # Try Yahoo Finance for non-US stocks (JSE, LSE, etc.)
+                yf_fin = get_financial_data_from_yahoo(ticker)
+                if yf_fin:
+                    progress_events.append(progress(2, total_steps, 'Fetching financial data from Yahoo Finance...'))
+                    fin = dict(yf_fin)  # mutable copy so we can fill in gaps
+                    fin_source = 'yahoo_finance'
+
+                    # Identify sections Yahoo Finance could not provide
+                    missing_sections = [
+                        s for s in ('income_statement', 'balance_sheet', 'cashflow')
+                        if not _has_real_values(fin.get(s) or {})
+                    ]
+                    if missing_sections:
+                        print(f"[Hybrid] Yahoo missing {missing_sections} for {ticker} — supplementing with AI")
+                        progress_events.append(progress(2, total_steps,
+                            f'Supplementing {len(missing_sections)} missing section(s) with AI...'))
+                        ai_supp = get_financial_data_with_ai(ticker, company_name)
+                        if ai_supp and not ai_supp.get('error'):
+                            for section in missing_sections:
+                                ai_data = ai_supp.get(section) or {}
+                                if _has_real_values(ai_data):
+                                    fin[section] = ai_data
+                                    section_sources[section] = 'ai_bedrock'
+                                    print(f"[Hybrid] AI filled {section} for {ticker}")
+                                else:
+                                    print(f"[Hybrid] AI also has no data for {section} ({ticker})")
+                else:
+                    # Final fallback: Claude AI (last resort for unknown tickers)
+                    progress_events.append(progress(2, total_steps, 'Retrieving financial data with AI...'))
+                    fin = get_financial_data_with_ai(ticker, company_name)
+                    fin_source = 'ai_bedrock'
 
     ai_error = fin.get('error')
     data_confidence = fin.get('data_confidence', 'low') if not ai_error else 'none'
@@ -1424,7 +1469,7 @@ def analyze_stock_get(ticker: str, stream: bool, params: dict) -> dict:
     # Step 8: AI commentary — plain-language price & buy opinion
     # ------------------------------------------------------------------
     progress_events.append(progress(8, total_steps, 'Generating AI commentary...'))
-    ai_commentary = _generate_ai_commentary(
+    ai_commentary, ai_recommendation = _generate_ai_commentary(
         ticker=ticker,
         company_name=company_name,
         sector=sector,
@@ -1440,6 +1485,38 @@ def analyze_stock_get(ticker: str, stream: bool, params: dict) -> dict:
         cf=cf,
         km=km,
     )
+
+    # Detect AI conflict: model is bullish/bearish but AI disagrees
+    model_recommendation = recommendation  # preserve original before possible override
+
+    def _rec_bucket(r):
+        if r in ('Strong Buy', 'Buy'):
+            return 'bullish'
+        if r in ('Reduce', 'Avoid'):
+            return 'bearish'
+        return 'neutral'
+
+    def _worst_rec(m, a):
+        """Return the more pessimistic of model rec (m) and AI rec (a: Buy/Hold/Avoid)."""
+        severity = {'Strong Buy': 1, 'Buy': 2, 'Hold': 3, 'Reduce': 4, 'Avoid': 5}
+        ai_mapped = a if a in severity else None
+        if not m and not ai_mapped:
+            return None
+        if not m:
+            return ai_mapped
+        if not ai_mapped:
+            return m
+        return m if severity.get(m, 0) >= severity.get(ai_mapped, 0) else ai_mapped
+
+    model_bucket = _rec_bucket(recommendation) if recommendation else None
+    ai_bucket = _rec_bucket(ai_recommendation) if ai_recommendation else None
+    if (model_bucket and ai_bucket
+            and model_bucket != 'neutral' and ai_bucket != 'neutral'
+            and model_bucket != ai_bucket):
+        recommendation = 'AI Conflict'
+
+    # Worst-of recommendation for watchlist display (always most cautious)
+    worst_recommendation = _worst_rec(model_recommendation, ai_recommendation)
 
     # Financial health indicators from AI data
     health_metrics = {}
@@ -1465,6 +1542,8 @@ def analyze_stock_get(ticker: str, stream: bool, params: dict) -> dict:
             round(current_price / fair_value, 2) if fair_value and current_price else None
         ),
         'recommendation': recommendation,
+        'modelRecommendation': model_recommendation or None,
+        'aiRecommendation': ai_recommendation or None,
         'recommendationReasoning': reasoning,
         'valuation': {
             'dcf': dcf_rounded,
@@ -1521,7 +1600,9 @@ def analyze_stock_get(ticker: str, stream: bool, params: dict) -> dict:
             'marginOfSafety': analysis['marginOfSafety'],
             'upsidePotential': analysis['upsidePotential'],
             'priceToIntrinsicValue': analysis['priceToIntrinsicValue'],
-            'recommendation': analysis['recommendation'],
+            'recommendation': worst_recommendation,  # most cautious for watchlist display
+            'modelRecommendation': analysis.get('modelRecommendation'),
+            'aiRecommendation': analysis.get('aiRecommendation'),
             'recommendationReasoning': analysis['recommendationReasoning'],
             'valuation': analysis['valuation'],
             'pe_ratio': float(pe_from_km) if pe_from_km is not None else None,
@@ -2002,6 +2083,137 @@ def handle_pdf_status(event: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Bulk analysis (orchestrator + worker + status)
+# ---------------------------------------------------------------------------
+
+BULK_JOB_PREFIX = 'BULK_JOB#'
+
+
+def handle_bulk_analyze(event, context):
+    """POST /api/bulk-analyze { tickers: [...] }
+    Creates a job record in DynamoDB and fires an async Lambda invocation for
+    each ticker.  Returns { jobId, total } immediately — no waiting.
+    """
+    try:
+        body = event.get('body') or '{}'
+        if isinstance(body, str):
+            body = json.loads(body)
+    except Exception:
+        return {'statusCode': 400, 'body': json.dumps({'error': 'Invalid JSON body'})}
+
+    tickers = body.get('tickers') or []
+    if not tickers or not isinstance(tickers, list):
+        return {'statusCode': 400, 'body': json.dumps({'error': 'tickers list required'})}
+
+    tickers = [str(t).strip().upper() for t in tickers if t]
+    total = len(tickers)
+    job_id = str(uuid.uuid4())
+
+    # Create job record
+    dynamodb = boto3.resource('dynamodb', region_name='eu-west-1')
+    table = dynamodb.Table(MANUAL_DATA_TABLE)
+    table.put_item(Item={
+        'ticker': f'{BULK_JOB_PREFIX}{job_id}',
+        'status': 'running',
+        'total': total,
+        'completed': 0,
+        'failed': 0,
+        'created_at': datetime.now().isoformat(),
+    })
+
+    # Fire one async Lambda invocation per ticker
+    function_name = context.function_name if context and hasattr(context, 'function_name') else 'stock-analysis-analyzer'
+    lc = boto3.client('lambda', region_name='eu-west-1')
+    for ticker in tickers:
+        try:
+            lc.invoke(
+                FunctionName=function_name,
+                InvocationType='Event',  # async, fire-and-forget
+                Payload=json.dumps({'_bulk_job': True, 'bulk_job_id': job_id, 'ticker': ticker}),
+            )
+        except Exception as exc:
+            print(f"[BulkAnalyze] Failed to invoke {ticker}: {exc}")
+            try:
+                table.update_item(
+                    Key={'ticker': f'{BULK_JOB_PREFIX}{job_id}'},
+                    UpdateExpression='ADD failed :one',
+                    ExpressionAttributeValues={':one': 1},
+                )
+            except Exception:
+                pass
+
+    return {'statusCode': 200, 'body': json.dumps({'jobId': job_id, 'total': total})}
+
+
+def handle_bulk_status(event):
+    """GET /api/bulk-status?jobId=xxx"""
+    params = event.get('queryStringParameters') or {}
+    job_id = params.get('jobId', '').strip()
+    if not job_id:
+        return {'statusCode': 400, 'body': json.dumps({'error': 'jobId required'})}
+
+    dynamodb = boto3.resource('dynamodb', region_name='eu-west-1')
+    table = dynamodb.Table(MANUAL_DATA_TABLE)
+    item = table.get_item(Key={'ticker': f'{BULK_JOB_PREFIX}{job_id}'}).get('Item')
+    if not item:
+        return {'statusCode': 404, 'body': json.dumps({'error': 'Job not found'})}
+
+    return {
+        'statusCode': 200,
+        'body': json.dumps({
+            'jobId': job_id,
+            'status': item.get('status', 'running'),
+            'total': int(item.get('total', 0)),
+            'completed': int(item.get('completed', 0)),
+            'failed': int(item.get('failed', 0)),
+        }),
+    }
+
+
+def _handle_bulk_job_ticker(event):
+    """Called when this Lambda is invoked asynchronously as part of a bulk job.
+    Runs analysis for a single ticker and atomically updates the job record.
+    """
+    job_id = event.get('bulk_job_id')
+    ticker = event.get('ticker', '').strip().upper()
+    if not job_id or not ticker:
+        return
+
+    dynamodb = boto3.resource('dynamodb', region_name='eu-west-1')
+    table = dynamodb.Table(MANUAL_DATA_TABLE)
+
+    success = False
+    try:
+        result = analyze_stock_get(ticker, stream=False, params={})
+        success = result.get('statusCode') == 200
+    except Exception as exc:
+        print(f"[BulkJob] {ticker} failed: {exc}")
+
+    try:
+        resp = table.update_item(
+            Key={'ticker': f'{BULK_JOB_PREFIX}{job_id}'},
+            UpdateExpression='ADD completed :c, failed :f',
+            ExpressionAttributeValues={
+                ':c': 1 if success else 0,
+                ':f': 0 if success else 1,
+            },
+            ReturnValues='ALL_NEW',
+        )
+        attrs = resp.get('Attributes', {})
+        done = int(attrs.get('completed', 0)) + int(attrs.get('failed', 0))
+        total = int(attrs.get('total', 0))
+        if total > 0 and done >= total:
+            table.update_item(
+                Key={'ticker': f'{BULK_JOB_PREFIX}{job_id}'},
+                UpdateExpression='SET #s = :done',
+                ExpressionAttributeNames={'#s': 'status'},
+                ExpressionAttributeValues={':done': 'complete'},
+            )
+    except Exception as exc:
+        print(f"[BulkJob] Failed to update job {job_id}: {exc}")
+
+
 # Lambda entry point
 # ---------------------------------------------------------------------------
 
@@ -2011,6 +2223,11 @@ def lambda_handler(event, context):
     # Async PDF processing — invoked by handle_pdf_upload with InvocationType='Event'
     if event.get('_pdf_async'):
         _handle_pdf_upload_async(event)
+        return
+
+    # Async bulk-job worker — invoked by handle_bulk_analyze with InvocationType='Event'
+    if event.get('_bulk_job'):
+        _handle_bulk_job_ticker(event)
         return
 
     headers = {
@@ -2028,11 +2245,11 @@ def lambda_handler(event, context):
 
     try:
         if '/api/analysis/' in path and method == 'POST':
-            ticker = path.split('/api/analysis/')[-1]
+            ticker = unquote(path.split('/api/analysis/')[-1])
             result = analyze_stock(ticker, event)
 
         elif '/api/analyze/' in path and method == 'GET':
-            ticker = path.split('/api/analyze/')[-1].split('?')[0]
+            ticker = unquote(path.split('/api/analyze/')[-1].split('?')[0])
             query_params = event.get('queryStringParameters') or {}
             stream = query_params.get('stream', 'false').lower() == 'true'
             result = analyze_stock_get(ticker, stream, query_params)
@@ -2042,6 +2259,12 @@ def lambda_handler(event, context):
 
         elif '/api/batch-analyze' in path and method == 'POST':
             result = handle_batch_analyze(event)
+
+        elif '/api/bulk-analyze' in path and method == 'POST':
+            result = handle_bulk_analyze(event, context)
+
+        elif '/api/bulk-status' in path and method == 'GET':
+            result = handle_bulk_status(event)
 
         # /api/upload-pdf/status must be checked before /api/upload-pdf
         elif '/api/upload-pdf/status' in path and method == 'GET':
