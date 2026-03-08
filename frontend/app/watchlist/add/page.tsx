@@ -345,20 +345,9 @@ function AddToWatchlistContent() {
         Add to Watchlist
       </h1>
 
-      {/* Mode tabs */}
-      <div style={{ display: 'flex', borderBottom: '1px solid var(--border-default)', marginBottom: '24px' }}>
-        <button style={tabStyle(mode === 'public')} onClick={() => setMode('public')}>
-          Public Company
-        </button>
-        <button style={tabStyle(mode === 'private')} onClick={() => setMode('private')}>
-          Private Company
-        </button>
-      </div>
-
-      {mode === 'public'
-        ? <PublicCompanyForm onCancel={() => router.back()} />
-        : <PrivateCompanyForm onCancel={() => router.back()} />
-      }
+      {/* DISABLED: Private company tab hidden pending further development.
+          PrivateCompanyForm and related logic below are kept for future use. */}
+      <PublicCompanyForm onCancel={() => router.back()} />
     </div>
   )
 }
