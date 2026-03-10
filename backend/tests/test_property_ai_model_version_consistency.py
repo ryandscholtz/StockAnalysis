@@ -17,7 +17,7 @@ class AIModelVersionManager:
 
     def __init__(self):
         self.current_models = {
-            "bedrock_claude": "anthropic.claude-3-sonnet-20240229-v1:0",
+            "bedrock_claude": "us.anthropic.claude-3-5-sonnet-20241022-v1:0",
             "bedrock_titan": "amazon.titan-text-express-v1",
             "bedrock_embedding": "amazon.titan-embed-text-v1",
             "ollama_llama": "llama3.1:8b",
@@ -484,7 +484,7 @@ class TestAIModelVersionConsistency:
 
         # Test valid configurations
         valid_configs = [
-            ("bedrock_claude", "anthropic.claude-3-sonnet-20240229-v1:0"),
+            ("bedrock_claude", "us.anthropic.claude-3-5-sonnet-20241022-v1:0"),
             ("ollama_llama", "llama3.1:8b"),
             ("bedrock_titan", "amazon.titan-text-express-v1")
         ]

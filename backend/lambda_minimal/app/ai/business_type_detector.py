@@ -19,7 +19,7 @@ class BusinessTypeDetector:
         self.aws_region = os.getenv("AWS_REGION", "us-east-1")
         self.aws_profile = os.getenv("AWS_PROFILE")  # Optional: use specific AWS profile
         self.openai_api_key = os.getenv("OPENAI_API_KEY")
-        self.bedrock_model_id = os.getenv("BEDROCK_MODEL_ID", "anthropic.claude-3-sonnet-20240229-v1:0")
+        self.bedrock_model_id = os.getenv("BEDROCK_MODEL_ID", "us.anthropic.claude-3-5-sonnet-20241022-v1:0")
 
     def _get_available_business_types(self) -> str:
         """Get list of available business types for the prompt"""
