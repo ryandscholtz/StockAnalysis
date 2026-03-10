@@ -84,7 +84,7 @@ $profile = $workingProfile
 # Check Bedrock
 Write-Host ""
 Write-Host "Checking Bedrock model access..." -ForegroundColor Yellow
-$modelId = "anthropic.claude-3-sonnet-20240229-v1:0"
+$modelId = "us.anthropic.claude-3-5-sonnet-20241022-v1:0"
 $bedrockCmd = "aws bedrock list-foundation-models --region $region"
 if ($profile) {
     $bedrockCmd += " --profile $profile"

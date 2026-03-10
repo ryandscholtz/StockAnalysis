@@ -368,8 +368,10 @@ export class StockAnalysisInfrastructureStack extends cdk.Stack {
                 'bedrock:InvokeModelWithResponseStream'
               ],
               resources: [
-                'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-sonnet-20240229-v1:0',
-                'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-haiku-20240307-v1:0'
+                'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-sonnet-20241022-v1:0',
+                'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0',
+                'arn:aws:bedrock:*::foundation-model/anthropic.claude-3-5-sonnet-20241022-v1:0',
+                'arn:aws:bedrock:*::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0'
               ]
             })
           ]

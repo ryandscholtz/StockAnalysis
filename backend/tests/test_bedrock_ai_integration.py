@@ -31,7 +31,7 @@ class TestBedrockAIIntegration:
 
     def test_bedrock_model_id_configuration(self):
         """Test that Bedrock model ID can be configured"""
-        custom_model_id = "anthropic.claude-3-haiku-20240307-v1:0"
+        custom_model_id = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 
         with patch.dict(os.environ, {
             'USE_AWS_BEDROCK': 'true',
