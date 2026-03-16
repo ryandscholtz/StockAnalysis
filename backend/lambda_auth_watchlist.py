@@ -72,10 +72,21 @@ def _enrich_with_latest_analysis(items: list) -> list:
             if mos is not None:
                 it['margin_of_safety_pct'] = float(mos) if hasattr(mos, '__float__') else mos
                 it['marginOfSafety'] = it['margin_of_safety_pct']
-            # Recommendation
-            rec = la.get('recommendation')
+            # Recommendation — worst-of model vs AI analyst
+            def _rec_severity(r):
+                return {'Strong Buy': 1, 'Buy': 2, 'Hold': 3, 'Reduce': 4, 'Avoid': 5}.get(r or '', 0)
+            model_rec = la.get('modelRecommendation') or (la.get('recommendation') if la.get('recommendation') != 'AI Conflict' else None)
+            ai_rec = la.get('aiRecommendation')
+            if model_rec and ai_rec:
+                rec = model_rec if _rec_severity(model_rec) >= _rec_severity(ai_rec) else ai_rec
+            else:
+                rec = model_rec or ai_rec or la.get('recommendation')
             if rec is not None:
                 it['recommendation'] = rec
+            if model_rec is not None:
+                it['modelRecommendation'] = model_rec
+            if ai_rec is not None:
+                it['aiRecommendation'] = ai_rec
             # PE ratio from keyMetrics or top-level
             km = la.get('aiFinancialData') or la.get('ai_financial_data') or {}
             km = km.get('keyMetrics') or km.get('key_metrics') or {}

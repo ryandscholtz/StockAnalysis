@@ -47,7 +47,7 @@ const FILTER_GROUPS: { label: string; rows: { key: keyof WatchlistFilterState; l
 
 const REC_OPTIONS = ['Strong Buy', 'Buy', 'Hold', 'Reduce', 'Avoid'] as const
 
-function WatchlistFilterModal({ filters, onChange, onClose, onClear, activeCount, selectedRecs, onRecsChange }: {
+function WatchlistFilterModal({ filters, onChange, onClose, onClear, activeCount, selectedRecs, onRecsChange, recFilterType, onRecFilterTypeChange }: {
   filters: WatchlistFilterState
   onChange: (f: WatchlistFilterState) => void
   onClose: () => void
@@ -55,6 +55,8 @@ function WatchlistFilterModal({ filters, onChange, onClose, onClear, activeCount
   activeCount: number
   selectedRecs: string[]
   onRecsChange: (recs: string[]) => void
+  recFilterType: 'overall' | 'model' | 'ai'
+  onRecFilterTypeChange: (t: 'overall' | 'model' | 'ai') => void
 }) {
   const set = (key: keyof WatchlistFilterState, side: 'min' | 'max', val: string) =>
     onChange({ ...filters, [key]: { ...filters[key], [side]: val } })
@@ -63,6 +65,11 @@ function WatchlistFilterModal({ filters, onChange, onClose, onClear, activeCount
   const REC_COLOR: Record<string, string> = {
     'Strong Buy': '#10b981', 'Buy': '#3b82f6', 'Hold': '#f59e0b', 'Reduce': '#f97316', 'Avoid': '#ef4444',
   }
+  const REC_TYPE_OPTIONS: { value: 'overall' | 'model' | 'ai'; label: string }[] = [
+    { value: 'overall', label: 'Overall' },
+    { value: 'model', label: 'Model' },
+    { value: 'ai', label: 'AI Analyst' },
+  ]
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 1000, backgroundColor: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
       <div onClick={(e) => e.stopPropagation()} style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: '12px', width: '100%', maxWidth: '500px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
@@ -80,6 +87,30 @@ function WatchlistFilterModal({ filters, onChange, onClose, onClear, activeCount
           {/* Recommendation multi-select */}
           <div style={{ marginBottom: '20px' }}>
             <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '10px', paddingTop: '12px' }}>Recommendation</div>
+            {/* Filter type toggle */}
+            <div style={{ display: 'flex', gap: '4px', marginBottom: '10px', backgroundColor: 'var(--bg-hover)', borderRadius: '8px', padding: '3px' }}>
+              {REC_TYPE_OPTIONS.map(({ value, label }) => (
+                <button
+                  key={value}
+                  onClick={() => onRecFilterTypeChange(value)}
+                  style={{
+                    flex: 1,
+                    padding: '4px 8px',
+                    borderRadius: '6px',
+                    border: 'none',
+                    backgroundColor: recFilterType === value ? 'var(--bg-surface)' : 'transparent',
+                    color: recFilterType === value ? 'var(--text-primary)' : 'var(--text-muted)',
+                    fontSize: '12px',
+                    fontWeight: recFilterType === value ? '600' : '400',
+                    cursor: 'pointer',
+                    boxShadow: recFilterType === value ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
               {REC_OPTIONS.map((rec) => {
                 const active = selectedRecs.includes(rec)
@@ -159,6 +190,8 @@ interface WatchlistItem {
   upside_potential?: number
   companyType?: string
   sector?: string
+  modelRecommendation?: string
+  aiRecommendation?: string
 }
 
 // Helpers for private companies
@@ -196,6 +229,7 @@ export default function WatchlistPage() {
   const [bulkProgress, setBulkProgress] = useState<{ current: number; total: number; ticker: string } | null>(null)
   const [sortBy, setSortBy] = useSessionState<'name' | 'undervalued'>('watchlist_sortBy', 'name')
   const [recommendationFilter, setRecommendationFilter] = useSessionState<string[]>('watchlist_recFilter', [])
+  const [recFilterType, setRecFilterType] = useSessionState<'overall' | 'model' | 'ai'>('watchlist_recFilterType', 'overall')
   const [filters, setFilters] = useSessionState<WatchlistFilterState>('watchlist_filters', EMPTY_FILTERS)
   const [filterOpen, setFilterOpen] = useState(false)
   const [selectedTickers, setSelectedTickers] = useState<Set<string>>(new Set())
@@ -238,6 +272,8 @@ export default function WatchlistPage() {
                 currency: la.currency ?? item.currency,
                 fair_value: la.fairValue ?? la.fair_value ?? item.fair_value,
                 margin_of_safety_pct: la.marginOfSafety ?? la.margin_of_safety_pct ?? item.margin_of_safety_pct,
+                modelRecommendation: la.modelRecommendation ?? (la.recommendation !== 'AI Conflict' ? la.recommendation : null) ?? item.modelRecommendation,
+                aiRecommendation: la.aiRecommendation ?? item.aiRecommendation,
                 recommendation: (() => {
                   const recSev = (r?: string | null) => ({ 'Strong Buy': 1, 'Buy': 2, 'Hold': 3, 'Reduce': 4, 'Avoid': 5 } as Record<string, number>)[r ?? ''] ?? 0
                   const m = la.modelRecommendation ?? (la.recommendation !== 'AI Conflict' ? la.recommendation : null)
@@ -419,7 +455,12 @@ export default function WatchlistPage() {
     }
     let items = recommendationFilter.length === 0
       ? watchlistItems
-      : watchlistItems.filter((s) => s.recommendation && recommendationFilter.includes(s.recommendation))
+      : watchlistItems.filter((s) => {
+          const val = recFilterType === 'model' ? s.modelRecommendation
+                    : recFilterType === 'ai'    ? s.aiRecommendation
+                    : s.recommendation
+          return val && recommendationFilter.includes(val)
+        })
     if (activeFilterCount > 0) {
       items = items.filter((s) =>
         inRange(s.pe_ratio,          filters.peRatio) &&
@@ -438,7 +479,7 @@ export default function WatchlistPage() {
       }
       return (a.company_name || a.ticker).localeCompare(b.company_name || b.ticker)
     })
-  }, [watchlistItems, sortBy, recommendationFilter, filters, activeFilterCount])
+  }, [watchlistItems, sortBy, recommendationFilter, recFilterType, filters, activeFilterCount])
 
   if (authLoading || (!isAuthenticated && !authLoading)) {
     return (
@@ -619,10 +660,12 @@ export default function WatchlistPage() {
             filters={filters}
             onChange={setFilters}
             onClose={() => setFilterOpen(false)}
-            onClear={() => { setFilters(EMPTY_FILTERS); setRecommendationFilter([]) }}
+            onClear={() => { setFilters(EMPTY_FILTERS); setRecommendationFilter([]); setRecFilterType('overall') }}
             activeCount={activeFilterCount}
             selectedRecs={recommendationFilter}
             onRecsChange={setRecommendationFilter}
+            recFilterType={recFilterType}
+            onRecFilterTypeChange={setRecFilterType}
           />
         )}
 

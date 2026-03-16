@@ -582,16 +582,43 @@ export default function TickerPage() {
                 )}
                 {/* Recommendation + Incomplete Data badges */}
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px', alignItems: 'center' }}>
-                  {recommendation && (
+                  {modelRec && (
+                    <span style={{
+                      padding: '5px 14px',
+                      borderRadius: '16px',
+                      fontSize: '13px',
+                      fontWeight: '600',
+                      color: 'white',
+                      backgroundColor: getRecommendationColor(modelRec),
+                      opacity: 0.85,
+                    }}>
+                      Model: {modelRec}
+                    </span>
+                  )}
+                  {aiRec && (
+                    <span style={{
+                      padding: '5px 14px',
+                      borderRadius: '16px',
+                      fontSize: '13px',
+                      fontWeight: '600',
+                      color: 'white',
+                      backgroundColor: getRecommendationColor(aiRec),
+                      opacity: 0.85,
+                    }}>
+                      AI Analyst: {aiRec}
+                    </span>
+                  )}
+                  {recommendation && (modelRec || aiRec) && (
                     <span style={{
                       padding: '6px 16px',
                       borderRadius: '16px',
                       fontSize: '14px',
-                      fontWeight: '600',
+                      fontWeight: '700',
                       color: 'white',
-                      backgroundColor: getRecommendationColor(recommendation)
+                      backgroundColor: getRecommendationColor(recommendation),
+                      boxShadow: '0 0 0 2px white, 0 0 0 3px ' + getRecommendationColor(recommendation),
                     }}>
-                      {recommendation}
+                      Overall: {recommendation}
                     </span>
                   )}
                   {hasIncompleteFinancialData && (

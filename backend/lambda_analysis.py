@@ -10,6 +10,7 @@ import boto3
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from urllib.parse import unquote
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 MANUAL_DATA_TABLE = os.environ.get('MANUAL_DATA_TABLE', 'stock-analysis-manual-data')
 
@@ -818,15 +819,15 @@ def _generate_ai_commentary(
 
     prompt = (
         f"You are an independent senior equity analyst reviewing {company_name} ({ticker}). "
-        f"Your role is to form your own investment view from the raw financial data below. "
-        f"Do not simply echo any pre-existing verdict — reason from the numbers to your own conclusion.\n\n"
+        f"Reason from the raw financial data below to your own conclusion. "
+        f"You have no prior bias — you give strong buy ratings when the data supports it just as readily as avoid ratings.\n\n"
         f"Write a concise investment commentary in 3 short paragraphs:\n"
         f"1. What the business does and what financial or sector factors drive the current "
         f"market price of {currency} {current_price:,.2f}.\n"
         f"2. Whether the stock appears undervalued or overvalued based on the fundamentals. "
         f"A DCF-based fair value estimate of {fv_str} (implied margin of safety: {mos_str}) is "
         f"provided as one reference point — assess it critically against the underlying numbers.\n"
-        f"3. Your independent buy / hold / avoid recommendation with 1-2 key risks to watch.\n\n"
+        f"3. Your overall assessment — weigh both the positives and negatives equally, then state your conviction level.\n\n"
         f"Financial data:\n"
         f"- Sector: {sector or 'N/A'} | Industry: {industry or 'N/A'}\n"
         f"- Revenue: {_scale(rev)} | Net Income: {_scale(ni)}\n"
@@ -834,12 +835,20 @@ def _generate_ai_commentary(
         f"- Equity: {_scale(eq)} | LT Debt: {_scale(debt)} | Cash: {_scale(cash)}\n"
         f"- ROE: {_fmt(roe, pct=True)} | ROA: {_fmt(roa, pct=True)} | "
         f"D/E: {_fmt(d2e)} | Current ratio: {_fmt(cr)} | P/E: {_fmt(pe)} | EPS: {_fmt(eps, prefix=currency+' ')}\n\n"
-        f"Write in plain English, 3 paragraphs, no bullet lists. Form your own view — "
-        f"it is fine to disagree with the DCF estimate if the fundamentals justify it. "
+        f"Write in plain English, 3 paragraphs, no bullet lists. "
+        f"It is fine to disagree with the DCF estimate if the fundamentals justify it. "
         f"Do not fabricate specific news events — stick to the data provided.\n\n"
+        f"Rating guidance (use the full spectrum based purely on the data):\n"
+        f"  Strong Buy — compelling value, strong fundamentals, significant upside\n"
+        f"  Buy        — attractively priced with solid fundamentals\n"
+        f"  Hold       — fairly valued or mixed picture, no clear edge\n"
+        f"  Reduce     — overvalued or fundamentals deteriorating\n"
+        f"  Avoid      — significantly overvalued or materially weak fundamentals\n\n"
         f"After the 3 paragraphs, on a new line write exactly one of:\n"
+        f"ANALYST RECOMMENDATION: Strong Buy\n"
         f"ANALYST RECOMMENDATION: Buy\n"
         f"ANALYST RECOMMENDATION: Hold\n"
+        f"ANALYST RECOMMENDATION: Reduce\n"
         f"ANALYST RECOMMENDATION: Avoid"
     )
     try:
@@ -852,7 +861,7 @@ def _generate_ai_commentary(
             stripped = line.strip()
             if stripped.startswith('ANALYST RECOMMENDATION:'):
                 raw = stripped.replace('ANALYST RECOMMENDATION:', '').strip()
-                if raw in ('Buy', 'Hold', 'Avoid'):
+                if raw in ('Strong Buy', 'Buy', 'Hold', 'Reduce', 'Avoid'):
                     ai_rec = raw
                 # Remove the tag line from the displayed commentary
                 text = '\n'.join(lines[:i] + lines[i+1:]).strip()
@@ -2124,26 +2133,36 @@ def handle_bulk_analyze(event, context):
         'created_at': datetime.now().isoformat(),
     })
 
-    # Fire one async Lambda invocation per ticker
+    # Fire one async Lambda invocation per ticker (parallelised to avoid API GW timeout)
     function_name = context.function_name if context and hasattr(context, 'function_name') else 'stock-analysis-analyzer'
-    lc = boto3.client('lambda', region_name='eu-west-1')
-    for ticker in tickers:
+
+    def _invoke(ticker):
+        lc = boto3.client('lambda', region_name='eu-west-1')
+        lc.invoke(
+            FunctionName=function_name,
+            InvocationType='Event',  # async, fire-and-forget
+            Payload=json.dumps({'_bulk_job': True, 'bulk_job_id': job_id, 'ticker': ticker}),
+        )
+
+    failed_invokes = 0
+    with ThreadPoolExecutor(max_workers=50) as executor:
+        futures = {executor.submit(_invoke, t): t for t in tickers}
+        for future in as_completed(futures):
+            ticker = futures[future]
+            exc = future.exception()
+            if exc:
+                print(f"[BulkAnalyze] Failed to invoke {ticker}: {exc}")
+                failed_invokes += 1
+
+    if failed_invokes:
         try:
-            lc.invoke(
-                FunctionName=function_name,
-                InvocationType='Event',  # async, fire-and-forget
-                Payload=json.dumps({'_bulk_job': True, 'bulk_job_id': job_id, 'ticker': ticker}),
+            table.update_item(
+                Key={'ticker': f'{BULK_JOB_PREFIX}{job_id}'},
+                UpdateExpression='ADD failed :n',
+                ExpressionAttributeValues={':n': failed_invokes},
             )
-        except Exception as exc:
-            print(f"[BulkAnalyze] Failed to invoke {ticker}: {exc}")
-            try:
-                table.update_item(
-                    Key={'ticker': f'{BULK_JOB_PREFIX}{job_id}'},
-                    UpdateExpression='ADD failed :one',
-                    ExpressionAttributeValues={':one': 1},
-                )
-            except Exception:
-                pass
+        except Exception:
+            pass
 
     return {'statusCode': 200, 'body': json.dumps({'jobId': job_id, 'total': total})}
 
