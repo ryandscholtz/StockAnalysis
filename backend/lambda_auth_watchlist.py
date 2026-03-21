@@ -150,6 +150,19 @@ def add_to_watchlist(user_id: str, ticker: str, data: dict) -> dict:
             if data.get(field):
                 item[field] = data[field]
 
+        # Analysis data — store when provided so watchlist shows results immediately
+        # without depending solely on the enrichment lookup from manual-data table
+        for field in ('recommendation', 'modelRecommendation', 'aiRecommendation', 'last_analyzed_at'):
+            if data.get(field):
+                item[field] = data[field]
+        for field in ('fair_value', 'margin_of_safety_pct', 'upside_potential',
+                      'pe_ratio', 'pb_ratio', 'ps_ratio', 'ev_to_ebitda', 'current_price'):
+            if data.get(field) is not None:
+                try:
+                    item[field] = Decimal(str(data[field]))
+                except Exception:
+                    pass
+
         table.put_item(Item=item)
         
         return {

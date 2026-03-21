@@ -289,7 +289,7 @@ def _fetch_tickers_from_marketstack(mic: str, yahoo_suffix: str) -> list[str]:
         return []
 
 
-def _fetch_screener_tickers(screener_exchange: str, max_count: int = 1000) -> list:
+def _fetch_screener_tickers(screener_exchange: str, max_count: int = 10_000) -> list:
     """
     Fetch all equity tickers for an exchange via Yahoo Finance screener, sorted by market cap.
     screener_exchange is the Yahoo Finance exchange code (e.g. 'JNB' for JSE, 'NYQ' for NYSE).
@@ -370,7 +370,7 @@ def _get_tickers_for_market(market_id: str, market_config: dict) -> list:
 
         tickers = []
         if screener_exchange:
-            tickers = _fetch_screener_tickers(screener_exchange, max_count=market_config.get('screener_max', 1000))
+            tickers = _fetch_screener_tickers(screener_exchange, max_count=market_config.get('screener_max', 10_000))
         if not tickers and mic:
             tickers = _fetch_tickers_from_marketstack(mic, yahoo_suffix)
         if tickers:
@@ -391,6 +391,31 @@ def _get_tickers_for_market(market_id: str, market_config: dict) -> list:
 
 MARKET_TICKERS = {
     # ── Americas ────────────────────────────────────────────────────────────────
+    "NYSE": {
+        "name": "NYSE",
+        "description": "New York Stock Exchange – all listed companies",
+        "region": "US", "continent": "Americas",
+        "screener_exchange": "NYQ",
+        "tickers": [],  # screener-driven
+    },
+    "NASDAQ": {
+        "name": "NASDAQ",
+        "description": "NASDAQ Global Select Market – all listed companies",
+        "region": "US", "continent": "Americas",
+        "screener_exchange": "NMS",
+        "tickers": [],  # screener-driven
+    },
+    "TSX": {
+        "name": "TSX",
+        "description": "Toronto Stock Exchange – all listed Canadian companies",
+        "region": "CA", "continent": "Americas",
+        "screener_exchange": "TOR",
+        "tickers": [  # fallback
+            "RY.TO", "TD.TO", "BNS.TO", "BMO.TO", "CM.TO", "ENB.TO", "CNR.TO",
+            "TRP.TO", "SU.TO", "ABX.TO", "MFC.TO", "SLF.TO", "CP.TO", "BCE.TO",
+            "T.TO", "CNQ.TO", "PPL.TO", "ATD.TO", "GWO.TO", "AEM.TO",
+        ],
+    },
     "SP500": {
         "name": "S&P 500",
         "description": "S&P 500 – 500 largest US public companies by market cap",
@@ -507,31 +532,14 @@ MARKET_TICKERS = {
             "MRK", "MSFT", "NKE", "PG", "TRV", "UNH", "V", "VZ", "WBA", "WMT",
         ],
     },
-    "NYSE": {
-        "name": "NYSE",
-        "description": "New York Stock Exchange – all listed companies",
-        "region": "US", "continent": "Americas",
-        "screener_exchange": "NYQ",
-        "screener_max": 500,
-        "tickers": [],  # screener-driven
-    },
-    "NASDAQ": {
-        "name": "NASDAQ",
-        "description": "NASDAQ Global Select Market – all listed companies",
-        "region": "US", "continent": "Americas",
-        "screener_exchange": "NMS",
-        "screener_max": 500,
-        "tickers": [],  # screener-driven
-    },
-    "TSX": {
-        "name": "TSX",
-        "description": "Toronto Stock Exchange – all listed Canadian companies",
-        "region": "CA", "continent": "Americas",
-        "screener_exchange": "TOR",
+    "B3": {
+        "name": "B3 São Paulo",
+        "description": "B3 – all listed Brazilian companies",
+        "region": "BR", "continent": "Americas",
+        "screener_exchange": "SAO",
         "tickers": [  # fallback
-            "RY.TO", "TD.TO", "BNS.TO", "BMO.TO", "CM.TO", "ENB.TO", "CNR.TO",
-            "TRP.TO", "SU.TO", "ABX.TO", "MFC.TO", "SLF.TO", "CP.TO", "BCE.TO",
-            "T.TO", "CNQ.TO", "PPL.TO", "ATD.TO", "GWO.TO", "AEM.TO",
+            "PETR4.SA", "VALE3.SA", "ITUB4.SA", "BBDC4.SA", "BBAS3.SA", "ABEV3.SA",
+            "WEGE3.SA", "RENT3.SA", "B3SA3.SA", "SUZB3.SA",
         ],
     },
     "BOVESPA": {
@@ -545,6 +553,16 @@ MARKET_TICKERS = {
             "MGLU3.SA", "RAIL3.SA",
         ],
     },
+    "BMV": {
+        "name": "Bolsa Mexicana",
+        "description": "Bolsa Mexicana de Valores – all listed Mexican companies",
+        "region": "MX", "continent": "Americas",
+        "screener_exchange": "MEX",
+        "tickers": [  # fallback
+            "AMXL.MX", "WALMEXV.MX", "FEMSAUBD.MX", "GFNORTEO.MX", "CEMEXCPO.MX",
+            "BIMBOA.MX", "KOFL.MX", "GRUMAB.MX",
+        ],
+    },
     "IPC": {
         "name": "IPC Mexico",
         "description": "Bolsa Mexicana – top Mexican companies",
@@ -556,6 +574,156 @@ MARKET_TICKERS = {
         ],
     },
     # ── Europe ──────────────────────────────────────────────────────────────────
+    "LSE": {
+        "name": "London Stock Exchange",
+        "description": "London Stock Exchange – all listed UK companies",
+        "region": "GB", "continent": "Europe",
+        "screener_exchange": "LSE",
+        "tickers": [  # fallback
+            "AZN.L", "SHEL.L", "HSBA.L", "ULVR.L", "BP.L", "BATS.L", "GSK.L", "RIO.L",
+            "DGE.L", "REL.L", "BA.L", "LSEG.L", "PRU.L", "IMB.L", "NG.L", "VOD.L",
+            "BT-A.L", "LLOY.L", "BARC.L", "NWG.L",
+        ],
+    },
+    "XETRA": {
+        "name": "Frankfurt (XETRA)",
+        "description": "Deutsche Börse XETRA – all listed German companies",
+        "region": "DE", "continent": "Europe",
+        "screener_exchange": "GER",
+        "tickers": [  # fallback
+            "SAP.DE", "SIE.DE", "ALV.DE", "MBG.DE", "DTE.DE", "BAYN.DE", "BMW.DE",
+            "VOW3.DE", "MUV2.DE", "DB1.DE", "RWE.DE", "BAS.DE", "MRK.DE", "HEI.DE",
+            "ADS.DE", "IFX.DE",
+        ],
+    },
+    "EURONEXT_PA": {
+        "name": "Euronext Paris",
+        "description": "Euronext Paris – all listed French companies",
+        "region": "FR", "continent": "Europe",
+        "screener_exchange": "PAR",
+        "tickers": [  # fallback
+            "MC.PA", "TTE.PA", "SAN.PA", "OR.PA", "AIR.PA", "SU.PA", "BNP.PA", "AI.PA",
+            "KER.PA", "RMS.PA", "DSY.PA", "ACA.PA", "GLE.PA",
+        ],
+    },
+    "EURONEXT_AM": {
+        "name": "Euronext Amsterdam",
+        "description": "Euronext Amsterdam – all listed Dutch companies",
+        "region": "NL", "continent": "Europe",
+        "screener_exchange": "AMS",
+        "tickers": [  # fallback
+            "ASML.AS", "HEIA.AS", "PHIA.AS", "ABN.AS", "ING.AS", "NN.AS", "AKZA.AS",
+            "AD.AS", "WKL.AS", "RAND.AS",
+        ],
+    },
+    "BORSA_IT": {
+        "name": "Borsa Italiana",
+        "description": "Borsa Italiana – all listed Italian companies",
+        "region": "IT", "continent": "Europe",
+        "screener_exchange": "MIL",
+        "tickers": [  # fallback
+            "ENI.MI", "ENEL.MI", "ISP.MI", "UCG.MI", "STLAM.MI", "RACE.MI", "STM.MI",
+            "LDO.MI", "MONC.MI", "AMP.MI",
+        ],
+    },
+    "BME": {
+        "name": "Bolsa de Madrid",
+        "description": "Bolsa de Madrid – all listed Spanish companies",
+        "region": "ES", "continent": "Europe",
+        "screener_exchange": "MCE",
+        "tickers": [  # fallback
+            "ITX.MC", "SAN.MC", "BBVA.MC", "IBE.MC", "TEF.MC", "REP.MC", "AMS.MC",
+            "CABK.MC", "SAB.MC", "ENG.MC",
+        ],
+    },
+    "NASDAQ_ST": {
+        "name": "Nasdaq Stockholm",
+        "description": "Nasdaq Stockholm – all listed Swedish companies",
+        "region": "SE", "continent": "Europe",
+        "screener_exchange": "STO",
+        "tickers": [  # fallback
+            "VOLV-B.ST", "ERIC-B.ST", "INVE-B.ST", "ATCO-A.ST", "HM-B.ST", "SEB-A.ST",
+            "SHB-A.ST", "SWED-A.ST", "NIBE-B.ST", "SAND.ST",
+        ],
+    },
+    "NASDAQ_CO": {
+        "name": "Nasdaq Copenhagen",
+        "description": "Nasdaq Copenhagen – all listed Danish companies",
+        "region": "DK", "continent": "Europe",
+        "screener_exchange": "CPH",
+        "tickers": [  # fallback
+            "NOVO-B.CO", "MAERSK-B.CO", "ORSTED.CO", "COLOB.CO", "GMAB.CO",
+            "VWS.CO", "DSV.CO", "CARL-B.CO",
+        ],
+    },
+    "OSLO": {
+        "name": "Oslo Børs",
+        "description": "Oslo Stock Exchange – all listed Norwegian companies",
+        "region": "NO", "continent": "Europe",
+        "screener_exchange": "OSL",
+        "tickers": [  # fallback
+            "EQNR.OL", "DNB.OL", "TEL.OL", "ORK.OL", "YAR.OL", "MOWI.OL",
+            "SALM.OL", "AKRBP.OL",
+        ],
+    },
+    "EURONEXT_BR": {
+        "name": "Euronext Brussels",
+        "description": "Euronext Brussels – all listed Belgian companies",
+        "region": "BE", "continent": "Europe",
+        "screener_exchange": "BRU",
+        "tickers": [  # fallback
+            "ABI.BR", "UCB.BR", "SOLB.BR", "ACKB.BR", "GBLB.BR", "KBC.BR",
+            "PROX.BR", "COLR.BR",
+        ],
+    },
+    "EURONEXT_LI": {
+        "name": "Euronext Lisbon",
+        "description": "Euronext Lisbon – all listed Portuguese companies",
+        "region": "PT", "continent": "Europe",
+        "screener_exchange": "LIS",
+        "tickers": [  # fallback
+            "EDP.LS", "GALP.LS", "JMT.LS", "NOS.LS", "BCP.LS", "EDPR.LS",
+        ],
+    },
+    "GPW": {
+        "name": "Warsaw Stock Exchange",
+        "description": "Warsaw Stock Exchange – all listed Polish companies",
+        "region": "PL", "continent": "Europe",
+        "screener_exchange": "WSE",
+        "tickers": [  # fallback
+            "PKN.WA", "PKO.WA", "PZU.WA", "KGHM.WA", "PGE.WA", "OPL.WA",
+            "CDR.WA", "JSW.WA", "LPP.WA",
+        ],
+    },
+    "WIENER": {
+        "name": "Vienna Stock Exchange",
+        "description": "Vienna Stock Exchange – all listed Austrian companies",
+        "region": "AT", "continent": "Europe",
+        "screener_exchange": "VIE",
+        "tickers": [  # fallback
+            "OMV.VI", "VOE.VI", "ANDR.VI", "EBS.VI", "RBI.VI", "ATS.VI", "VIG.VI",
+        ],
+    },
+    "NASDAQ_HE": {
+        "name": "Nasdaq Helsinki",
+        "description": "Nasdaq Helsinki – all listed Finnish companies",
+        "region": "FI", "continent": "Europe",
+        "screener_exchange": "HEL",
+        "tickers": [  # fallback
+            "NOKIA.HE", "NESTE.HE", "SAMPO.HE", "KNEBV.HE", "WRT1V.HE",
+            "METSO.HE", "KESKO.HE",
+        ],
+    },
+    "SIX": {
+        "name": "SIX Swiss Exchange",
+        "description": "SIX Swiss Exchange – all listed Swiss companies",
+        "region": "CH", "continent": "Europe",
+        "screener_exchange": "ZRH",
+        "tickers": [  # fallback
+            "NOVN.SW", "NESN.SW", "ROG.SW", "ABBN.SW", "ZURN.SW", "CFR.SW",
+            "SIKA.SW", "ALC.SW", "LONN.SW", "SLHN.SW",
+        ],
+    },
     "FTSE100": {
         "name": "FTSE 100",
         "description": "London Stock Exchange – largest UK companies by market cap",
@@ -707,16 +875,6 @@ MARKET_TICKERS = {
         ],
     },
     # ── Asia Pacific ────────────────────────────────────────────────────────────
-    "NIKKEI": {
-        "name": "Nikkei 225",
-        "description": "Tokyo Stock Exchange – top Japanese companies",
-        "region": "JP", "continent": "Asia Pacific",
-        "tickers": [
-            "7203.T", "6758.T", "9984.T", "6861.T", "8306.T", "8316.T", "6902.T",
-            "9432.T", "9433.T", "4063.T", "6954.T", "7974.T", "8035.T", "4519.T",
-            "6367.T", "5108.T", "4661.T", "9022.T", "8591.T", "6098.T",
-        ],
-    },
     "ASX200": {
         "name": "ASX",
         "description": "Australian Securities Exchange – all listed Australian companies",
@@ -740,18 +898,6 @@ MARKET_TICKERS = {
             "0003.HK", "2020.HK",
         ],
     },
-    "NIFTY50": {
-        "name": "Nifty 50",
-        "description": "NSE India – largest Indian companies by market cap",
-        "region": "IN", "continent": "Asia Pacific",
-        "tickers": [
-            "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "HINDUNILVR.NS",
-            "ICICIBANK.NS", "KOTAKBANK.NS", "SBIN.NS", "BAJFINANCE.NS", "BHARTIARTL.NS",
-            "WIPRO.NS", "ITC.NS", "TATAMOTORS.NS", "HCLTECH.NS", "AXISBANK.NS",
-            "ASIANPAINT.NS", "MARUTI.NS", "NESTLEIND.NS", "ULTRACEMCO.NS", "LT.NS",
-            "ONGC.NS", "NTPC.NS", "POWERGRID.NS", "SUNPHARMA.NS", "TITAN.NS",
-        ],
-    },
     "KOSPI": {
         "name": "Korea Exchange",
         "description": "Korea Exchange – all listed South Korean companies",
@@ -772,6 +918,78 @@ MARKET_TICKERS = {
             "2330.TW", "2454.TW", "2317.TW", "2308.TW", "2303.TW", "2412.TW",
             "2882.TW", "1303.TW", "1301.TW", "2886.TW", "2891.TW", "1326.TW",
             "2881.TW", "2002.TW", "2207.TW",
+        ],
+    },
+    "TSE": {
+        "name": "Tokyo Stock Exchange",
+        "description": "Tokyo Stock Exchange – all listed Japanese companies",
+        "region": "JP", "continent": "Asia Pacific",
+        "screener_exchange": "TKS",
+        "tickers": [  # fallback
+            "7203.T", "6758.T", "9984.T", "6861.T", "8306.T", "8316.T", "6902.T",
+            "9432.T", "9433.T", "4063.T", "6954.T", "7974.T",
+        ],
+    },
+    "NSE": {
+        "name": "NSE India",
+        "description": "National Stock Exchange of India – all listed Indian companies",
+        "region": "IN", "continent": "Asia Pacific",
+        "screener_exchange": "NSI",
+        "tickers": [  # fallback
+            "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "HINDUNILVR.NS",
+            "ICICIBANK.NS", "KOTAKBANK.NS", "SBIN.NS",
+        ],
+    },
+    "SGX": {
+        "name": "Singapore Exchange",
+        "description": "Singapore Exchange – all listed companies",
+        "region": "SG", "continent": "Asia Pacific",
+        "screener_exchange": "SGX",
+        "tickers": [  # fallback
+            "D05.SI", "O39.SI", "U11.SI", "Z74.SI", "C6L.SI", "BN4.SI",
+            "J36.SI", "S63.SI",
+        ],
+    },
+    "SSE": {
+        "name": "Shanghai Stock Exchange",
+        "description": "Shanghai Stock Exchange – all listed Chinese A-share companies",
+        "region": "CN", "continent": "Asia Pacific",
+        "screener_exchange": "SHH",
+        "tickers": [  # fallback
+            "600519.SS", "601318.SS", "601398.SS", "600036.SS", "600900.SS",
+            "601166.SS", "600690.SS",
+        ],
+    },
+    "SZSE": {
+        "name": "Shenzhen Stock Exchange",
+        "description": "Shenzhen Stock Exchange – all listed Chinese companies",
+        "region": "CN", "continent": "Asia Pacific",
+        "screener_exchange": "SHZ",
+        "tickers": [  # fallback
+            "000858.SZ", "300750.SZ", "000333.SZ", "002415.SZ", "002594.SZ",
+            "000001.SZ", "000002.SZ",
+        ],
+    },
+    "NIKKEI": {
+        "name": "Nikkei 225",
+        "description": "Tokyo Stock Exchange – top Japanese companies",
+        "region": "JP", "continent": "Asia Pacific",
+        "tickers": [
+            "7203.T", "6758.T", "9984.T", "6861.T", "8306.T", "8316.T", "6902.T",
+            "9432.T", "9433.T", "4063.T", "6954.T", "7974.T", "8035.T", "4519.T",
+            "6367.T", "5108.T", "4661.T", "9022.T", "8591.T", "6098.T",
+        ],
+    },
+    "NIFTY50": {
+        "name": "Nifty 50",
+        "description": "NSE India – largest Indian companies by market cap",
+        "region": "IN", "continent": "Asia Pacific",
+        "tickers": [
+            "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "HINDUNILVR.NS",
+            "ICICIBANK.NS", "KOTAKBANK.NS", "SBIN.NS", "BAJFINANCE.NS", "BHARTIARTL.NS",
+            "WIPRO.NS", "ITC.NS", "TATAMOTORS.NS", "HCLTECH.NS", "AXISBANK.NS",
+            "ASIANPAINT.NS", "MARUTI.NS", "NESTLEIND.NS", "ULTRACEMCO.NS", "LT.NS",
+            "ONGC.NS", "NTPC.NS", "POWERGRID.NS", "SUNPHARMA.NS", "TITAN.NS",
         ],
     },
     "STI": {

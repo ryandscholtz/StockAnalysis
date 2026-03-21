@@ -537,7 +537,9 @@ def get_financial_data_from_yahoo(ticker: str) -> dict | None:
     fd = r.get('financialData') or {}
     km = {
         'shares_outstanding': _raw(ks.get('sharesOutstanding')),
+        'pe_ratio':           _raw(ks.get('trailingPE') or ks.get('forwardPE')),
         'pb_ratio':           _raw(ks.get('priceToBook')),
+        'ps_ratio':           _raw(ks.get('priceToSalesTrailing12Months')),
         'current_ratio':      _raw(fd.get('currentRatio')),
         'roe':                _raw(fd.get('returnOnEquity')),
         'roa':                _raw(fd.get('returnOnAssets')),
@@ -833,7 +835,8 @@ def _generate_ai_commentary(
         f"- Revenue: {_scale(rev)} | Net Income: {_scale(ni)}\n"
         f"- Operating CF: {_scale(ocf)} | Free CF: {_scale(fcf)}\n"
         f"- Equity: {_scale(eq)} | LT Debt: {_scale(debt)} | Cash: {_scale(cash)}\n"
-        f"- ROE: {_fmt(roe, pct=True)} | ROA: {_fmt(roa, pct=True)} | "
+        f"- ROE: {_fmt(None if roe is None else roe * 100, pct=True)} | "
+        f"ROA: {_fmt(None if roa is None else roa * 100, pct=True)} | "
         f"D/E: {_fmt(d2e)} | Current ratio: {_fmt(cr)} | P/E: {_fmt(pe)} | EPS: {_fmt(eps, prefix=currency+' ')}\n\n"
         f"Write in plain English, 3 paragraphs, no bullet lists. "
         f"It is fine to disagree with the DCF estimate if the fundamentals justify it. "
@@ -999,6 +1002,81 @@ def run_earnings_power(net_income, shares, required_return=0.10):
         return None
     eps = net_income / shares
     return eps / required_return
+
+
+def _get_fx_scale(fin_currency: str, price_currency: str) -> float | None:
+    """
+    Return the multiplier to convert monetary values from fin_currency to
+    price_currency so that per-share fair values and the live price are
+    expressed in the same unit.
+
+    Returns 1.0 if the currencies are the same.
+    Returns None if the rate could not be determined (valuation will be skipped
+    or flagged as unreliable).
+
+    Sub-unit pseudo-currencies (ZAC = 1/100 ZAR, GBX = 1/100 GBP) are handled
+    with a fixed ratio so no external lookup is needed.
+
+    All other cross-currency pairs are resolved via the Frankfurter API (ECB
+    daily rates, no key required, standard-library urllib only).
+    """
+    fc = (fin_currency or 'USD').upper()
+    pc = (price_currency or 'USD').upper()
+
+    if fc == pc:
+        return 1.0
+
+    # Sub-unit fixed ratios — no external lookup needed
+    _SUB_UNIT = {
+        ('ZAR', 'ZAC'): 100.0,
+        ('ZAC', 'ZAR'): 0.01,
+        ('GBP', 'GBX'): 100.0,
+        ('GBX', 'GBP'): 0.01,
+    }
+    if (fc, pc) in _SUB_UNIT:
+        return _SUB_UNIT[(fc, pc)]
+
+    # Cross-currency sub-units (e.g. GBX financials vs USD price):
+    # decompose into the parent currency, then apply the FX rate
+    if fc == 'GBX':
+        rate = _get_fx_scale('GBP', pc)
+        return rate * 0.01 if rate is not None else None
+    if pc == 'GBX':
+        rate = _get_fx_scale(fc, 'GBP')
+        return rate * 100 if rate is not None else None
+    if fc == 'ZAC':
+        rate = _get_fx_scale('ZAR', pc)
+        return rate * 0.01 if rate is not None else None
+    if pc == 'ZAC':
+        rate = _get_fx_scale(fc, 'ZAR')
+        return rate * 100 if rate is not None else None
+
+    # Live rate: invoke the stock-data Lambda with the Yahoo Finance forex symbol
+    # (e.g. JPYUSD=X for JPY→USD). The stock-data Lambda has yfinance/urllib and
+    # handles Yahoo Finance's auth requirements. No external API dependency.
+    try:
+        lc = boto3.client('lambda', region_name='eu-west-1')
+        fx_symbol = f'{fc}{pc}=X'
+        payload = {
+            'path': f'/api/ticker/{fx_symbol}',
+            'httpMethod': 'GET',
+            'queryStringParameters': {},
+            'headers': {}
+        }
+        resp = lc.invoke(
+            FunctionName=os.getenv('STOCK_DATA_LAMBDA', 'stock-analysis-stock-data'),
+            InvocationType='RequestResponse',
+            Payload=json.dumps(payload)
+        )
+        body = json.loads(json.loads(resp['Payload'].read()).get('body', '{}'))
+        rate = body.get('currentPrice') or body.get('price')
+        if rate and float(rate) > 0:
+            print(f'[FX] {fc} → {pc}: {float(rate):.6f} (via {fx_symbol})')
+            return float(rate)
+    except Exception as e:
+        print(f'[FX] Could not fetch {fc} → {pc} rate: {e}')
+
+    return None
 
 
 def weighted_fair_value(model_results):
@@ -1331,24 +1409,25 @@ def analyze_stock_get(ticker: str, stream: bool, params: dict) -> dict:
                                 fin_source, section_sources or None)
 
     # ------------------------------------------------------------------
-    # Currency mismatch correction (valuation only — does NOT affect stored data)
-    # Financial statements are in their reporting currency (e.g. ZAR), but the
-    # price may be in a sub-unit (e.g. ZAC = 1/100 ZAR). Scale monetary values
-    # to match the price unit before running per-share valuation calculations.
+    # Currency conversion (valuation only — does NOT affect stored data)
+    # Financial statements are in their reporting currency (e.g. JPY, ZAR),
+    # but the live price may be in a different currency or sub-unit (e.g. USD,
+    # ZAC). Fetch an FX scale factor and convert all monetary statement values
+    # so that per-share fair values and the current price use the same unit.
+    # Dimensionless ratios (P/E, ROE, ROA) and share counts are NOT scaled.
     # ------------------------------------------------------------------
-    _CURRENCY_SCALE: dict[tuple, float] = {
-        ('ZAR', 'ZAC'): 100.0,   # financials in Rands, price in cents → ×100
-        ('ZAC', 'ZAR'): 0.01,    # financials in cents, price in Rands  → ÷100
-    }
-    scale = _CURRENCY_SCALE.get((fin_currency.upper(), currency.upper()))
-    if scale is not None:
-        print(f"[Currency] Scaling financials ×{scale} ({fin_currency} → {currency}) for {ticker}")
-        def _scale(d: dict) -> dict:
-            return {k: v * scale if isinstance(v, (int, float)) else v for k, v in d.items()}
-        inc = _scale(inc)
-        bal = _scale(bal)
-        cf  = _scale(cf)
+    fx_scale = _get_fx_scale(fin_currency, currency)
+    if fx_scale is not None and fx_scale != 1.0:
+        print(f"[Currency] Scaling financials ×{fx_scale:.6f} ({fin_currency} → {currency}) for {ticker}")
+        def _scale_stmt(d: dict) -> dict:
+            return {k: v * fx_scale if isinstance(v, (int, float)) else v for k, v in d.items()}
+        inc = _scale_stmt(inc)
+        bal = _scale_stmt(bal)
+        cf  = _scale_stmt(cf)
         # key_metrics: shares_outstanding is a count; ratios are dimensionless — no scaling
+    elif fx_scale is None and fin_currency.upper() != currency.upper():
+        print(f"[Currency] WARNING: could not determine FX rate {fin_currency} → {currency} "
+              f"for {ticker}. Valuation numbers may be unreliable.")
 
     shares = _safe(km.get('shares_outstanding'))
 
@@ -2133,36 +2212,15 @@ def handle_bulk_analyze(event, context):
         'created_at': datetime.now().isoformat(),
     })
 
-    # Fire one async Lambda invocation per ticker (parallelised to avoid API GW timeout)
+    # Fire a single async self-invocation to do the per-ticker fan-out.
+    # This lets us return jobId immediately without waiting for 200+ invocations.
     function_name = context.function_name if context and hasattr(context, 'function_name') else 'stock-analysis-analyzer'
-
-    def _invoke(ticker):
-        lc = boto3.client('lambda', region_name='eu-west-1')
-        lc.invoke(
-            FunctionName=function_name,
-            InvocationType='Event',  # async, fire-and-forget
-            Payload=json.dumps({'_bulk_job': True, 'bulk_job_id': job_id, 'ticker': ticker}),
-        )
-
-    failed_invokes = 0
-    with ThreadPoolExecutor(max_workers=50) as executor:
-        futures = {executor.submit(_invoke, t): t for t in tickers}
-        for future in as_completed(futures):
-            ticker = futures[future]
-            exc = future.exception()
-            if exc:
-                print(f"[BulkAnalyze] Failed to invoke {ticker}: {exc}")
-                failed_invokes += 1
-
-    if failed_invokes:
-        try:
-            table.update_item(
-                Key={'ticker': f'{BULK_JOB_PREFIX}{job_id}'},
-                UpdateExpression='ADD failed :n',
-                ExpressionAttributeValues={':n': failed_invokes},
-            )
-        except Exception:
-            pass
+    lc = boto3.client('lambda', region_name='eu-west-1')
+    lc.invoke(
+        FunctionName=function_name,
+        InvocationType='Event',  # async, fire-and-forget
+        Payload=json.dumps({'_bulk_fanout': True, 'bulk_job_id': job_id, 'tickers': tickers}),
+    )
 
     return {'statusCode': 200, 'body': json.dumps({'jobId': job_id, 'total': total})}
 
@@ -2190,6 +2248,48 @@ def handle_bulk_status(event):
             'failed': int(item.get('failed', 0)),
         }),
     }
+
+
+def _handle_bulk_fanout(event):
+    """Invoked asynchronously by handle_bulk_analyze.
+    Fans out one async Lambda invocation per ticker.
+    """
+    job_id = event.get('bulk_job_id')
+    tickers = event.get('tickers', [])
+    if not job_id or not tickers:
+        return
+
+    function_name = os.environ.get('AWS_LAMBDA_FUNCTION_NAME', 'stock-analysis-analyzer')
+    lc = boto3.client('lambda', region_name='eu-west-1')
+
+    failed_invokes = 0
+
+    def _invoke(ticker):
+        lc.invoke(
+            FunctionName=function_name,
+            InvocationType='Event',
+            Payload=json.dumps({'_bulk_job': True, 'bulk_job_id': job_id, 'ticker': ticker}),
+        )
+
+    with ThreadPoolExecutor(max_workers=50) as executor:
+        futures = {executor.submit(_invoke, t): t for t in tickers}
+        for future in as_completed(futures):
+            exc = future.exception()
+            if exc:
+                print(f"[BulkFanout] Failed to invoke {futures[future]}: {exc}")
+                failed_invokes += 1
+
+    if failed_invokes:
+        try:
+            dynamodb = boto3.resource('dynamodb', region_name='eu-west-1')
+            table = dynamodb.Table(MANUAL_DATA_TABLE)
+            table.update_item(
+                Key={'ticker': f'{BULK_JOB_PREFIX}{job_id}'},
+                UpdateExpression='ADD failed :n',
+                ExpressionAttributeValues={':n': failed_invokes},
+            )
+        except Exception:
+            pass
 
 
 def _handle_bulk_job_ticker(event):
@@ -2246,7 +2346,12 @@ def lambda_handler(event, context):
         _handle_pdf_upload_async(event)
         return
 
-    # Async bulk-job worker — invoked by handle_bulk_analyze with InvocationType='Event'
+    # Async bulk fan-out — fires one async invocation per ticker, then exits
+    if event.get('_bulk_fanout'):
+        _handle_bulk_fanout(event)
+        return
+
+    # Async bulk-job worker — invoked by _handle_bulk_fanout with InvocationType='Event'
     if event.get('_bulk_job'):
         _handle_bulk_job_ticker(event)
         return
