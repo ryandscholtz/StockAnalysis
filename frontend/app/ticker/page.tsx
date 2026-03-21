@@ -503,8 +503,8 @@ export default function TickerPage() {
     ? (privateCurrency || storedWatchlistCurrency || analysis?.currency)
     : (inferredCurrency || storedWatchlistCurrency || analysis?.currency)
 
-  // Formatter for analysis monetary values — converts from analysis.currency to the active display currency
-  const analysisCurrency = analysis?.currency || displayCurrency || 'USD'
+  // Formatter for analysis monetary values — use displayCurrency (which already prefers inferred over stored)
+  const analysisCurrency = displayCurrency || 'USD'
   const targetCurrency = showLocal ? analysisCurrency : (preferredCurrency || analysisCurrency)
   const fmtAnalysisPrice = (amount: number | null | undefined): string => {
     if (amount == null || isNaN(amount as number) || !isFinite(amount as number)) return '-'
