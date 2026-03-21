@@ -620,82 +620,6 @@ export default function TickerPage() {
                     )}
                   </div>
                 )}
-                {/* Recommendation + Incomplete Data badges */}
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px', alignItems: 'center' }}>
-                  {modelRec && (
-                    <span style={{
-                      padding: '5px 14px',
-                      borderRadius: '16px',
-                      fontSize: '13px',
-                      fontWeight: '600',
-                      color: 'white',
-                      backgroundColor: getRecommendationColor(modelRec),
-                      opacity: 0.85,
-                    }}>
-                      Model: {modelRec}
-                    </span>
-                  )}
-                  {aiRec && (
-                    <span style={{
-                      padding: '5px 14px',
-                      borderRadius: '16px',
-                      fontSize: '13px',
-                      fontWeight: '600',
-                      color: 'white',
-                      backgroundColor: getRecommendationColor(aiRec),
-                      opacity: 0.85,
-                    }}>
-                      AI Analyst: {aiRec}
-                    </span>
-                  )}
-                  {recommendation && (modelRec || aiRec) && (
-                    <span style={{
-                      padding: '6px 16px',
-                      borderRadius: '16px',
-                      fontSize: '14px',
-                      fontWeight: '700',
-                      color: 'white',
-                      backgroundColor: getRecommendationColor(recommendation),
-                      boxShadow: '0 0 0 2px white, 0 0 0 3px ' + getRecommendationColor(recommendation),
-                    }}>
-                      Overall: {recommendation}
-                    </span>
-                  )}
-                  {hasIncompleteFinancialData && (
-                    <span style={{
-                      padding: '5px 12px',
-                      borderRadius: '16px',
-                      fontSize: '13px',
-                      fontWeight: '500',
-                      color: '#92400e',
-                      backgroundColor: '#fef3c7',
-                      border: '1px solid #fde68a',
-                    }}>
-                      ⚠ Incomplete Financial Data
-                    </span>
-                  )}
-                  {/* Currency toggle — far right, aligned with badges */}
-                  {displayCurrency && displayCurrency.toUpperCase() !== preferredCurrency.toUpperCase() && (
-                    <div style={{ display: 'flex', borderRadius: '6px', border: '1px solid var(--border-input)', overflow: 'hidden', fontSize: '13px', marginLeft: 'auto' }}>
-                      {([true, false] as const).map(local => (
-                        <button
-                          key={String(local)}
-                          onClick={() => setShowLocal(local)}
-                          style={{
-                            padding: '5px 14px',
-                            border: 'none',
-                            cursor: 'pointer',
-                            fontWeight: showLocal === local ? '600' : '400',
-                            backgroundColor: showLocal === local ? 'var(--color-primary)' : 'var(--bg-surface)',
-                            color: showLocal === local ? 'white' : 'var(--text-muted)',
-                          }}
-                        >
-                          {local ? displayCurrency : preferredCurrency}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
               </div>
             ) : priceError ? (
               <p style={{ fontSize: '16px', color: '#dc2626', margin: 0, marginTop: '8px' }}>
@@ -770,6 +694,45 @@ export default function TickerPage() {
             </div>
           </div>
         </div>
+
+        {/* Badges + currency toggle — full-width row, badges left, toggle far right */}
+        {(modelRec || aiRec || recommendation || hasIncompleteFinancialData || (displayCurrency && displayCurrency.toUpperCase() !== preferredCurrency.toUpperCase())) && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '8px' }}>
+            {modelRec && (
+              <span style={{ padding: '5px 14px', borderRadius: '16px', fontSize: '13px', fontWeight: '600', color: 'white', backgroundColor: getRecommendationColor(modelRec), opacity: 0.85 }}>
+                Model: {modelRec}
+              </span>
+            )}
+            {aiRec && (
+              <span style={{ padding: '5px 14px', borderRadius: '16px', fontSize: '13px', fontWeight: '600', color: 'white', backgroundColor: getRecommendationColor(aiRec), opacity: 0.85 }}>
+                AI Analyst: {aiRec}
+              </span>
+            )}
+            {recommendation && (modelRec || aiRec) && (
+              <span style={{ padding: '6px 16px', borderRadius: '16px', fontSize: '14px', fontWeight: '700', color: 'white', backgroundColor: getRecommendationColor(recommendation), boxShadow: '0 0 0 2px white, 0 0 0 3px ' + getRecommendationColor(recommendation) }}>
+                Overall: {recommendation}
+              </span>
+            )}
+            {hasIncompleteFinancialData && (
+              <span style={{ padding: '5px 12px', borderRadius: '16px', fontSize: '13px', fontWeight: '500', color: '#92400e', backgroundColor: '#fef3c7', border: '1px solid #fde68a' }}>
+                ⚠ Incomplete Financial Data
+              </span>
+            )}
+            {displayCurrency && displayCurrency.toUpperCase() !== preferredCurrency.toUpperCase() && (
+              <div style={{ display: 'flex', borderRadius: '6px', border: '1px solid var(--border-input)', overflow: 'hidden', fontSize: '13px', marginLeft: 'auto' }}>
+                {([true, false] as const).map(local => (
+                  <button
+                    key={String(local)}
+                    onClick={() => setShowLocal(local)}
+                    style={{ padding: '5px 14px', border: 'none', cursor: 'pointer', fontWeight: showLocal === local ? '600' : '400', backgroundColor: showLocal === local ? 'var(--color-primary)' : 'var(--bg-surface)', color: showLocal === local ? 'white' : 'var(--text-muted)' }}
+                  >
+                    {local ? displayCurrency : preferredCurrency}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {error && (
