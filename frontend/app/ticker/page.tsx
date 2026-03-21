@@ -674,6 +674,27 @@ export default function TickerPage() {
                       ⚠ Incomplete Financial Data
                     </span>
                   )}
+                  {/* Currency toggle — far right, aligned with badges */}
+                  {displayCurrency && displayCurrency.toUpperCase() !== preferredCurrency.toUpperCase() && (
+                    <div style={{ display: 'flex', borderRadius: '6px', border: '1px solid var(--border-input)', overflow: 'hidden', fontSize: '13px', marginLeft: 'auto' }}>
+                      {([true, false] as const).map(local => (
+                        <button
+                          key={String(local)}
+                          onClick={() => setShowLocal(local)}
+                          style={{
+                            padding: '5px 14px',
+                            border: 'none',
+                            cursor: 'pointer',
+                            fontWeight: showLocal === local ? '600' : '400',
+                            backgroundColor: showLocal === local ? 'var(--color-primary)' : 'var(--bg-surface)',
+                            color: showLocal === local ? 'white' : 'var(--text-muted)',
+                          }}
+                        >
+                          {local ? displayCurrency : preferredCurrency}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             ) : priceError ? (
@@ -747,27 +768,6 @@ export default function TickerPage() {
               Remove from Watchlist
             </button>
             </div>
-            {/* Currency toggle — far right, below action buttons */}
-            {displayCurrency && displayCurrency.toUpperCase() !== preferredCurrency.toUpperCase() && (
-              <div style={{ display: 'flex', borderRadius: '6px', border: '1px solid var(--border-input)', overflow: 'hidden', fontSize: '13px' }}>
-                {([true, false] as const).map(local => (
-                  <button
-                    key={String(local)}
-                    onClick={() => setShowLocal(local)}
-                    style={{
-                      padding: '5px 14px',
-                      border: 'none',
-                      cursor: 'pointer',
-                      fontWeight: showLocal === local ? '600' : '400',
-                      backgroundColor: showLocal === local ? 'var(--color-primary)' : 'var(--bg-surface)',
-                      color: showLocal === local ? 'white' : 'var(--text-muted)',
-                    }}
-                  >
-                    {local ? displayCurrency : preferredCurrency}
-                  </button>
-                ))}
-              </div>
-            )}
           </div>
         </div>
       </div>
