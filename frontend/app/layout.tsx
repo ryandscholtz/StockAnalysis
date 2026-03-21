@@ -1,7 +1,6 @@
 import './globals.css'
 import type { Metadata } from 'next'
 import Navigation from '@/components/Navigation'
-import VersionFooter from '@/components/VersionFooter'
 import { Providers } from '@/components/Providers'
 import { AuthProvider } from '@/components/AuthProvider'
 
@@ -27,7 +26,6 @@ export default function RootLayout({
             <main className="flex-1 container mx-auto px-0 sm:px-4 py-4 sm:py-6 bg-white dark:bg-slate-900 sm:bg-transparent sm:dark:bg-transparent">
               {children}
             </main>
-            <VersionFooter />
           </Providers>
         </AuthProvider>
       </body>

@@ -398,6 +398,32 @@ export default function AboutPage() {
             rather than forming an independent view.
           </p>
         </div>
+
+        <div style={{ marginBottom: '32px' }}>
+          <h3 style={{ fontSize: '22px', fontWeight: '600', color: 'var(--text-primary)', marginBottom: '12px' }}>
+            4. Independent Confirmation of the Analysis
+          </h3>
+          <p style={{ fontSize: '16px', lineHeight: '1.7', color: 'var(--text-secondary)', marginBottom: '12px' }}>
+            After the quantitative verdict is reached, Claude independently reviews the full analysis — the fair value
+            estimate, margin of safety, financial ratios, and business context — and issues its own standalone
+            recommendation: <strong>Buy</strong>, <strong>Hold</strong>, or <strong>Avoid</strong>. This is separate from
+            the commentary step and is designed to act as a second opinion on the model's conclusion.
+          </p>
+          <p style={{ fontSize: '16px', lineHeight: '1.7', color: 'var(--text-secondary)', marginBottom: '12px' }}>
+            The two verdicts — quantitative model and AI analyst — are then compared:
+          </p>
+          <ul style={{ fontSize: '16px', lineHeight: '1.7', color: 'var(--text-secondary)', paddingLeft: '24px', marginBottom: '12px' }}>
+            <li><strong>Agreement:</strong> The overall recommendation reflects the shared verdict, with higher confidence</li>
+            <li><strong>Conflict:</strong> If the model and AI point in opposite directions (e.g. model says Buy, AI says Avoid), the overall recommendation is shown as <strong>AI Conflict</strong> — a deliberate signal to pause and review the commentary carefully before acting</li>
+          </ul>
+          <div style={{ backgroundColor: 'var(--status-warning-bg)', padding: '16px', borderRadius: '8px', borderLeft: '4px solid #f59e0b' }}>
+            <p style={{ fontSize: '14px', lineHeight: '1.6', color: 'var(--status-warning-text)', margin: 0 }}>
+              <strong>AI Conflict:</strong> This status does not mean one side is right and the other wrong. It means
+              the quantitative and qualitative signals diverge and warrant closer scrutiny — for example, a stock that
+              looks cheap on numbers alone but faces a structural business risk the model cannot price in.
+            </p>
+          </div>
+        </div>
       </section>
 
       {/* Data Sources Section */}
