@@ -425,39 +425,17 @@ export default function WatchlistPage() {
               ))}
             </div>
           </div>
-          {/* Currency toggle */}
-          <div style={{ display: 'flex', gap: '4px', background: 'var(--bg-hover)', borderRadius: '8px', padding: '3px' }}>
-            {([false, true] as const).map(local => (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end' }}>
               <button
-                key={String(local)}
-                onClick={() => setShowLocal(local)}
-                style={{
-                  padding: '4px 12px',
-                  borderRadius: '6px',
-                  border: 'none',
-                  fontSize: '13px',
-                  fontWeight: '500',
-                  cursor: 'pointer',
-                  backgroundColor: showLocal === local ? 'var(--bg-surface)' : 'transparent',
-                  color: showLocal === local ? 'var(--text-primary)' : 'var(--text-muted)',
-                  boxShadow: showLocal === local ? '0 1px 3px rgba(0,0,0,0.15)' : 'none',
-                }}
+                onClick={() => setFilterOpen(true)}
+                style={{ position: 'relative', padding: '6px 14px', borderRadius: '6px', border: `1px solid ${activeFilterCount > 0 ? 'var(--color-primary)' : 'var(--border-input)'}`, backgroundColor: activeFilterCount > 0 ? 'var(--color-primary-bg)' : 'var(--bg-surface)', color: activeFilterCount > 0 ? 'var(--color-primary)' : 'var(--text-secondary)', fontSize: '13px', cursor: 'pointer', fontWeight: activeFilterCount > 0 ? '600' : '400', whiteSpace: 'nowrap' }}
               >
-                {local ? 'Local' : preferredCurrency}
+                ⚙ Filters
+                {activeFilterCount > 0 && (
+                  <span style={{ marginLeft: '6px', backgroundColor: 'var(--color-primary)', color: '#fff', borderRadius: '10px', fontSize: '11px', padding: '1px 6px', fontWeight: '700' }}>{activeFilterCount}</span>
+                )}
               </button>
-            ))}
-          </div>
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-            <button
-              onClick={() => setFilterOpen(true)}
-              style={{ position: 'relative', padding: '6px 14px', borderRadius: '6px', border: `1px solid ${activeFilterCount > 0 ? 'var(--color-primary)' : 'var(--border-input)'}`, backgroundColor: activeFilterCount > 0 ? 'var(--color-primary-bg)' : 'var(--bg-surface)', color: activeFilterCount > 0 ? 'var(--color-primary)' : 'var(--text-secondary)', fontSize: '13px', cursor: 'pointer', fontWeight: activeFilterCount > 0 ? '600' : '400', whiteSpace: 'nowrap' }}
-            >
-              ⚙ Filters
-              {activeFilterCount > 0 && (
-                <span style={{ marginLeft: '6px', backgroundColor: 'var(--color-primary)', color: '#fff', borderRadius: '10px', fontSize: '11px', padding: '1px 6px', fontWeight: '700' }}>{activeFilterCount}</span>
-              )}
-            </button>
-          </div>
 
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             <button
@@ -512,6 +490,30 @@ export default function WatchlistPage() {
             >
               ➕ Add Stock
             </button>
+          </div>
+            </div>
+            {/* Currency toggle — far right, below action buttons */}
+            <div style={{ display: 'flex', gap: '4px', background: 'var(--bg-hover)', borderRadius: '8px', padding: '3px' }}>
+              {([false, true] as const).map(local => (
+                <button
+                  key={String(local)}
+                  onClick={() => setShowLocal(local)}
+                  style={{
+                    padding: '4px 12px',
+                    borderRadius: '6px',
+                    border: 'none',
+                    fontSize: '13px',
+                    fontWeight: '500',
+                    cursor: 'pointer',
+                    backgroundColor: showLocal === local ? 'var(--bg-surface)' : 'transparent',
+                    color: showLocal === local ? 'var(--text-primary)' : 'var(--text-muted)',
+                    boxShadow: showLocal === local ? '0 1px 3px rgba(0,0,0,0.15)' : 'none',
+                  }}
+                >
+                  {local ? 'Local' : preferredCurrency}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 

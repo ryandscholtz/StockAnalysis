@@ -582,27 +582,6 @@ export default function TickerPage() {
                         : formatPrice(currentPrice, displayCurrency)
                     })()}
                   </span>
-                  {/* Currency toggle — only show when local ≠ preferred */}
-                  {displayCurrency && displayCurrency.toUpperCase() !== preferredCurrency.toUpperCase() && (
-                    <span style={{ display: 'inline-flex', borderRadius: '6px', border: '1px solid var(--border-input)', overflow: 'hidden', fontSize: '12px' }}>
-                      {([true, false] as const).map(local => (
-                        <button
-                          key={String(local)}
-                          onClick={() => setShowLocal(local)}
-                          style={{
-                            padding: '3px 10px',
-                            border: 'none',
-                            cursor: 'pointer',
-                            fontWeight: showLocal === local ? '600' : '400',
-                            backgroundColor: showLocal === local ? 'var(--color-primary)' : 'var(--bg-hover)',
-                            color: showLocal === local ? 'white' : 'var(--text-muted)',
-                          }}
-                        >
-                          {local ? displayCurrency : preferredCurrency}
-                        </button>
-                      ))}
-                    </span>
-                  )}
                   {marketQuote?.exchange && (
                     <span style={{ fontSize: '14px', color: '#9ca3af' }}>
                       · {marketQuote.exchange}
@@ -703,7 +682,8 @@ export default function TickerPage() {
               </p>
             ) : null}
           </div>
-          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
+            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
             <button
               onClick={handleRunAnalysis}
               disabled={analyzing}
@@ -766,6 +746,28 @@ export default function TickerPage() {
             >
               Remove from Watchlist
             </button>
+            </div>
+            {/* Currency toggle — far right, below action buttons */}
+            {displayCurrency && displayCurrency.toUpperCase() !== preferredCurrency.toUpperCase() && (
+              <div style={{ display: 'flex', borderRadius: '6px', border: '1px solid var(--border-input)', overflow: 'hidden', fontSize: '13px' }}>
+                {([true, false] as const).map(local => (
+                  <button
+                    key={String(local)}
+                    onClick={() => setShowLocal(local)}
+                    style={{
+                      padding: '5px 14px',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontWeight: showLocal === local ? '600' : '400',
+                      backgroundColor: showLocal === local ? 'var(--color-primary)' : 'var(--bg-surface)',
+                      color: showLocal === local ? 'white' : 'var(--text-muted)',
+                    }}
+                  >
+                    {local ? displayCurrency : preferredCurrency}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
