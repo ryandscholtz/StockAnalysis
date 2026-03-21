@@ -6,14 +6,296 @@ import { stockApi, ExploreMarket, ExploreStock } from '@/lib/api'
 import { useAuth } from '@/components/AuthProvider'
 import { useSessionState } from '@/lib/useSessionState'
 import {
+  AnalysisFilterContent,
+  AnalysisFilterState,
+  EMPTY_ANALYSIS_FILTERS,
+  RecFilterType,
+  REC_OPTIONS,
+  REC_COLOR,
+  recMatches,
+} from '@/components/AnalysisFilterModal'
+import {
   formatPrice,
   formatLargeNumber,
   formatPercent,
   formatNumber,
   formatRatio,
+  inferCurrencyFromTicker,
 } from '@/lib/currency'
+import { useCurrency } from '@/lib/useCurrency'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+
+// ─── AnalyseAndAddModal ───────────────────────────────────────────────────────
+
+type AnalysePhase = 'setup' | 'analysing' | 'adding' | 'done'
+
+function AnalyseAndAddModal({
+  tickers,
+  stocks,
+  onClose,
+  onAdded,
+}: {
+  tickers: string[]
+  stocks: ExploreStock[]
+  onClose: () => void
+  onAdded: (count: number) => void
+}) {
+  const [filters, setFilters] = useState<AnalysisFilterState>(EMPTY_ANALYSIS_FILTERS)
+  const [selectedRecs, setSelectedRecs] = useState<string[]>([])
+  const [recFilterType, setRecFilterType] = useState<RecFilterType>('overall')
+  const [phase, setPhase] = useState<AnalysePhase>('setup')
+  const [progress, setProgress] = useState({ current: 0, total: tickers.length })
+  const [result, setResult] = useState<{ added: number; skipped: number; failed: number } | null>(null)
+  const [errorMsg, setErrorMsg] = useState('')
+
+  const inRange = (val: number | null | undefined, { min, max }: { min: string; max: string }): boolean => {
+    if (min === '' && max === '') return true
+    if (val == null || !isFinite(val)) return false
+    if (min !== '' && val < parseFloat(min)) return false
+    if (max !== '' && val > parseFloat(max)) return false
+    return true
+  }
+
+  const run = async () => {
+    setPhase('analysing')
+    setProgress({ current: 0, total: tickers.length })
+    setErrorMsg('')
+    try {
+      // 1. Start bulk analysis
+      const { jobId, total } = await stockApi.startBulkAnalysis(tickers)
+
+      // 2. Poll until complete
+      await new Promise<void>((resolve, reject) => {
+        const poll = setInterval(async () => {
+          try {
+            const status = await stockApi.getBulkStatus(jobId)
+            setProgress({ current: status.completed + status.failed, total: status.total })
+            if (status.status === 'complete') {
+              clearInterval(poll)
+              resolve()
+            }
+          } catch (e) { /* keep polling */ }
+        }, 2000)
+        // safety timeout: 10 minutes
+        setTimeout(() => { clearInterval(poll); reject(new Error('Timed out waiting for analysis')) }, 600_000)
+      })
+
+      // 3. Fetch analysis results & apply filters
+      setPhase('adding')
+      const hasNumericFilters = Object.values(filters).some(({ min, max }) => min !== '' || max !== '')
+      const hasRecFilter = selectedRecs.length > 0
+
+      const results = await Promise.all(
+        tickers.map(async (ticker) => {
+          try {
+            const data = await stockApi.getFinancialData(ticker)
+            const la = data.latest_analysis as any
+            const stockInfo = stocks.find(s => s.ticker === ticker)
+            if (!la) {
+              // No analysis data — only passes if 'Unrated' is selected (or no rec filter)
+              const passes = !hasRecFilter || selectedRecs.includes('Unrated')
+              return { ticker, pass: passes, stockInfo, la: null }
+            }
+
+            // Recommendation filter
+            if (hasRecFilter) {
+              const rec = recFilterType === 'model' ? la.modelRecommendation
+                : recFilterType === 'ai' ? la.aiRecommendation
+                : la.recommendation
+              if (!recMatches(rec, selectedRecs)) return { ticker, pass: false, stockInfo }
+            }
+
+            // Numeric filters — prefer analysis data, fall back to explore stock data
+            if (hasNumericFilters) {
+              const price = la.currentPrice ?? stockInfo?.price
+              const fairValue = la.fairValue
+              const marginOfSafety = la.marginOfSafety
+              const upsidePotential = la.upsidePotential
+              const peRatio = stockInfo?.peRatio
+              const pbRatio = stockInfo?.pbRatio
+              const psRatio = stockInfo?.psRatio
+              const evToEbitda = stockInfo?.evToEbitda
+
+              if (
+                !inRange(peRatio, filters.peRatio) ||
+                !inRange(pbRatio, filters.pbRatio) ||
+                !inRange(psRatio, filters.psRatio) ||
+                !inRange(evToEbitda, filters.evToEbitda) ||
+                !inRange(marginOfSafety, filters.marginOfSafety) ||
+                !inRange(upsidePotential, filters.upsidePotential) ||
+                !inRange(price, filters.price) ||
+                !inRange(fairValue, filters.fairValue)
+              ) return { ticker, pass: false, stockInfo }
+            }
+
+            return { ticker, pass: true, stockInfo, la }
+          } catch {
+            return { ticker, pass: false, stockInfo: stocks.find(s => s.ticker === ticker), la: null }
+          }
+        })
+      )
+
+      // 4. Add passing stocks to watchlist
+      const passing = results.filter(r => r.pass)
+      let addedCount = 0
+      let failedCount = 0
+      await Promise.allSettled(passing.map(async ({ ticker, stockInfo, la }) => {
+        try {
+          await stockApi.addToWatchlist(
+            ticker,
+            stockInfo?.companyName || ticker,
+            stockInfo?.exchange || '',
+            undefined,
+            undefined,
+            la ? {
+              recommendation: la.recommendation,
+              modelRecommendation: la.modelRecommendation,
+              aiRecommendation: la.aiRecommendation,
+              fair_value: la.fairValue ?? la.fair_value,
+              margin_of_safety_pct: la.marginOfSafety ?? la.margin_of_safety_pct,
+              upside_potential: la.upsidePotential,
+              pe_ratio: la.priceRatios?.peRatio,
+              pb_ratio: la.priceRatios?.pbRatio,
+              ps_ratio: la.priceRatios?.priceToSalesRatio,
+              ev_to_ebitda: la.priceRatios?.enterpriseValueToEBITDA,
+              current_price: la.currentPrice,
+              last_analyzed_at: la.timestamp,
+              currency: la.currency,
+            } : undefined
+          )
+          addedCount++
+        } catch {
+          failedCount++
+        }
+      }))
+
+      const skipped = tickers.length - passing.length
+      setResult({ added: addedCount, skipped, failed: failedCount })
+      setPhase('done')
+      onAdded(addedCount)
+    } catch (e: any) {
+      setErrorMsg(e?.message || 'Something went wrong')
+      setPhase('setup')
+    }
+  }
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 1000, padding: '16px',
+    }}>
+      <div style={{
+        backgroundColor: 'var(--bg-surface)', borderRadius: '12px',
+        border: '1px solid var(--border-default)', width: '100%', maxWidth: '560px',
+        maxHeight: '90vh', overflowY: 'auto',
+        boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+      }}>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--border-default)' }}>
+          <div>
+            <div style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-primary)' }}>Analyse & Add to Watchlist</div>
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>{tickers.length} stock{tickers.length !== 1 ? 's' : ''} selected</div>
+          </div>
+          {phase !== 'analysing' && phase !== 'adding' && (
+            <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '18px', cursor: 'pointer', color: 'var(--text-muted)', lineHeight: 1 }}>×</button>
+          )}
+        </div>
+
+        <div style={{ padding: '20px' }}>
+          {/* Setup phase */}
+          {(phase === 'setup') && (
+            <>
+              <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '4px' }}>
+                Set optional filters below. Only stocks that pass after analysis will be added to your watchlist.
+                Leave all filters empty to add every analysed stock.
+              </p>
+
+              <AnalysisFilterContent
+                filters={filters}
+                onChange={setFilters}
+                selectedRecs={selectedRecs}
+                onRecsChange={setSelectedRecs}
+                recFilterType={recFilterType}
+                onRecFilterTypeChange={setRecFilterType}
+              />
+
+              {errorMsg && (
+                <div style={{ padding: '10px 14px', borderRadius: '6px', backgroundColor: 'var(--status-error-bg)', color: 'var(--status-error-text)', fontSize: '13px', marginBottom: '12px' }}>
+                  {errorMsg}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '8px' }}>
+                <button onClick={onClose} style={{ padding: '8px 16px', borderRadius: '6px', border: '1px solid var(--border-input)', backgroundColor: 'var(--bg-surface)', color: 'var(--text-secondary)', fontSize: '13px', cursor: 'pointer' }}>
+                  Cancel
+                </button>
+                <button onClick={run} style={{ padding: '8px 20px', borderRadius: '6px', border: 'none', backgroundColor: '#7c3aed', color: '#fff', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>
+                  Run Analysis
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* Analysing phase */}
+          {(phase === 'analysing' || phase === 'adding') && (
+            <div style={{ textAlign: 'center', padding: '24px 0' }}>
+              <div style={{ fontSize: '32px', marginBottom: '12px' }}>
+                {phase === 'adding' ? '⚙️' : '📊'}
+              </div>
+              <div style={{ fontSize: '15px', fontWeight: '600', color: 'var(--text-primary)', marginBottom: '6px' }}>
+                {phase === 'adding' ? 'Applying filters & adding…' : 'Analysing stocks…'}
+              </div>
+              {phase === 'analysing' && (
+                <>
+                  <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px' }}>
+                    {progress.current} / {progress.total} complete
+                  </div>
+                  <div style={{ height: '6px', borderRadius: '3px', backgroundColor: 'var(--bg-hover)', overflow: 'hidden' }}>
+                    <div style={{
+                      height: '100%', borderRadius: '3px', backgroundColor: '#7c3aed',
+                      width: `${progress.total > 0 ? (progress.current / progress.total) * 100 : 0}%`,
+                      transition: 'width 0.4s ease',
+                    }} />
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Done phase */}
+          {phase === 'done' && result && (
+            <div style={{ textAlign: 'center', padding: '24px 0' }}>
+              <div style={{ fontSize: '32px', marginBottom: '12px' }}>✓</div>
+              <div style={{ fontSize: '15px', fontWeight: '600', color: 'var(--text-primary)', marginBottom: '16px' }}>Done!</div>
+              <div style={{ display: 'flex', justifyContent: 'center', gap: '24px', marginBottom: '24px' }}>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '28px', fontWeight: '700', color: '#10b981' }}>{result.added}</div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Added</div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '28px', fontWeight: '700', color: 'var(--text-muted)' }}>{result.skipped}</div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Filtered out</div>
+                </div>
+                {result.failed > 0 && (
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '28px', fontWeight: '700', color: '#ef4444' }}>{result.failed}</div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Failed to add</div>
+                  </div>
+                )}
+              </div>
+              <button onClick={onClose} style={{ padding: '8px 24px', borderRadius: '6px', border: 'none', backgroundColor: '#7c3aed', color: '#fff', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>
+                Close
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
 
 type SortField = keyof ExploreStock | null
 type SortDir = 'asc' | 'desc'
@@ -156,6 +438,9 @@ export default function ExplorePage() {
   const [selectedTickers, setSelectedTickers] = useState<Set<string>>(new Set())
   const [bulkLoading, setBulkLoading] = useState(false)
   const selectAllRef = useRef<HTMLInputElement>(null)
+  const [analyseModalOpen, setAnalyseModalOpen] = useState(false)
+  const [showLocal, setShowLocal] = useState(false)
+  const { preferredCurrency, prefetchRates } = useCurrency()
 
   // Derived: ordered continent list + markets per continent
   const continents = useMemo(() => {
@@ -222,6 +507,12 @@ export default function ExplorePage() {
   useEffect(() => {
     loadStocks(selectedMarket)
   }, [selectedMarket, loadStocks])
+
+  useEffect(() => {
+    if (stocks.length > 0) {
+      prefetchRates(stocks.map(s => s.currency || inferCurrencyFromTicker(s.ticker, s.exchange) || 'USD'), preferredCurrency)
+    }
+  }, [stocks, preferredCurrency, prefetchRates])
 
   // Sorting
   const handleSort = (field: SortField) => {
@@ -596,6 +887,24 @@ export default function ExplorePage() {
                     {bulkLoading ? '…' : '+ Add to Watchlist'}
                   </button>
                 )}
+                <button
+                  onClick={() => setAnalyseModalOpen(true)}
+                  disabled={bulkLoading}
+                  style={{
+                    padding: '5px 14px',
+                    borderRadius: '6px',
+                    border: '1px solid #7c3aed',
+                    backgroundColor: '#7c3aed',
+                    color: '#fff',
+                    fontSize: '13px',
+                    fontWeight: '500',
+                    cursor: bulkLoading ? 'not-allowed' : 'pointer',
+                    opacity: bulkLoading ? 0.6 : 1,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  📊 Analyse & Add to Watchlist
+                </button>
                 {canRemove && (
                   <button
                     onClick={handleBulkRemove}
@@ -636,6 +945,22 @@ export default function ExplorePage() {
             </button>
           </div>
         </div>
+      )}
+
+      {/* Analyse & Add to Watchlist modal */}
+      {analyseModalOpen && (
+        <AnalyseAndAddModal
+          tickers={[...selectedTickers]}
+          stocks={stocks}
+          onClose={() => setAnalyseModalOpen(false)}
+          onAdded={(count) => {
+            if (count > 0) {
+              setWatchlistTickers(prev => new Set([...prev, ...[...selectedTickers]]))
+              setSelectedTickers(new Set())
+              showToast(`${count} stock${count !== 1 ? 's' : ''} added to watchlist`)
+            }
+          }}
+        />
       )}
 
       {/* Toast notification */}
@@ -680,6 +1005,29 @@ export default function ExplorePage() {
           {sectorFilter !== 'All' ? ` in ${sectorFilter}` : ''}
         </p>
       )}
+
+      {/* Currency toggle — above table, aligned right */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
+        <div style={{ display: 'flex', gap: '0', borderRadius: '6px', border: '1px solid var(--border-input)', overflow: 'hidden' }}>
+          {([false, true] as const).map(local => (
+            <button
+              key={String(local)}
+              onClick={() => setShowLocal(local)}
+              style={{
+                padding: '6px 12px',
+                border: 'none',
+                fontSize: '13px',
+                fontWeight: showLocal === local ? '600' : '400',
+                cursor: 'pointer',
+                backgroundColor: showLocal === local ? 'var(--color-primary)' : 'var(--bg-surface)',
+                color: showLocal === local ? 'white' : 'var(--text-muted)',
+              }}
+            >
+              {local ? 'Local' : preferredCurrency}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {/* Table */}
       <div style={{
@@ -761,6 +1109,7 @@ export default function ExplorePage() {
                     selected={selectedTickers.has(stock.ticker)}
                     onToggle={handleToggleSelect}
                     onWatchlist={watchlistTickers.has(stock.ticker.toUpperCase())}
+                    showLocal={showLocal}
                   />
                 ))}
             {!loading && !error && displayStocks.length === 0 && (
@@ -801,11 +1150,19 @@ interface StockRowProps {
   selected: boolean
   onToggle: (ticker: string) => void
   onWatchlist: boolean
+  showLocal: boolean
 }
 
-function StockRow({ stock, idx, selected, onToggle, onWatchlist }: StockRowProps) {
+function StockRow({ stock, idx, selected, onToggle, onWatchlist, showLocal }: StockRowProps) {
   const changePositive = (stock.priceChangePct ?? 0) >= 0
-  const currency = stock.currency || 'USD'
+  const currency = stock.currency || inferCurrencyFromTicker(stock.ticker, stock.exchange) || 'USD'
+  const { preferredCurrency, convert } = useCurrency()
+  const fmtStockPrice = (v: number | null | undefined) => {
+    if (v == null) return '-'
+    if (showLocal) return formatPrice(v, currency)
+    const converted = convert(v, currency)
+    return converted != null ? formatPrice(converted, preferredCurrency) : formatPrice(v, currency)
+  }
   const checkboxCellRef = useRef<HTMLTableCellElement>(null)
   const symbolCellRef = useRef<HTMLTableCellElement>(null)
 
@@ -915,7 +1272,7 @@ function StockRow({ stock, idx, selected, onToggle, onWatchlist }: StockRowProps
       {/* Price */}
       {cell(
         <span style={{ fontWeight: '500', fontFamily: 'monospace' }}>
-          {stock.price != null ? formatPrice(stock.price, currency) : '-'}
+          {fmtStockPrice(stock.price)}
         </span>
       )}
 
@@ -963,7 +1320,7 @@ function StockRow({ stock, idx, selected, onToggle, onWatchlist }: StockRowProps
       {/* EPS */}
       {cell(
         stock.eps != null
-          ? <span style={{ fontFamily: 'monospace' }}>{formatPrice(stock.eps, currency)}</span>
+          ? <span style={{ fontFamily: 'monospace' }}>{fmtStockPrice(stock.eps)}</span>
           : '-'
       )}
 
@@ -982,14 +1339,14 @@ function StockRow({ stock, idx, selected, onToggle, onWatchlist }: StockRowProps
       {/* 52W High */}
       {cell(
         stock.week52High != null
-          ? <span style={{ fontFamily: 'monospace', fontSize: '12px' }}>{formatPrice(stock.week52High, currency)}</span>
+          ? <span style={{ fontFamily: 'monospace', fontSize: '12px' }}>{fmtStockPrice(stock.week52High)}</span>
           : '-'
       )}
 
       {/* 52W Low */}
       {cell(
         stock.week52Low != null
-          ? <span style={{ fontFamily: 'monospace', fontSize: '12px' }}>{formatPrice(stock.week52Low, currency)}</span>
+          ? <span style={{ fontFamily: 'monospace', fontSize: '12px' }}>{fmtStockPrice(stock.week52Low)}</span>
           : '-'
       )}
 

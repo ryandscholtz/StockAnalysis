@@ -6,9 +6,11 @@ import { formatPrice } from '@/lib/currency'
 
 interface AnalysisCardProps {
   analysis: StockAnalysis
+  fmtPrice?: (amount: number | null | undefined) => string
 }
 
-export default function AnalysisCard({ analysis }: AnalysisCardProps) {
+export default function AnalysisCard({ analysis, fmtPrice }: AnalysisCardProps) {
+  const fmt = fmtPrice ?? ((v: number | null | undefined) => formatPrice(v, analysis.currency))
   const [showMultiplier, setShowMultiplier] = useState(true)
 
   const getRecommendationClass = (rec: string) => {
@@ -37,7 +39,7 @@ export default function AnalysisCard({ analysis }: AnalysisCardProps) {
         <span className="metric-label">Fair Value Per Share</span>
         <span className="metric-value" style={{ color: analysis.fairValue && analysis.fairValue > 0 ? (analysis.marginOfSafety && analysis.marginOfSafety > 0 ? '#059669' : '#dc2626') : '#6b7280', fontSize: '28px' }}>
           {analysis.fairValue && analysis.fairValue > 0
-            ? formatPrice(analysis.fairValue, analysis.currency)
+            ? fmt(analysis.fairValue)
             : 'Not available'}
         </span>
         {(!analysis.fairValue || analysis.fairValue === 0) && (
@@ -52,7 +54,7 @@ export default function AnalysisCard({ analysis }: AnalysisCardProps) {
         <div className="metric">
           <span className="metric-label">Current Price Per Share</span>
           <span className="metric-value">
-            {formatPrice(analysis.currentPrice, analysis.currency)}
+            {fmt(analysis.currentPrice)}
           </span>
         </div>
       )}

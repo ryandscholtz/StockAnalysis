@@ -743,7 +743,22 @@ export const stockApi = {
     companyName?: string,
     exchange?: string,
     notes?: string,
-    privateOptions?: { companyType?: string; pricePerShare?: number; sector?: string; currency?: string }
+    privateOptions?: { companyType?: string; pricePerShare?: number; sector?: string; currency?: string },
+    analysisData?: {
+      recommendation?: string | null
+      modelRecommendation?: string | null
+      aiRecommendation?: string | null
+      fair_value?: number | null
+      margin_of_safety_pct?: number | null
+      upside_potential?: number | null
+      pe_ratio?: number | null
+      pb_ratio?: number | null
+      ps_ratio?: number | null
+      ev_to_ebitda?: number | null
+      current_price?: number | null
+      last_analyzed_at?: string | null
+      currency?: string | null
+    }
   ): Promise<{ success: boolean; message: string }> {
     console.log('=== API addToWatchlist DEBUG ===')
     console.log('Input params:', { ticker, companyName, exchange, notes, privateOptions })
@@ -764,6 +779,16 @@ export const stockApi = {
         if (privateOptions.pricePerShare != null) body.pricePerShare = privateOptions.pricePerShare
         if (privateOptions.sector) body.sector = privateOptions.sector
         if (privateOptions.currency) body.currency = privateOptions.currency
+      }
+      if (analysisData) {
+        const fields = ['recommendation', 'modelRecommendation', 'aiRecommendation',
+          'fair_value', 'margin_of_safety_pct', 'upside_potential',
+          'pe_ratio', 'pb_ratio', 'ps_ratio', 'ev_to_ebitda', 'current_price', 'last_analyzed_at',
+          'currency'] as const
+        for (const key of fields) {
+          const val = (analysisData as Record<string, unknown>)[key]
+          if (val != null) body[key] = val
+        }
       }
 
       console.log('Trying API POST request...')

@@ -8,6 +8,7 @@ interface ValuationChartProps {
   availablePresets?: string[]
   currentPreset?: string | null
   onPresetChange?: (preset: string) => void
+  fmtPrice?: (amount: number | null | undefined) => string
 }
 
 const MODEL_COLORS = {
@@ -25,7 +26,9 @@ export default function ValuationChart({
   availablePresets,
   currentPreset,
   onPresetChange,
+  fmtPrice,
 }: ValuationChartProps) {
+  const fmt = fmtPrice ?? ((v: number | null | undefined) => formatPrice(v, analysis.currency))
   const currentPrice = (analysis.currentPrice && Math.abs(analysis.currentPrice - 1.0) > 0.01)
     ? analysis.currentPrice
     : 0
@@ -79,7 +82,7 @@ export default function ValuationChart({
             )}
           </span>
           <span style={{ fontSize: '14px', color: isValidNumber ? '#6b7280' : '#9ca3af' }}>
-            {formatPrice(value, analysis.currency)}
+            {fmt(value)}
           </span>
         </div>
         <div style={{ width: '100%', height: '24px', background: '#e5e7eb', borderRadius: '4px', overflow: 'hidden' }}>
@@ -107,7 +110,7 @@ export default function ValuationChart({
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
           <span style={{ fontSize: '14px', fontWeight: '600' }}>Fair Value (Weighted)</span>
           <span style={{ fontSize: '14px', color: fairValue ? '#6b7280' : '#9ca3af' }}>
-            {formatPrice(fairValue ?? null, analysis.currency)}
+            {fmt(fairValue ?? null)}
           </span>
         </div>
         <div style={{ width: '100%', height: '24px', background: '#e5e7eb', borderRadius: '4px', overflow: 'hidden' }}>
@@ -120,7 +123,7 @@ export default function ValuationChart({
                 <div
                   key={seg.key}
                   style={{ width: `${segPct}%`, height: '100%', background: seg.color, flexShrink: 0 }}
-                  title={`${formatPreset(seg.key)}: ${formatPrice(contribution, analysis.currency)} (${(seg.weight * 100).toFixed(0)}% weight)`}
+                  title={`${formatPreset(seg.key)}: ${fmt(contribution)} (${(seg.weight * 100).toFixed(0)}% weight)`}
                 />
               )
             })}

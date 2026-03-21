@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { stockApi, WatchlistItemDetail, QuoteResponse } from '@/lib/api'
 import { StockAnalysis } from '@/types/analysis'
-import { formatPrice } from '@/lib/currency'
+import { formatPrice, inferCurrencyFromTicker } from '@/lib/currency'
+import { useCurrency } from '@/lib/useCurrency'
 import AnalysisCard from '@/components/AnalysisCard'
 import ValuationStatus from '@/components/ValuationStatus'
 import ValuationChart from '@/components/ValuationChart'
@@ -46,6 +47,8 @@ export default function TickerPage() {
   const [showManualEntry, setShowManualEntry] = useState(false)
   const [showPDFUpload, setShowPDFUpload] = useState(false)
   const [marketQuote, setMarketQuote] = useState<QuoteResponse | null>(null)
+  const [showLocal, setShowLocal] = useState(true)
+  const { preferredCurrency, convert, prefetchRates } = useCurrency()
 
   // Private company URL params (set by watchlist navigation)
   const privatePrice = searchParams.get('price') ? parseFloat(searchParams.get('price')!) : undefined
@@ -93,6 +96,18 @@ export default function TickerPage() {
       document.removeEventListener('mousedown', handleClickOutside)
     }
   }, [showModelDropdown])
+
+  // Pre-fetch FX rate for the ticker's local currency
+  // Compute displayCurrency inline here (same logic as below) so this hook stays before conditional returns
+  useEffect(() => {
+    const storedCcy = watchlistData?.watchlist_item?.currency
+    const localCcy = ticker.startsWith('PRIVATE#')
+      ? (searchParams.get('currency') || storedCcy || analysis?.currency)
+      : (analysis?.currency || storedCcy || inferCurrencyFromTicker(ticker, marketQuote?.exchange))
+    if (localCcy) {
+      prefetchRates([localCcy], preferredCurrency)
+    }
+  }, [watchlistData, analysis, ticker, marketQuote, preferredCurrency, prefetchRates, searchParams])
 
   const fetchAvailableModels = async () => {
     // P/E weight is implicit: pe = 1 - dcf - epv - asset
@@ -483,7 +498,17 @@ export default function TickerPage() {
   const storedWatchlistCurrency = watchlistData?.watchlist_item?.currency
   const displayCurrency = isPrivateCompany
     ? (privateCurrency || storedWatchlistCurrency || analysis?.currency)
-    : (analysis?.currency || storedWatchlistCurrency)
+    : (analysis?.currency || storedWatchlistCurrency || inferCurrencyFromTicker(ticker, marketQuote?.exchange))
+
+  // Formatter for analysis monetary values — converts from analysis.currency to the active display currency
+  const analysisCurrency = analysis?.currency || displayCurrency || 'USD'
+  const targetCurrency = showLocal ? analysisCurrency : (preferredCurrency || analysisCurrency)
+  const fmtAnalysisPrice = (amount: number | null | undefined): string => {
+    if (amount == null || isNaN(amount as number) || !isFinite(amount as number)) return '-'
+    if (analysisCurrency === targetCurrency) return formatPrice(amount, targetCurrency)
+    const converted = convert(amount, analysisCurrency, targetCurrency)
+    return converted != null ? formatPrice(converted, targetCurrency) : formatPrice(amount, analysisCurrency)
+  }
 
   // Worst-of recommendation for the header badge (most cautious of model vs AI)
   const recSeverity = (rec?: string | null): number => {
@@ -545,11 +570,47 @@ export default function TickerPage() {
             </div>
             {currentPrice ? (
               <div>
-                <p style={{ fontSize: '20px', color: '#6b7280', margin: 0 }}>
-                  {isPrivateCompany ? 'Stored Price' : 'Current Price'}: {formatPrice(currentPrice, displayCurrency)}
-                  {displayCurrency && displayCurrency !== 'USD' && (
-                    <span style={{ fontSize: '14px', marginLeft: '8px', color: '#9ca3af' }}>
-                      ({displayCurrency})
+                <p style={{ fontSize: '20px', color: '#6b7280', margin: 0, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                  <span>
+                    {isPrivateCompany ? 'Stored Price' : 'Current Price'}:{' '}
+                    {(() => {
+                      if (showLocal || !displayCurrency) return formatPrice(currentPrice, displayCurrency)
+                      const converted = convert(currentPrice, displayCurrency)
+                      // Fall back to local price while rate is loading
+                      return converted != null
+                        ? formatPrice(converted, preferredCurrency)
+                        : formatPrice(currentPrice, displayCurrency)
+                    })()}
+                  </span>
+                  {/* Currency toggle — only show when local ≠ preferred */}
+                  {displayCurrency && displayCurrency.toUpperCase() !== preferredCurrency.toUpperCase() && (
+                    <span style={{ display: 'inline-flex', borderRadius: '6px', border: '1px solid var(--border-input)', overflow: 'hidden', fontSize: '12px' }}>
+                      {([true, false] as const).map(local => (
+                        <button
+                          key={String(local)}
+                          onClick={() => setShowLocal(local)}
+                          style={{
+                            padding: '3px 10px',
+                            border: 'none',
+                            cursor: 'pointer',
+                            fontWeight: showLocal === local ? '600' : '400',
+                            backgroundColor: showLocal === local ? 'var(--color-primary)' : 'var(--bg-hover)',
+                            color: showLocal === local ? 'white' : 'var(--text-muted)',
+                          }}
+                        >
+                          {local ? displayCurrency : preferredCurrency}
+                        </button>
+                      ))}
+                    </span>
+                  )}
+                  {marketQuote?.exchange && (
+                    <span style={{ fontSize: '14px', color: '#9ca3af' }}>
+                      · {marketQuote.exchange}
+                    </span>
+                  )}
+                  {marketQuote?.sector && (
+                    <span style={{ fontSize: '14px', color: '#9ca3af' }}>
+                      · {marketQuote.sector}
                     </span>
                   )}
                 </p>
@@ -770,7 +831,7 @@ export default function TickerPage() {
           )}
 
           {/* Analysis Components */}
-          <AnalysisCard analysis={analysis} />
+          <AnalysisCard analysis={analysis} fmtPrice={fmtAnalysisPrice} />
 
           {/* Other Metrics — live market data, positioned just below Key Metrics */}
           {marketQuote && (() => {
@@ -873,6 +934,7 @@ export default function TickerPage() {
             availablePresets={availableModels}
             currentPreset={businessType}
             onPresetChange={handleModelChange}
+            fmtPrice={fmtAnalysisPrice}
           />
 
           {/* Stored financial data — below valuation breakdown */}

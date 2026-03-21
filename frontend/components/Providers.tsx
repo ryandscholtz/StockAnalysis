@@ -2,6 +2,7 @@
 
 import React from 'react'
 import { ErrorBoundary } from './ErrorBoundary'
+import { CurrencyProvider } from '@/lib/useCurrency'
 
 interface ProvidersProps {
   children: React.ReactNode
@@ -10,7 +11,9 @@ interface ProvidersProps {
 export function Providers({ children }: ProvidersProps) {
   return (
     <ErrorBoundary>
-      {children}
+      <CurrencyProvider>
+        {children}
+      </CurrencyProvider>
     </ErrorBoundary>
   )
 }

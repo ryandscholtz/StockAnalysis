@@ -4,13 +4,16 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAuth } from './AuthProvider'
 import { useState, useEffect } from 'react'
+import { useCurrency, COMMON_CURRENCIES } from '@/lib/useCurrency'
 
 const MOBILE_BREAKPOINT = 640
 
 export default function Navigation() {
   const pathname = usePathname()
   const { isAuthenticated, user, signOut } = useAuth()
+  const { preferredCurrency, setPreferredCurrency } = useCurrency()
   const [showUserMenu, setShowUserMenu] = useState(false)
+  const [showCurrencyPicker, setShowCurrencyPicker] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
 
@@ -252,7 +255,80 @@ export default function Navigation() {
                     >
                       Profile Settings
                     </Link>
-                    
+
+                    {/* Currency selector */}
+                    <div style={{ borderTop: '1px solid var(--border-default)', margin: '4px 0', paddingTop: '4px' }}>
+                      <div style={{ padding: '4px 16px 6px', fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: '600' }}>
+                        Display Currency
+                      </div>
+                      {showCurrencyPicker ? (
+                        <div style={{ padding: '0 8px 8px' }}>
+                          <div style={{
+                            maxHeight: '180px',
+                            overflowY: 'auto',
+                            border: '1px solid var(--border-input)',
+                            borderRadius: '4px',
+                          }}>
+                            {COMMON_CURRENCIES.map(c => (
+                              <button
+                                key={c.code}
+                                onClick={() => { setPreferredCurrency(c.code); setShowCurrencyPicker(false) }}
+                                style={{
+                                  display: 'block',
+                                  width: '100%',
+                                  padding: '6px 10px',
+                                  fontSize: '13px',
+                                  textAlign: 'left',
+                                  background: c.code === preferredCurrency ? 'var(--color-primary-bg)' : 'transparent',
+                                  color: c.code === preferredCurrency ? 'var(--color-primary)' : 'var(--text-secondary)',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  fontWeight: c.code === preferredCurrency ? '600' : '400',
+                                }}
+                              >
+                                {c.code} — {c.label}
+                              </button>
+                            ))}
+                          </div>
+                          <button
+                            onClick={() => setShowCurrencyPicker(false)}
+                            style={{ display: 'block', width: '100%', marginTop: '4px', padding: '4px', fontSize: '12px', color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setShowCurrencyPicker(true)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            width: '100%',
+                            padding: '8px 16px',
+                            fontSize: '14px',
+                            color: 'var(--text-secondary)',
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            textAlign: 'left',
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-hover)' }}
+                          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent' }}
+                        >
+                          <span>My Currency</span>
+                          <span style={{
+                            fontSize: '12px',
+                            fontWeight: '600',
+                            color: 'var(--color-primary)',
+                            backgroundColor: 'var(--color-primary-bg)',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                          }}>{preferredCurrency}</span>
+                        </button>
+                      )}
+                    </div>
+
                     <button
                       onClick={handleSignOut}
                       style={{
@@ -404,6 +480,32 @@ export default function Navigation() {
               >
                 Profile Settings
               </Link>
+              {/* Mobile currency selector */}
+              <div style={{ padding: '4px 16px 8px', borderTop: '1px solid var(--border-default)', marginTop: '4px' }}>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: '600', marginBottom: '8px', marginTop: '8px' }}>
+                  Display Currency
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                  {COMMON_CURRENCIES.slice(0, 8).map(c => (
+                    <button
+                      key={c.code}
+                      onClick={() => setPreferredCurrency(c.code)}
+                      style={{
+                        padding: '4px 10px',
+                        fontSize: '13px',
+                        borderRadius: '4px',
+                        border: '1px solid var(--border-input)',
+                        background: c.code === preferredCurrency ? 'var(--color-primary)' : 'var(--bg-hover)',
+                        color: c.code === preferredCurrency ? 'white' : 'var(--text-secondary)',
+                        cursor: 'pointer',
+                        fontWeight: c.code === preferredCurrency ? '600' : '400',
+                      }}
+                    >
+                      {c.code}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={() => { handleSignOut(); setMenuOpen(false) }}
