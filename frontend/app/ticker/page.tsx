@@ -496,9 +496,12 @@ export default function TickerPage() {
   // For private companies: the URL-supplied or watchlist-stored currency is authoritative.
   // Analysis may have stored 'USD' as a default before private params were wired through.
   const storedWatchlistCurrency = watchlistData?.watchlist_item?.currency
+  // Inferred currency from ticker suffix/exchange (e.g. .L → GBP, LSE → GBP) takes priority over
+  // analysis.currency which may have been stored as 'USD' before currency tracking was wired in.
+  const inferredCurrency = inferCurrencyFromTicker(ticker, marketQuote?.exchange)
   const displayCurrency = isPrivateCompany
     ? (privateCurrency || storedWatchlistCurrency || analysis?.currency)
-    : (analysis?.currency || storedWatchlistCurrency || inferCurrencyFromTicker(ticker, marketQuote?.exchange))
+    : (inferredCurrency || storedWatchlistCurrency || analysis?.currency)
 
   // Formatter for analysis monetary values — converts from analysis.currency to the active display currency
   const analysisCurrency = analysis?.currency || displayCurrency || 'USD'
