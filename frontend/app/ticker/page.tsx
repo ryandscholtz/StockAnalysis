@@ -803,7 +803,7 @@ export default function TickerPage() {
 
           {/* Other Metrics — live market data, positioned just below Key Metrics */}
           {marketQuote && (() => {
-            const currency = marketQuote.currency || analysis.currency || 'USD'
+            const currency = displayCurrency || marketQuote.currency || 'USD'
             const fmtPrice = (v?: number | null) =>
               v != null ? formatPrice(v, currency) : '—'
             const fmtNum = (v?: number | null, decimals = 2) =>
