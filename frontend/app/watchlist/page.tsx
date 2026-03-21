@@ -492,28 +492,6 @@ export default function WatchlistPage() {
             </button>
           </div>
             </div>
-            {/* Currency toggle — far right, below action buttons */}
-            <div style={{ display: 'flex', gap: '4px', background: 'var(--bg-hover)', borderRadius: '8px', padding: '3px' }}>
-              {([false, true] as const).map(local => (
-                <button
-                  key={String(local)}
-                  onClick={() => setShowLocal(local)}
-                  style={{
-                    padding: '4px 12px',
-                    borderRadius: '6px',
-                    border: 'none',
-                    fontSize: '13px',
-                    fontWeight: '500',
-                    cursor: 'pointer',
-                    backgroundColor: showLocal === local ? 'var(--bg-surface)' : 'transparent',
-                    color: showLocal === local ? 'var(--text-primary)' : 'var(--text-muted)',
-                    boxShadow: showLocal === local ? '0 1px 3px rgba(0,0,0,0.15)' : 'none',
-                  }}
-                >
-                  {local ? 'Local' : preferredCurrency}
-                </button>
-              ))}
-            </div>
           </div>
         </div>
 
@@ -538,6 +516,28 @@ export default function WatchlistPage() {
                 🗑 Remove {selectedTickers.size}
               </button>
             )}
+            {/* Currency toggle — far right, aligned with Select all */}
+            <div style={{ display: 'flex', gap: '4px', background: 'var(--bg-hover)', borderRadius: '8px', padding: '3px', marginLeft: 'auto' }}>
+              {([false, true] as const).map(local => (
+                <button
+                  key={String(local)}
+                  onClick={() => setShowLocal(local)}
+                  style={{
+                    padding: '4px 12px',
+                    borderRadius: '6px',
+                    border: 'none',
+                    fontSize: '13px',
+                    fontWeight: '500',
+                    cursor: 'pointer',
+                    backgroundColor: showLocal === local ? 'var(--bg-surface)' : 'transparent',
+                    color: showLocal === local ? 'var(--text-primary)' : 'var(--text-muted)',
+                    boxShadow: showLocal === local ? '0 1px 3px rgba(0,0,0,0.15)' : 'none',
+                  }}
+                >
+                  {local ? 'Local' : preferredCurrency}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
