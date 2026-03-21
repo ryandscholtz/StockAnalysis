@@ -10,16 +10,7 @@ export default function FinancialHealth({ analysis }: FinancialHealthProps) {
   // Handle both full analysis and simplified watchlist data
   const financialHealth = analysis.financialHealth
   
-  if (!financialHealth) {
-    return (
-      <div className="card">
-        <h3 className="card-title">Financial Health</h3>
-        <p style={{ color: '#6b7280', fontStyle: 'italic' }}>
-          Financial health data not available
-        </p>
-      </div>
-    )
-  }
+  if (!financialHealth) return null
 
   const score = financialHealth.score || 0
   const metrics = financialHealth.metrics || {}

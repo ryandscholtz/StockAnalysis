@@ -10,16 +10,7 @@ export default function BusinessQuality({ analysis }: BusinessQualityProps) {
   // Handle both full analysis and simplified watchlist data
   const businessQuality = analysis.businessQuality
   
-  if (!businessQuality) {
-    return (
-      <div className="card">
-        <h3 className="card-title">Business Quality</h3>
-        <p style={{ color: '#6b7280', fontStyle: 'italic' }}>
-          Business quality data not available
-        </p>
-      </div>
-    )
-  }
+  if (!businessQuality) return null
 
   const score = businessQuality.score || 0
   const moats = businessQuality.moatIndicators || []
