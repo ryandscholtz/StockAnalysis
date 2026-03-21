@@ -328,124 +328,77 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* AI & Machine Learning Section */}
+      {/* AI Section */}
       <section style={{ marginBottom: '60px' }}>
         <h2 style={{ fontSize: '28px', fontWeight: '600', marginBottom: '24px', color: 'var(--text-primary)', borderBottom: '2px solid var(--border-default)', paddingBottom: '8px' }}>
-          AI & Machine Learning
+          AI Analyst
         </h2>
         <p style={{ fontSize: '16px', lineHeight: '1.7', color: 'var(--text-secondary)', marginBottom: '24px' }}>
-          Claude (Anthropic's large language model, accessed via AWS Bedrock) is used at three distinct points in
-          every analysis. It acts as a reasoning layer — not a replacement for quantitative models — handling tasks
-          where structured rules alone fall short.
+          An AI analyst runs alongside the quantitative models at four points in every analysis. It acts as a reasoning
+          layer — not a replacement for the numbers — handling tasks where rules alone fall short.
         </p>
 
         <div style={{ marginBottom: '32px' }}>
           <h3 style={{ fontSize: '22px', fontWeight: '600', color: 'var(--text-primary)', marginBottom: '12px' }}>
-            1. Automatic Preset Selection
+            1. Chooses the right valuation approach
           </h3>
-          <p style={{ fontSize: '16px', lineHeight: '1.7', color: 'var(--text-secondary)', marginBottom: '12px' }}>
-            When you run an analysis with the preset set to "Automatic", Claude reads the company's name, sector,
-            and industry and selects the most appropriate valuation preset from the 15 available options. A bank
-            should not be valued the same way as a SaaS company — the AI handles this classification step so the
-            right weighting is applied without manual intervention.
-          </p>
           <p style={{ fontSize: '16px', lineHeight: '1.7', color: 'var(--text-secondary)' }}>
-            You can always override the selection by opening the weights panel and choosing a different preset or
-            configuring custom weights manually.
+            When the preset is set to "Automatic", the AI reads the company's sector and business model and selects
+            the most appropriate weighting from the 15 available presets. A bank should not be valued the same way
+            as a software company — this step ensures the right approach is applied without you having to configure it.
+            You can always override the selection manually.
           </p>
         </div>
 
         <div style={{ marginBottom: '32px' }}>
           <h3 style={{ fontSize: '22px', fontWeight: '600', color: 'var(--text-primary)', marginBottom: '12px' }}>
-            2. Financial Data Retrieval (Fallback)
+            2. Fills in missing financial data
           </h3>
           <p style={{ fontSize: '16px', lineHeight: '1.7', color: 'var(--text-secondary)', marginBottom: '12px' }}>
-            The primary data pipeline pulls financial statements from Yahoo Finance, SEC EDGAR, and other market
-            data providers. When these sources are unavailable, incomplete, or the ticker is not listed on a major
-            US exchange, Claude is used as a fallback to supply the missing financial data — income statement,
-            balance sheet, cash flow statement, and key metrics — from its training knowledge.
-          </p>
-          <p style={{ fontSize: '16px', lineHeight: '1.7', color: 'var(--text-secondary)', marginBottom: '12px' }}>
-            AI-sourced data is clearly labelled in the "Stored Financial Data" panel so you can see which sections
-            came from structured feeds versus the model. Any data retrieved this way is also cached to DynamoDB so
-            subsequent analyses for the same ticker avoid the round-trip.
+            When financial statements cannot be retrieved automatically — for smaller companies, international listings,
+            or private businesses — the AI supplies the missing figures from its knowledge so the analysis can still run.
+            Any data sourced this way is clearly flagged in the interface.
           </p>
           <div style={{ backgroundColor: 'var(--status-warning-bg)', padding: '16px', borderRadius: '8px', borderLeft: '4px solid #f59e0b' }}>
             <p style={{ fontSize: '14px', lineHeight: '1.6', color: 'var(--status-warning-text)', margin: 0 }}>
-              <strong>Note:</strong> AI-sourced financials reflect the model's training data and may not match the
-              latest reported figures. Where AI data is used, the analysis flags this. For greater accuracy,
-              upload the company's PDF annual report to override specific fields with the source data.
+              <strong>Note:</strong> AI-supplied figures may not reflect the latest reported numbers. For the highest
+              accuracy, upload the company's PDF annual report to replace AI-sourced data with the actual source.
             </p>
           </div>
         </div>
 
         <div style={{ marginBottom: '32px' }}>
           <h3 style={{ fontSize: '22px', fontWeight: '600', color: 'var(--text-primary)', marginBottom: '12px' }}>
-            3. Investment Commentary
+            3. Writes the investment commentary
           </h3>
           <p style={{ fontSize: '16px', lineHeight: '1.7', color: 'var(--text-secondary)', marginBottom: '12px' }}>
-            Once the quantitative models have run and a fair value estimate is calculated, Claude generates a
-            short plain-language commentary covering three things:
+            After the models calculate a fair value, the AI writes a short plain-language summary covering:
           </p>
-          <ul style={{ fontSize: '16px', lineHeight: '1.7', color: 'var(--text-secondary)', paddingLeft: '24px', marginBottom: '12px' }}>
-            <li><strong>Price context:</strong> What sector trends, business model characteristics, and recent financial performance explain the current market price</li>
-            <li><strong>Valuation opinion:</strong> Whether the stock appears cheap or expensive relative to the model's fair value estimate and margin of safety</li>
-            <li><strong>Recommendation with risks:</strong> A clear buy / hold / avoid opinion with one or two key risks the investor should monitor</li>
+          <ul style={{ fontSize: '16px', lineHeight: '1.7', color: 'var(--text-secondary)', paddingLeft: '24px' }}>
+            <li><strong>Price context:</strong> Why the stock is priced where it is</li>
+            <li><strong>Valuation opinion:</strong> Whether it looks cheap or expensive relative to the fair value estimate</li>
+            <li><strong>Key risks:</strong> One or two things to watch before acting</li>
           </ul>
-          <p style={{ fontSize: '16px', lineHeight: '1.7', color: 'var(--text-secondary)' }}>
-            The commentary is grounded in the quantitative outputs — the AI is given the fair value, margin of safety,
-            key financial ratios, and the selected preset — so its opinion stays consistent with the model's findings
-            rather than forming an independent view.
-          </p>
         </div>
 
         <div style={{ marginBottom: '32px' }}>
           <h3 style={{ fontSize: '22px', fontWeight: '600', color: 'var(--text-primary)', marginBottom: '12px' }}>
-            4. Independent Confirmation of the Analysis
+            4. Issues an independent verdict
           </h3>
           <p style={{ fontSize: '16px', lineHeight: '1.7', color: 'var(--text-secondary)', marginBottom: '12px' }}>
-            After the quantitative verdict is reached, Claude independently reviews the full analysis — the fair value
-            estimate, margin of safety, financial ratios, and business context — and issues its own standalone
-            recommendation: <strong>Buy</strong>, <strong>Hold</strong>, or <strong>Avoid</strong>. This is separate from
-            the commentary step and is designed to act as a second opinion on the model's conclusion.
-          </p>
-          <p style={{ fontSize: '16px', lineHeight: '1.7', color: 'var(--text-secondary)', marginBottom: '12px' }}>
-            The two verdicts — quantitative model and AI analyst — are then compared:
+            Separately from the commentary, the AI issues its own <strong>Buy</strong>, <strong>Hold</strong>, or{' '}
+            <strong>Avoid</strong> verdict — a second opinion on the quantitative model's conclusion. The two are then compared:
           </p>
           <ul style={{ fontSize: '16px', lineHeight: '1.7', color: 'var(--text-secondary)', paddingLeft: '24px', marginBottom: '12px' }}>
-            <li><strong>Agreement:</strong> The overall recommendation reflects the shared verdict, with higher confidence</li>
-            <li><strong>Conflict:</strong> If the model and AI point in opposite directions (e.g. model says Buy, AI says Avoid), the overall recommendation is shown as <strong>AI Conflict</strong> — a deliberate signal to pause and review the commentary carefully before acting</li>
+            <li><strong>Agreement:</strong> The overall recommendation reflects the shared verdict</li>
+            <li><strong>Conflict:</strong> If the model and AI disagree, the result is shown as <strong>AI Conflict</strong> — a signal to read the commentary carefully before acting</li>
           </ul>
           <div style={{ backgroundColor: 'var(--status-warning-bg)', padding: '16px', borderRadius: '8px', borderLeft: '4px solid #f59e0b' }}>
             <p style={{ fontSize: '14px', lineHeight: '1.6', color: 'var(--status-warning-text)', margin: 0 }}>
-              <strong>AI Conflict:</strong> This status does not mean one side is right and the other wrong. It means
-              the quantitative and qualitative signals diverge and warrant closer scrutiny — for example, a stock that
-              looks cheap on numbers alone but faces a structural business risk the model cannot price in.
+              <strong>AI Conflict</strong> doesn't mean one side is wrong — it means the numbers and the qualitative
+              picture diverge, and the situation warrants closer scrutiny before making a decision.
             </p>
           </div>
-        </div>
-      </section>
-
-      {/* Data Sources Section */}
-      <section style={{ marginBottom: '60px' }}>
-        <h2 style={{ fontSize: '28px', fontWeight: '600', marginBottom: '24px', color: 'var(--text-primary)', borderBottom: '2px solid var(--border-default)', paddingBottom: '8px' }}>
-          Data Sources
-        </h2>
-        <p style={{ fontSize: '16px', lineHeight: '1.7', color: 'var(--text-secondary)', marginBottom: '16px' }}>
-          The tool uses multiple data sources to ensure accuracy and reliability:
-        </p>
-        <ul style={{ fontSize: '16px', lineHeight: '1.7', color: 'var(--text-secondary)', paddingLeft: '24px', marginBottom: '16px' }}>
-          <li><strong>Yahoo Finance:</strong> Primary source for stock prices, company info, and financial statements</li>
-          <li><strong>Alpha Vantage:</strong> Backup data source and financial statement data</li>
-          <li><strong>Financial Modeling Prep:</strong> Additional backup for price and company data</li>
-          <li><strong>MarketStack:</strong> Alternative backup data source</li>
-          <li><strong>SEC EDGAR:</strong> Official financial filings for verification</li>
-        </ul>
-        <div style={{ backgroundColor: 'var(--status-warning-bg)', padding: '16px', borderRadius: '8px', borderLeft: '4px solid #f59e0b' }}>
-          <p style={{ fontSize: '14px', lineHeight: '1.6', color: 'var(--status-warning-text)', margin: 0 }}>
-            <strong>Note:</strong> The tool includes data quality warnings when assumptions are made or data is incomplete.
-            Always review these warnings and consider uploading PDF financial statements for custom or private companies.
-          </p>
         </div>
       </section>
 
