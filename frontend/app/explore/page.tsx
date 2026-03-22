@@ -23,6 +23,7 @@ import {
   inferCurrencyFromTicker,
 } from '@/lib/currency'
 import { useCurrency } from '@/lib/useCurrency'
+import { useRouter } from 'next/navigation'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -413,6 +414,7 @@ const SkeletonRow = () => (
 
 export default function ExplorePage() {
   const { isAuthenticated } = useAuth()
+  const router = useRouter()
 
   const [markets, setMarkets] = useState<ExploreMarket[]>([])
   const [selectedContinent, setSelectedContinent] = useSessionState<string>('explore_continent', 'Americas')
@@ -925,6 +927,33 @@ export default function ExplorePage() {
                     {bulkLoading ? '…' : '− Remove from Watchlist'}
                   </button>
                 )}
+                <button
+                  onClick={async () => {
+                    const selected = stocks.filter(s => selectedTickers.has(s.ticker))
+                    await Promise.allSettled(selected.map(s => stockApi.addToBuyList(s.ticker, {
+                      company_name: s.companyName,
+                      exchange: s.exchange,
+                      current_price: s.price,
+                      currency: s.currency,
+                    })))
+                    router.push('/buy-list')
+                  }}
+                  disabled={bulkLoading}
+                  style={{
+                    padding: '5px 14px',
+                    borderRadius: '6px',
+                    border: '1px solid #f59e0b',
+                    backgroundColor: 'transparent',
+                    color: '#d97706',
+                    fontSize: '13px',
+                    fontWeight: '500',
+                    cursor: bulkLoading ? 'not-allowed' : 'pointer',
+                    opacity: bulkLoading ? 0.6 : 1,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  🛒 Add to Buy List
+                </button>
               </>
             )}
             <button

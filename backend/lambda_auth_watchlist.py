@@ -13,6 +13,7 @@ from urllib.parse import unquote
 dynamodb = boto3.resource('dynamodb', region_name='eu-west-1')
 WATCHLIST_TABLE = os.getenv('WATCHLIST_TABLE', 'stock-analysis-watchlist')
 MANUAL_DATA_TABLE = os.getenv('MANUAL_DATA_TABLE', 'stock-analysis-manual-data')
+BUY_LIST_TABLE = os.getenv('BUY_LIST_TABLE', 'stock-analysis-buy-list')
 
 
 class DecimalEncoder(json.JSONEncoder):
@@ -292,6 +293,111 @@ def save_manual_data(ticker: str, data: dict) -> dict:
         }
 
 
+def get_buy_list(user_id: str) -> dict:
+    """Get user's buy list."""
+    try:
+        table = dynamodb.Table(BUY_LIST_TABLE)
+        response = table.query(
+            KeyConditionExpression='userId = :uid',
+            ExpressionAttributeValues={':uid': user_id}
+        )
+        items = response.get('Items', [])
+        return {
+            'statusCode': 200,
+            'body': json.dumps({'items': items}, cls=DecimalEncoder)
+        }
+    except Exception as e:
+        return {
+            'statusCode': 500,
+            'body': json.dumps({'error': f'Failed to get buy list: {str(e)}'})
+        }
+
+
+def add_to_buy_list(user_id: str, ticker: str, data: dict) -> dict:
+    """Add or update a stock in the buy list. Preserves existing quantity if not provided."""
+    try:
+        table = dynamodb.Table(BUY_LIST_TABLE)
+
+        # Fetch existing item to preserve quantity if not specified
+        existing_qty = 1
+        try:
+            existing = table.get_item(Key={'userId': user_id, 'ticker': ticker}).get('Item')
+            if existing:
+                existing_qty = int(existing.get('quantity', 1))
+        except Exception:
+            pass
+
+        qty = data.get('quantity', existing_qty)
+        try:
+            qty = int(qty)
+        except (TypeError, ValueError):
+            qty = existing_qty
+
+        item = {
+            'userId': user_id,
+            'ticker': ticker,
+            'added_at': data.get('added_at', datetime.now().isoformat()),
+            'quantity': qty,
+        }
+        for field in ('company_name', 'exchange', 'currency', 'recommendation',
+                      'modelRecommendation', 'aiRecommendation'):
+            if data.get(field):
+                item[field] = data[field]
+        for field in ('current_price', 'fair_value', 'margin_of_safety_pct'):
+            if data.get(field) is not None:
+                try:
+                    item[field] = Decimal(str(data[field]))
+                except Exception:
+                    pass
+
+        table.put_item(Item=item)
+        return {
+            'statusCode': 200,
+            'body': json.dumps({'message': 'Added to buy list', 'item': item}, cls=DecimalEncoder)
+        }
+    except Exception as e:
+        return {
+            'statusCode': 500,
+            'body': json.dumps({'error': f'Failed to add to buy list: {str(e)}'})
+        }
+
+
+def update_buy_list_quantity(user_id: str, ticker: str, quantity: int) -> dict:
+    """Update the quantity for a buy list item."""
+    try:
+        table = dynamodb.Table(BUY_LIST_TABLE)
+        table.update_item(
+            Key={'userId': user_id, 'ticker': ticker},
+            UpdateExpression='SET quantity = :q',
+            ExpressionAttributeValues={':q': quantity}
+        )
+        return {
+            'statusCode': 200,
+            'body': json.dumps({'success': True, 'quantity': quantity})
+        }
+    except Exception as e:
+        return {
+            'statusCode': 500,
+            'body': json.dumps({'error': f'Failed to update quantity: {str(e)}'})
+        }
+
+
+def remove_from_buy_list(user_id: str, ticker: str) -> dict:
+    """Remove a stock from the buy list."""
+    try:
+        table = dynamodb.Table(BUY_LIST_TABLE)
+        table.delete_item(Key={'userId': user_id, 'ticker': ticker})
+        return {
+            'statusCode': 200,
+            'body': json.dumps({'success': True, 'message': 'Removed from buy list'})
+        }
+    except Exception as e:
+        return {
+            'statusCode': 500,
+            'body': json.dumps({'error': f'Failed to remove from buy list: {str(e)}'})
+        }
+
+
 def lambda_handler(event, context):
     """AWS Lambda handler for auth and watchlist operations"""
     
@@ -333,7 +439,7 @@ def lambda_handler(event, context):
             except Exception:
                 pass
 
-    if not user_id and ('/api/watchlist' in path or '/api/manual-data' in path):
+    if not user_id and ('/api/watchlist' in path or '/api/manual-data' in path or '/api/buy-list' in path):
         return {
             'statusCode': 401,
             'headers': headers,
@@ -373,6 +479,31 @@ def lambda_handler(event, context):
                     'body': json.dumps({'error': 'Method not allowed'})
                 }
         
+        # Buy list routes
+        elif '/api/buy-list' in path:
+            if method == 'GET' and path == '/api/buy-list':
+                result = get_buy_list(user_id)
+            elif method == 'POST' and '/api/buy-list/' in path:
+                ticker = unquote(path.split('/api/buy-list/')[-1].split('?')[0])
+                body = json.loads(event.get('body', '{}') or '{}')
+                result = add_to_buy_list(user_id, ticker, body)
+            elif method == 'PUT' and '/api/buy-list/' in path:
+                ticker = unquote(path.split('/api/buy-list/')[-1].split('?')[0])
+                body = json.loads(event.get('body', '{}') or '{}')
+                quantity = body.get('quantity')
+                if quantity is not None:
+                    result = update_buy_list_quantity(user_id, ticker, int(quantity))
+                else:
+                    result = add_to_buy_list(user_id, ticker, body)
+            elif method == 'DELETE' and '/api/buy-list/' in path:
+                ticker = unquote(path.split('/api/buy-list/')[-1].split('?')[0])
+                result = remove_from_buy_list(user_id, ticker)
+            else:
+                result = {
+                    'statusCode': 405,
+                    'body': json.dumps({'error': 'Method not allowed'})
+                }
+
         # Manual data routes
         elif '/api/manual-data/' in path:
             ticker = path.split('/api/manual-data/')[-1]

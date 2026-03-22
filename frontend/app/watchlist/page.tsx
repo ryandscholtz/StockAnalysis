@@ -509,12 +509,32 @@ export default function WatchlistPage() {
               {selectedTickers.size === 0 ? 'Select all' : selectedTickers.size === displayItems.length ? 'Deselect all' : `${selectedTickers.size} selected`}
             </label>
             {selectedTickers.size > 0 && (
-              <button
-                onClick={() => setConfirmRemoveOpen(true)}
-                style={{ padding: '4px 12px', borderRadius: '6px', border: '1px solid #ef4444', backgroundColor: 'transparent', color: '#ef4444', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
-              >
-                🗑 Remove {selectedTickers.size}
-              </button>
+              <>
+                <button
+                  onClick={() => setConfirmRemoveOpen(true)}
+                  style={{ padding: '4px 12px', borderRadius: '6px', border: '1px solid #ef4444', backgroundColor: 'transparent', color: '#ef4444', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
+                >
+                  🗑 Remove {selectedTickers.size}
+                </button>
+                <button
+                  onClick={async () => {
+                    const selected = watchlistItems.filter(i => selectedTickers.has(i.ticker))
+                    await Promise.allSettled(selected.map(item => stockApi.addToBuyList(item.ticker, {
+                      company_name: item.company_name,
+                      exchange: item.exchange,
+                      current_price: item.current_price,
+                      currency: item.currency,
+                      fair_value: item.fair_value,
+                      margin_of_safety_pct: item.margin_of_safety_pct,
+                      recommendation: item.recommendation,
+                    })))
+                    router.push('/buy-list')
+                  }}
+                  style={{ padding: '4px 12px', borderRadius: '6px', border: '1px solid #f59e0b', backgroundColor: 'transparent', color: '#d97706', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
+                >
+                  🛒 Add {selectedTickers.size} to Buy List
+                </button>
+              </>
             )}
             {/* Currency toggle — far right, aligned with Select all */}
             <div style={{ display: 'flex', gap: '4px', background: 'var(--bg-hover)', borderRadius: '8px', padding: '3px', marginLeft: 'auto' }}>

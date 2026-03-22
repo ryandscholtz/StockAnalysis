@@ -994,6 +994,46 @@ export const stockApi = {
     const response = await api.get<ExploreStocksResponse>('/api/explore/stocks', { params })
     return response.data
   },
+
+  // Buy list methods
+  async getBuyList(): Promise<{ items: import('@/lib/buyList').BuyListItem[] }> {
+    const response = await api.get<{ items: any[] }>('/api/buy-list')
+    const items = (response.data.items || []).map((item: any) => ({
+      ...item,
+      company_name: item.company_name || item.companyName,
+      current_price: item.current_price != null ? Number(item.current_price) : undefined,
+      fair_value: item.fair_value != null ? Number(item.fair_value) : undefined,
+      margin_of_safety_pct: item.margin_of_safety_pct != null ? Number(item.margin_of_safety_pct) : undefined,
+      quantity: Number(item.quantity) || 1,
+    }))
+    return { items }
+  },
+
+  async addToBuyList(
+    ticker: string,
+    data: {
+      company_name?: string
+      exchange?: string
+      current_price?: number
+      currency?: string
+      fair_value?: number
+      margin_of_safety_pct?: number
+      recommendation?: string
+    }
+  ): Promise<{ success: boolean }> {
+    await api.post(`/api/buy-list/${encodeURIComponent(ticker)}`, data)
+    return { success: true }
+  },
+
+  async updateBuyListQuantity(ticker: string, quantity: number): Promise<{ success: boolean }> {
+    await api.put(`/api/buy-list/${encodeURIComponent(ticker)}`, { quantity })
+    return { success: true }
+  },
+
+  async removeFromBuyList(ticker: string): Promise<{ success: boolean }> {
+    await api.delete(`/api/buy-list/${encodeURIComponent(ticker)}`)
+    return { success: true }
+  },
 }
 
 export interface WatchlistItem {

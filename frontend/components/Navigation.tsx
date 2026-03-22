@@ -31,6 +31,7 @@ export default function Navigation() {
   const navItems = [
     { href: '/explore', label: 'Explore', requireAuth: false },
     { href: '/watchlist', label: 'Watchlist', requireAuth: true },
+    { href: '/buy-list', label: 'Buy List', requireAuth: true },
     { href: '/about', label: 'About', requireAuth: false },
   ]
 
