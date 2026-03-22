@@ -158,6 +158,9 @@ async def _analyze_stock_with_progress(ticker: str, progress_tracker: ProgressTr
                                        business_type: Optional[str] = None,
                                        analysis_weights: Optional[dict] = None) -> StockAnalysis:
     """Internal function to perform analysis with progress tracking"""
+    from app.ai.bedrock_client import reset_invocation_budget
+    reset_invocation_budget()
+
     # Step 1: Fetch company data
     await progress_tracker.update(1, "Fetching company data and financial statements...")
     # Small delay to ensure progress update is sent before potentially blocking operation
@@ -650,11 +653,14 @@ def _fetch_ai_financial_data(ticker: str, company_name: str) -> dict:
       }
     Returns {} on failure.
     """
-    try:
-        import boto3
-        bedrock = boto3.client('bedrock-runtime', region_name='us-east-1')
-    except Exception as e:
-        logger.warning(f"Could not create Bedrock client: {e}")
+    from app.ai.bedrock_client import (
+        get_claude_model_id,
+        invoke_claude_bedrock_simple,
+        is_ai_financial_fallback_disabled,
+    )
+
+    if is_ai_financial_fallback_disabled():
+        logger.info("Skipping AI financial fetch (BEDROCK_SKIP_AI_FINANCIAL_FALLBACK) for %s", ticker)
         return {}
 
     prompt = f"""You are a financial data provider. Return the most recent annual financial data you know about for {company_name} ({ticker}).
@@ -700,16 +706,13 @@ Return ONLY valid JSON with this exact structure (no explanation, no markdown fe
 }}"""
 
     try:
-        response = bedrock.invoke_model(
-            modelId='us.anthropic.claude-3-5-sonnet-20241022-v1:0',
-            body=json.dumps({
-                'anthropic_version': 'bedrock-2023-05-31',
-                'max_tokens': 2000,
-                'messages': [{'role': 'user', 'content': prompt}]
-            })
+        ai_text = invoke_claude_bedrock_simple(
+            prompt,
+            max_tokens=2000,
+            model_id=get_claude_model_id("financial"),
+            operation="ai_financial_fetch_fastapi",
+            ticker=ticker,
         )
-        body = json.loads(response['body'].read())
-        ai_text = body['content'][0]['text']
 
         # Strip markdown code fences then parse JSON
         import re as _re

@@ -11,6 +11,119 @@ from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from urllib.parse import unquote
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import sys
+from pathlib import Path
+
+_lambda_backend_root = Path(__file__).resolve().parent
+if str(_lambda_backend_root) not in sys.path:
+    sys.path.insert(0, str(_lambda_backend_root))
+
+try:
+    from app.ai.bedrock_client import (
+        invoke_claude_bedrock,
+        invoke_claude_bedrock_simple,
+        get_bedrock_region,
+        get_claude_model_id,
+        reset_invocation_budget,
+        is_ai_financial_fallback_disabled,
+        is_ai_commentary_disabled,
+        is_auto_valuation_preset_disabled,
+    )
+except ImportError:
+    _HAIKU_DEFAULT = 'us.anthropic.claude-haiku-4-5-20251001-v1:0'
+
+    def get_bedrock_region() -> str:
+        return os.getenv('BEDROCK_REGION') or os.getenv('AWS_REGION', 'us-east-1')
+
+    def get_claude_model_id(use_case: str = 'default') -> str:
+        env_for_case = {
+            'financial': 'BEDROCK_FINANCIAL_MODEL_ID',
+            'preset': 'BEDROCK_PRESET_MODEL_ID',
+            'commentary': 'BEDROCK_COMMENTARY_MODEL_ID',
+            'pdf_extraction': 'BEDROCK_PDF_EXTRACTION_MODEL_ID',
+            'business_type': 'BEDROCK_MODEL_ID',
+        }.get(use_case)
+        if env_for_case:
+            v = os.getenv(env_for_case, '').strip()
+            if v:
+                return v
+        if use_case == 'business_type':
+            v = os.getenv('BEDROCK_CLAUDE_MODEL_ID', '').strip()
+            if v:
+                return v
+            return _HAIKU_DEFAULT
+        generic = os.getenv('BEDROCK_CLAUDE_MODEL_ID', '').strip()
+        if generic:
+            return generic
+        return _HAIKU_DEFAULT
+
+    def reset_invocation_budget() -> None:
+        pass
+
+    def is_ai_financial_fallback_disabled() -> bool:
+        return os.getenv('BEDROCK_SKIP_AI_FINANCIAL_FALLBACK', '').lower() in ('1', 'true', 'yes')
+
+    def is_ai_commentary_disabled() -> bool:
+        return os.getenv('BEDROCK_SKIP_AI_COMMENTARY', '').lower() in ('1', 'true', 'yes')
+
+    def is_auto_valuation_preset_disabled() -> bool:
+        return os.getenv('BEDROCK_SKIP_AUTO_VALUATION_PRESET', '').lower() in ('1', 'true', 'yes')
+
+    def invoke_claude_bedrock_simple(
+        prompt: str,
+        *,
+        max_tokens: int = 2000,
+        temperature: float = 0.0,
+        model_id: str | None = None,
+        operation: str = 'bedrock_invoke',
+        ticker: str | None = None,
+        bedrock_client=None,
+    ) -> str:
+        mid = model_id or get_claude_model_id('financial')
+        region = get_bedrock_region()
+        client = bedrock_client or boto3.client('bedrock-runtime', region_name=region)
+        body = {
+            'anthropic_version': 'bedrock-2023-05-31',
+            'max_tokens': max_tokens,
+            'temperature': temperature,
+            'messages': [{'role': 'user', 'content': prompt}],
+        }
+        print(f"[Bedrock] {operation} model={mid} ticker={ticker} region={region}")
+        response = client.invoke_model(
+            modelId=mid,
+            body=json.dumps(body),
+            contentType='application/json',
+            accept='application/json',
+        )
+        return json.loads(response['body'].read())['content'][0]['text']
+
+    def invoke_claude_bedrock(
+        *,
+        messages: list,
+        max_tokens: int,
+        temperature: float = 0.0,
+        model_id: str | None = None,
+        operation: str = 'bedrock_invoke',
+        ticker: str | None = None,
+        bedrock_client=None,
+    ) -> str:
+        mid = model_id or get_claude_model_id('financial')
+        region = get_bedrock_region()
+        client = bedrock_client or boto3.client('bedrock-runtime', region_name=region)
+        body = {
+            'anthropic_version': 'bedrock-2023-05-31',
+            'max_tokens': max_tokens,
+            'temperature': temperature,
+            'messages': messages,
+        }
+        print(f"[Bedrock] {operation} model={mid} ticker={ticker} region={region}")
+        response = client.invoke_model(
+            modelId=mid,
+            body=json.dumps(body),
+            contentType='application/json',
+            accept='application/json',
+        )
+        return json.loads(response['body'].read())['content'][0]['text']
 
 MANUAL_DATA_TABLE = os.environ.get('MANUAL_DATA_TABLE', 'stock-analysis-manual-data')
 
@@ -589,20 +702,23 @@ def get_financial_data_from_yahoo(ticker: str) -> dict | None:
 # Bedrock / Claude helpers
 # ---------------------------------------------------------------------------
 
-def _call_bedrock_claude(prompt: str, max_tokens: int = 2000) -> str:
+def _call_bedrock_claude(
+    prompt: str,
+    max_tokens: int = 2000,
+    *,
+    operation: str = 'bedrock_claude',
+    ticker: str | None = None,
+    model_id: str | None = None,
+) -> str:
     """Call Claude via AWS Bedrock and return the text response."""
-    bedrock = boto3.client('bedrock-runtime', region_name='us-east-1')
-    response = bedrock.invoke_model(
-        modelId='us.anthropic.claude-haiku-4-5-20251001-v1:0',
-        body=json.dumps({
-            'anthropic_version': 'bedrock-2023-05-31',
-            'max_tokens': max_tokens,
-            'temperature': 0,
-            'messages': [{'role': 'user', 'content': prompt}]
-        })
+    mid = model_id or get_claude_model_id('financial')
+    return invoke_claude_bedrock_simple(
+        prompt,
+        max_tokens=max_tokens,
+        model_id=mid,
+        operation=operation,
+        ticker=ticker,
     )
-    body = json.loads(response['body'].read())
-    return body['content'][0]['text']
 
 
 def _load_cached_financial_data(ticker: str, max_age_days: int = 90) -> dict | None:
@@ -743,19 +859,13 @@ def _recommend_preset(ticker: str, company_name: str, sector: str = '', industry
         f"Respond with ONLY the preset key (e.g. \"technology\", \"bank\"). Nothing else."
     )
     try:
-        bedrock = boto3.client('bedrock-runtime', region_name='us-east-1')
-        body = json.dumps({
-            'anthropic_version': 'bedrock-2023-05-31',
-            'max_tokens': 20,
-            'messages': [{'role': 'user', 'content': prompt}]
-        })
-        response = bedrock.invoke_model(
-            modelId='us.anthropic.claude-haiku-4-5-20251001-v1:0',
-            contentType='application/json',
-            accept='application/json',
-            body=body
-        )
-        raw = json.loads(response['body'].read())['content'][0]['text'].strip().lower()
+        raw = invoke_claude_bedrock_simple(
+            prompt,
+            max_tokens=20,
+            model_id=get_claude_model_id('preset'),
+            operation='valuation_preset',
+            ticker=ticker,
+        ).strip().lower()
         # Accept the key verbatim or with spaces→underscores
         preset = raw.replace(' ', '_')
         if preset in PRESET_WEIGHTS:
@@ -855,7 +965,16 @@ def _generate_ai_commentary(
         f"ANALYST RECOMMENDATION: Avoid"
     )
     try:
-        text = _call_bedrock_claude(prompt, max_tokens=650)
+        if is_ai_commentary_disabled():
+            print(f"[Commentary] Skipped (BEDROCK_SKIP_AI_COMMENTARY) for {ticker}")
+            return '', None
+        text = _call_bedrock_claude(
+            prompt,
+            max_tokens=650,
+            operation='ai_commentary',
+            ticker=ticker,
+            model_id=get_claude_model_id('commentary'),
+        )
         text = text.strip()
         # Extract structured AI recommendation from the final line
         ai_rec = None
@@ -934,7 +1053,15 @@ Return ONLY the following JSON object (no explanation, no markdown):
   "data_confidence": "<high|medium|low>"
 }}"""
     try:
-        text = _call_bedrock_claude(prompt, max_tokens=2000)
+        if is_ai_financial_fallback_disabled():
+            return {'error': 'AI financial fallback disabled (BEDROCK_SKIP_AI_FINANCIAL_FALLBACK)'}
+        text = _call_bedrock_claude(
+            prompt,
+            max_tokens=2000,
+            operation='ai_financial_lambda',
+            ticker=ticker,
+            model_id=get_claude_model_id('financial'),
+        )
         return _extract_json(text)
     except Exception as e:
         print(f"[Bedrock] ERROR {type(e).__name__}: {e}")
@@ -1230,6 +1357,7 @@ def get_analysis_presets() -> dict:
 
 def analyze_stock_get(ticker: str, stream: bool, params: dict) -> dict:
     """Handle GET /api/analyze/{ticker} — AI-driven analysis with SSE streaming."""
+    reset_invocation_budget()
 
     progress_events = []
 
@@ -1319,10 +1447,15 @@ def analyze_stock_get(ticker: str, stream: bool, params: dict) -> dict:
             w = PRESET_WEIGHTS['default']
             resolved_preset = 'default'
     else:
-        # No preset specified or 'automatic' — ask LLM
-        progress_events.append(progress(1, total_steps, 'Auto-selecting valuation preset...'))
-        resolved_preset = _recommend_preset(ticker, company_name, sector, industry)
-        w = PRESET_WEIGHTS.get(resolved_preset, PRESET_WEIGHTS['default'])
+        # No preset specified or 'automatic' — ask LLM (unless disabled for cost/testing)
+        if is_auto_valuation_preset_disabled():
+            resolved_preset = 'default'
+            w = PRESET_WEIGHTS['default']
+            print(f"[Preset] BEDROCK_SKIP_AUTO_VALUATION_PRESET: using default for {ticker}")
+        else:
+            progress_events.append(progress(1, total_steps, 'Auto-selecting valuation preset...'))
+            resolved_preset = _recommend_preset(ticker, company_name, sector, industry)
+            w = PRESET_WEIGHTS.get(resolved_preset, PRESET_WEIGHTS['default'])
 
     # ------------------------------------------------------------------
     # Step 2: Retrieve financial data (cache → SEC EDGAR → Yahoo Finance → Claude AI)
@@ -1851,22 +1984,21 @@ def _call_claude_extraction(bedrock_client, ticker: str, currency_hint: str, tex
     Send extracted PDF text to Claude and return (parsed_dict, raw_text).
     Raises on Bedrock errors so the caller can handle them.
     """
-    response = bedrock_client.invoke_model(
-        modelId='us.anthropic.claude-haiku-4-5-20251001-v1:0',
-        body=json.dumps({
-            'anthropic_version': 'bedrock-2023-05-31',
-            'max_tokens': 2000,
-            'temperature': 0,
-            'messages': [{
-                'role': 'user',
-                'content': [
-                    {'type': 'text', 'text': f"Here is financial statement text extracted from a PDF:\n\n{text}"},
-                    {'type': 'text', 'text': _build_extraction_prompt(ticker, currency_hint)}
-                ]
-            }]
-        })
+    messages = [{
+        'role': 'user',
+        'content': [
+            {'type': 'text', 'text': f"Here is financial statement text extracted from a PDF:\n\n{text}"},
+            {'type': 'text', 'text': _build_extraction_prompt(ticker, currency_hint)},
+        ],
+    }]
+    ai_text = invoke_claude_bedrock(
+        messages=messages,
+        max_tokens=2000,
+        model_id=get_claude_model_id('pdf_extraction'),
+        operation='pdf_extraction_chunk',
+        ticker=ticker,
+        bedrock_client=bedrock_client,
     )
-    ai_text = json.loads(response['body'].read())['content'][0]['text']
     return _extract_json(ai_text), ai_text
 
 
@@ -2002,19 +2134,18 @@ def _process_pdf_from_s3(ticker: str, s3_key: str, currency_hint: str) -> dict:
         # pypdf unavailable — fall back to document block (100-page limit applies)
         print(f"[PDF Upload] pypdf unavailable — using document block for {ticker}")
         pdf_b64 = base64.b64encode(pdf_bytes).decode('utf-8')
-        resp = bedrock.invoke_model(
-            modelId='us.anthropic.claude-haiku-4-5-20251001-v1:0',
-            body=json.dumps({
-                'anthropic_version': 'bedrock-2023-05-31',
-                'max_tokens': 2000,
-                'temperature': 0,
-                'messages': [{'role': 'user', 'content': [
-                    {'type': 'document', 'source': {'type': 'base64', 'media_type': 'application/pdf', 'data': pdf_b64}},
-                    {'type': 'text', 'text': _build_extraction_prompt(ticker, currency_hint)},
-                ]}]
-            })
+        doc_messages = [{'role': 'user', 'content': [
+            {'type': 'document', 'source': {'type': 'base64', 'media_type': 'application/pdf', 'data': pdf_b64}},
+            {'type': 'text', 'text': _build_extraction_prompt(ticker, currency_hint)},
+        ]}]
+        ai_text = invoke_claude_bedrock(
+            messages=doc_messages,
+            max_tokens=2000,
+            model_id=get_claude_model_id('pdf_extraction'),
+            operation='pdf_extraction_document',
+            ticker=ticker,
+            bedrock_client=bedrock,
         )
-        ai_text = json.loads(resp['body'].read())['content'][0]['text']
         print(f"[PDF Upload] Document-block response: {ai_text[:200]}")
         data = _extract_json(ai_text)
 

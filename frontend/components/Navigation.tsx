@@ -236,26 +236,6 @@ export default function Navigation() {
                   </div>
                   
                   <div style={{ padding: '8px 0' }}>
-                    <Link
-                      href="/profile"
-                      style={{
-                        display: 'block',
-                        padding: '8px 16px',
-                        fontSize: '14px',
-                        color: 'var(--text-secondary)',
-                        textDecoration: 'none'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = 'var(--bg-hover)'
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = 'transparent'
-                      }}
-                      onClick={() => setShowUserMenu(false)}
-                    >
-                      Profile Settings
-                    </Link>
-
                     {/* Currency selector */}
                     <div style={{ borderTop: '1px solid var(--border-default)', margin: '4px 0', paddingTop: '4px' }}>
                       <div style={{ padding: '4px 16px 6px', fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: '600' }}>
@@ -467,19 +447,6 @@ export default function Navigation() {
                   {user?.givenName && user?.familyName ? `${user.givenName} ${user.familyName}` : user?.username}
                 </div>
               </div>
-              <Link
-                href="/profile"
-                onClick={() => setMenuOpen(false)}
-                style={{
-                  display: 'block',
-                  padding: '12px 16px',
-                  fontSize: '15px',
-                  color: 'var(--text-secondary)',
-                  textDecoration: 'none'
-                }}
-              >
-                Profile Settings
-              </Link>
               {/* Mobile currency selector */}
               <div style={{ padding: '4px 16px 8px', borderTop: '1px solid var(--border-default)', marginTop: '4px' }}>
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: '600', marginBottom: '8px', marginTop: '8px' }}>

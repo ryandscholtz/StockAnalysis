@@ -7,6 +7,7 @@ import logging
 from typing import Optional, Dict, Any
 from app.config.analysis_weights import BusinessType, AnalysisWeightPresets
 from app.core.xray_middleware import trace_function, create_external_api_subsegment, end_subsegment
+from app.ai.bedrock_client import get_claude_model_id
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +20,8 @@ class BusinessTypeDetector:
         self.aws_region = os.getenv("AWS_REGION", "us-east-1")
         self.aws_profile = os.getenv("AWS_PROFILE")  # Optional: use specific AWS profile
         self.openai_api_key = os.getenv("OPENAI_API_KEY")
-        self.bedrock_model_id = os.getenv("BEDROCK_MODEL_ID", "us.anthropic.claude-3-5-sonnet-20241022-v1:0")
+        # Default Haiku via bedrock_client; set BEDROCK_MODEL_ID for Sonnet or another model explicitly.
+        self.bedrock_model_id = get_claude_model_id("business_type")
 
     def _get_available_business_types(self) -> str:
         """Get list of available business types for the prompt"""

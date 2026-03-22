@@ -40,6 +40,17 @@ class TestBedrockAIIntegration:
             detector = BusinessTypeDetector()
             assert detector.bedrock_model_id == custom_model_id
 
+    def test_default_bedrock_model_is_haiku_when_unset(self):
+        """Cost default: without BEDROCK_MODEL_ID, business-type Bedrock uses Haiku."""
+        from app.ai.bedrock_client import DEFAULT_CLAUDE_MODEL_ID
+        with patch.dict(os.environ, {
+            'USE_AWS_BEDROCK': 'true',
+            'BEDROCK_MODEL_ID': '',
+            'BEDROCK_CLAUDE_MODEL_ID': '',
+        }):
+            detector = BusinessTypeDetector()
+            assert detector.bedrock_model_id == DEFAULT_CLAUDE_MODEL_ID
+
     def test_bedrock_aws_credentials_configuration(self):
         """Test that Bedrock uses AWS credentials configuration"""
         with patch.dict(os.environ, {

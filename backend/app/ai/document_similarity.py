@@ -10,6 +10,7 @@ import math
 from collections import Counter
 
 from app.core.xray_middleware import trace_function, create_external_api_subsegment, end_subsegment
+from app.ai.bedrock_client import get_bedrock_region
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +20,7 @@ class DocumentSimilarityService:
 
     def __init__(self):
         self.use_aws_bedrock = os.getenv("USE_AWS_BEDROCK", "false").lower() == "true"
-        self.aws_region = os.getenv("AWS_REGION", "us-east-1")
+        self.aws_region = get_bedrock_region()
         self.aws_profile = os.getenv("AWS_PROFILE")
         self.bedrock_embedding_model = os.getenv("BEDROCK_EMBEDDING_MODEL", "amazon.titan-embed-text-v1")
 

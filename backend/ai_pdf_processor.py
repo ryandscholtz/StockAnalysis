@@ -11,7 +11,10 @@ import re
 from typing import Dict, List, Optional, Any, Tuple
 from decimal import Decimal
 
+from app.ai.bedrock_client import get_bedrock_region, get_claude_model_id, invoke_claude_bedrock_simple
+
 logger = logging.getLogger(__name__)
+
 
 class AIPDFProcessor:
     """
@@ -24,7 +27,7 @@ class AIPDFProcessor:
         
         # Try to initialize Bedrock for Claude
         try:
-            self.bedrock = boto3.client('bedrock-runtime', region_name='us-east-1')
+            self.bedrock = boto3.client('bedrock-runtime', region_name=get_bedrock_region())
             logger.info("Bedrock client initialized for Claude AI")
         except Exception as e:
             logger.warning(f"Bedrock not available: {e}")
@@ -195,23 +198,15 @@ If the text only contains titles, headers, or no numerical financial data, retur
 Return only valid JSON with the extracted financial data (empty if no data found):
 """
 
-            # Call Claude via Bedrock
-            response = self.bedrock.invoke_model(
-                modelId='us.anthropic.claude-3-5-sonnet-20241022-v1:0',
-                body=json.dumps({
-                    'anthropic_version': 'bedrock-2023-05-31',
-                    'max_tokens': 4000,
-                    'messages': [
-                        {
-                            'role': 'user',
-                            'content': prompt
-                        }
-                    ]
-                })
+            # Call Claude via Bedrock (model from BEDROCK_PDF_EXTRACTION_MODEL_ID / BEDROCK_CLAUDE_MODEL_ID / Haiku default)
+            ai_response = invoke_claude_bedrock_simple(
+                prompt,
+                max_tokens=4000,
+                model_id=get_claude_model_id('pdf_extraction'),
+                operation='ai_pdf_processor_extract',
+                ticker=ticker,
+                bedrock_client=self.bedrock,
             )
-            
-            response_body = json.loads(response['body'].read())
-            ai_response = response_body['content'][0]['text']
             
             # Extract JSON from AI response
             try:

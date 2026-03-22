@@ -368,10 +368,19 @@ export class StockAnalysisInfrastructureStack extends cdk.Stack {
                 'bedrock:InvokeModelWithResponseStream'
               ],
               resources: [
+                // Foundation model IDs (no regional inference prefix)
                 'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-sonnet-20241022-v1:0',
                 'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0',
                 'arn:aws:bedrock:*::foundation-model/anthropic.claude-3-5-sonnet-20241022-v1:0',
-                'arn:aws:bedrock:*::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0'
+                'arn:aws:bedrock:*::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0',
+                // us.* inference profile model IDs used at runtime
+                'arn:aws:bedrock:us-east-1::foundation-model/us.anthropic.claude-3-5-sonnet-20241022-v1:0',
+                'arn:aws:bedrock:us-east-1::foundation-model/us.anthropic.claude-haiku-4-5-20251001-v1:0',
+                'arn:aws:bedrock:*::foundation-model/us.anthropic.claude-3-5-sonnet-20241022-v1:0',
+                'arn:aws:bedrock:*::foundation-model/us.anthropic.claude-haiku-4-5-20251001-v1:0',
+                // Titan embeddings (DocumentSimilarityService / tests when USE_AWS_BEDROCK + Titan)
+                'arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-text-v1',
+                'arn:aws:bedrock:*::foundation-model/amazon.titan-embed-text-v1'
               ]
             })
           ]
