@@ -1052,6 +1052,12 @@ export interface WatchlistItem {
   financial_health_score?: number
   business_quality_score?: number
   pe_ratio?: number
+  pb_ratio?: number
+  ps_ratio?: number
+  ev_to_ebitda?: number
+  upside_potential?: number
+  modelRecommendation?: string
+  aiRecommendation?: string
   currency?: string
   live_price?: number
   price_error?: string
