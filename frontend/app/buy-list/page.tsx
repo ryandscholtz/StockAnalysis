@@ -66,6 +66,7 @@ export default function BuyListPage() {
   const [confirmRemoveOpen, setConfirmRemoveOpen] = useState(false)
   const [editingQty, setEditingQty] = useState<Record<string, string>>({})
   const [savingQty, setSavingQty] = useState<Set<string>>(new Set())
+  const [showLocal, setShowLocal] = useState(false)
 
   // Budget allocator state
   const [budget, setBudget] = useState('')
@@ -394,6 +395,22 @@ export default function BuyListPage() {
             >
               🔄 Refresh
             </button>
+            <div style={{ display: 'flex', gap: '4px', background: 'var(--bg-hover)', borderRadius: '8px', padding: '3px' }}>
+              {([false, true] as const).map(local => (
+                <button
+                  key={String(local)}
+                  onClick={() => setShowLocal(local)}
+                  style={{
+                    padding: '4px 12px', borderRadius: '6px', border: 'none', fontSize: '13px', fontWeight: '500', cursor: 'pointer',
+                    backgroundColor: showLocal === local ? 'var(--bg-surface)' : 'transparent',
+                    color: showLocal === local ? 'var(--text-primary)' : 'var(--text-muted)',
+                    boxShadow: showLocal === local ? '0 1px 3px rgba(0,0,0,0.15)' : 'none',
+                  }}
+                >
+                  {local ? 'Local' : preferredCurrency}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -430,12 +447,12 @@ export default function BuyListPage() {
                   </th>
                   <SortHeader label="Company / Ticker" sortKey="name" current={sortKey} dir={sortDir} onClick={handleSort} align="left" />
                   <th style={{ padding: '10px 12px', fontSize: '12px', fontWeight: '600', color: 'var(--text-muted)', textAlign: 'center', whiteSpace: 'nowrap', borderBottom: '2px solid var(--border-default)' }}>Rec.</th>
-                  <SortHeader label={`Price (${preferredCurrency})`} sortKey="price" current={sortKey} dir={sortDir} onClick={handleSort} />
-                  <SortHeader label={`Fair Value (${preferredCurrency})`} sortKey="fair_value" current={sortKey} dir={sortDir} onClick={handleSort} />
+                  <SortHeader label={showLocal ? 'Price (Local)' : `Price (${preferredCurrency})`} sortKey="price" current={sortKey} dir={sortDir} onClick={handleSort} />
+                  <SortHeader label={showLocal ? 'Fair Value (Local)' : `Fair Value (${preferredCurrency})`} sortKey="fair_value" current={sortKey} dir={sortDir} onClick={handleSort} />
                   <SortHeader label="% Under/Over" sortKey="margin" current={sortKey} dir={sortDir} onClick={handleSort} />
                   <SortHeader label="Quantity" sortKey="quantity" current={sortKey} dir={sortDir} onClick={handleSort} />
-                  <SortHeader label={`Total Cost (${preferredCurrency})`} sortKey="total_cost" current={sortKey} dir={sortDir} onClick={handleSort} />
-                  <SortHeader label={`Total Fair Value (${preferredCurrency})`} sortKey="total_fv" current={sortKey} dir={sortDir} onClick={handleSort} />
+                  <SortHeader label={showLocal ? 'Total Cost (Local)' : `Total Cost (${preferredCurrency})`} sortKey="total_cost" current={sortKey} dir={sortDir} onClick={handleSort} />
+                  <SortHeader label={showLocal ? 'Total Fair Value (Local)' : `Total Fair Value (${preferredCurrency})`} sortKey="total_fv" current={sortKey} dir={sortDir} onClick={handleSort} />
                 </tr>
               </thead>
               <tbody>
@@ -446,6 +463,8 @@ export default function BuyListPage() {
                   const qty = effectiveQty(item)
                   const totalCost = price != null ? price * qty : undefined
                   const totalFV   = fairVal != null ? fairVal * qty : undefined
+                  const localTotalCost = item.current_price != null ? item.current_price * qty : undefined
+                  const localTotalFV   = item.fair_value != null ? item.fair_value * qty : undefined
                   const margin = item.margin_of_safety_pct
                   const isSelected = selectedTickers.has(item.ticker)
                   const qtyEditing = editingQty[item.ticker]
@@ -484,11 +503,15 @@ export default function BuyListPage() {
                       </td>
 
                       <td style={{ padding: '12px', textAlign: 'right', fontWeight: '500', color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
-                        {price != null ? formatPrice(price, preferredCurrency) : <span style={{ color: 'var(--text-subtle)' }}>—</span>}
+                        {showLocal
+                          ? (item.current_price != null ? formatPrice(item.current_price, effectiveCurrency) : <span style={{ color: 'var(--text-subtle)' }}>—</span>)
+                          : (price != null ? formatPrice(price, preferredCurrency) : <span style={{ color: 'var(--text-subtle)' }}>—</span>)}
                       </td>
 
                       <td style={{ padding: '12px', textAlign: 'right', fontWeight: '500', whiteSpace: 'nowrap', color: fairVal != null && price != null ? (fairVal > price ? '#10b981' : '#ef4444') : 'var(--text-primary)' }}>
-                        {fairVal != null ? formatPrice(fairVal, preferredCurrency) : <span style={{ color: 'var(--text-subtle)' }}>—</span>}
+                        {showLocal
+                          ? (item.fair_value != null ? formatPrice(item.fair_value, effectiveCurrency) : <span style={{ color: 'var(--text-subtle)' }}>—</span>)
+                          : (fairVal != null ? formatPrice(fairVal, preferredCurrency) : <span style={{ color: 'var(--text-subtle)' }}>—</span>)}
                       </td>
 
                       <td style={{ padding: '12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
@@ -518,11 +541,15 @@ export default function BuyListPage() {
                       </td>
 
                       <td style={{ padding: '12px', textAlign: 'right', fontWeight: '600', color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
-                        {totalCost != null ? formatPrice(totalCost, preferredCurrency) : <span style={{ color: 'var(--text-subtle)' }}>—</span>}
+                        {showLocal
+                          ? (localTotalCost != null ? formatPrice(localTotalCost, effectiveCurrency) : <span style={{ color: 'var(--text-subtle)' }}>—</span>)
+                          : (totalCost != null ? formatPrice(totalCost, preferredCurrency) : <span style={{ color: 'var(--text-subtle)' }}>—</span>)}
                       </td>
 
                       <td style={{ padding: '12px', textAlign: 'right', fontWeight: '600', whiteSpace: 'nowrap', color: totalFV != null && totalCost != null ? (totalFV > totalCost ? '#10b981' : '#ef4444') : 'var(--text-primary)' }}>
-                        {totalFV != null ? formatPrice(totalFV, preferredCurrency) : <span style={{ color: 'var(--text-subtle)' }}>—</span>}
+                        {showLocal
+                          ? (localTotalFV != null ? formatPrice(localTotalFV, effectiveCurrency) : <span style={{ color: 'var(--text-subtle)' }}>—</span>)
+                          : (totalFV != null ? formatPrice(totalFV, preferredCurrency) : <span style={{ color: 'var(--text-subtle)' }}>—</span>)}
                       </td>
                     </tr>
                   )
@@ -532,7 +559,7 @@ export default function BuyListPage() {
               <tfoot>
                 <tr style={{ borderTop: '2px solid var(--border-default)', backgroundColor: 'var(--bg-surface-subtle)' }}>
                   <td colSpan={7} style={{ padding: '12px', fontSize: '13px', fontWeight: '600', color: 'var(--text-secondary)', textAlign: 'right' }}>
-                    Total ({items.length} position{items.length !== 1 ? 's' : ''})
+                    Total ({items.length} position{items.length !== 1 ? 's' : ''}){showLocal && <span style={{ fontWeight: '400', fontSize: '12px', color: 'var(--text-muted)', marginLeft: '6px' }}>in {preferredCurrency}</span>}
                   </td>
                   <td style={{ padding: '12px', textAlign: 'right', fontWeight: '700', color: 'var(--text-primary)', whiteSpace: 'nowrap', fontSize: '14px' }}>
                     {totals.costAvailable > 0 ? formatPrice(totals.cost, preferredCurrency) : '—'}
