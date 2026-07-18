@@ -30,7 +30,7 @@ try:
         is_auto_valuation_preset_disabled,
     )
 except ImportError:
-    _HAIKU_DEFAULT = 'us.anthropic.claude-haiku-4-5-20251001-v1:0'
+    _HAIKU_DEFAULT = 'eu.anthropic.claude-haiku-4-5-20251001-v1:0'
 
     def get_bedrock_region() -> str:
         return os.getenv('BEDROCK_REGION') or os.getenv('AWS_REGION', 'us-east-1')
@@ -1379,6 +1379,7 @@ def analyze_stock_get(ticker: str, stream: bool, params: dict) -> dict:
     currency = 'USD'
     sector = ''
     industry = ''
+    stock_body = {}
 
     if is_private:
         progress_events.append(progress(1, total_steps, 'Loading private company details...'))
@@ -1392,6 +1393,7 @@ def analyze_stock_get(ticker: str, stream: bool, params: dict) -> dict:
             current_price = 0
     else:
         progress_events.append(progress(1, total_steps, 'Fetching live stock price...'))
+        stock_body = {}
         try:
             lambda_client = boto3.client('lambda', region_name='eu-west-1')
             stock_data_lambda = os.getenv('STOCK_DATA_LAMBDA', 'stock-analysis-stock-data')
@@ -1563,6 +1565,24 @@ def analyze_stock_get(ticker: str, stream: bool, params: dict) -> dict:
               f"for {ticker}. Valuation numbers may be unreliable.")
 
     shares = _safe(km.get('shares_outstanding'))
+
+    # Derive shares if not explicitly provided — needed for DCF, EPV, Book Value
+    if shares is None:
+        # Try: Net Income / Diluted EPS
+        _ni  = _safe(inc.get('Net Income'))
+        _eps = _safe(inc.get('Diluted EPS') or inc.get('Basic EPS'))
+        if _ni is not None and _eps is not None and _eps != 0:
+            shares = round(_ni / _eps)
+            print(f"[Shares] Derived shares from NI/EPS for {ticker}: {shares:,.0f}")
+        # Fallback: market_cap / current_price
+        elif current_price and current_price > 0:
+            _mc = _safe(km.get('market_cap'))
+            if _mc is None:
+                # Try to get market cap from stock data response (populated earlier)
+                _mc = stock_body.get('marketCap') if not is_private else None
+            if _mc is not None and _mc > 0:
+                shares = round(_mc / current_price)
+                print(f"[Shares] Derived shares from market_cap/price for {ticker}: {shares:,.0f}")
 
     # ------------------------------------------------------------------
     # Step 3: DCF valuation

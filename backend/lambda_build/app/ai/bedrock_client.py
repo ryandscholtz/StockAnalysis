@@ -25,7 +25,7 @@ from typing import Any, List, Optional
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_CLAUDE_MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+DEFAULT_CLAUDE_MODEL_ID = "eu.anthropic.claude-haiku-4-5-20251001-v1:0"
 
 # Per-request budget (reset via reset_invocation_budget() at handler start)
 _budget_remaining: Optional[int] = None
