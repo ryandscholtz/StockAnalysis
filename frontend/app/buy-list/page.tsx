@@ -67,6 +67,9 @@ export default function BuyListPage() {
   const [editingQty, setEditingQty] = useState<Record<string, string>>({})
   const [savingQty, setSavingQty] = useState<Set<string>>(new Set())
   const [showLocal, setShowLocal] = useState(false)
+  const [bulkAnalyzing, setBulkAnalyzing] = useState(false)
+  const [bulkProgress, setBulkProgress] = useState<{ current: number; total: number } | null>(null)
+  const [bulkResult, setBulkResult] = useState<{ success: boolean; message: string } | null>(null)
 
   // Budget allocator state
   const [budget, setBudget] = useState('')
@@ -280,6 +283,48 @@ export default function BuyListPage() {
     }
   }
 
+  const runBulkAnalysis = async () => {
+    if (items.length === 0) {
+      setBulkResult({ success: false, message: 'No stocks in buy list to analyse.' })
+      setTimeout(() => setBulkResult(null), 5000)
+      return
+    }
+    setBulkAnalyzing(true)
+    setBulkResult(null)
+    const tickers = selectedTickers.size > 0
+      ? items.map(i => i.ticker).filter(t => selectedTickers.has(t))
+      : items.map(i => i.ticker)
+    setBulkProgress({ current: 0, total: tickers.length })
+    try {
+      const { jobId } = await stockApi.startBulkAnalysis(tickers)
+      await new Promise<void>((resolve) => {
+        const poll = setInterval(async () => {
+          try {
+            const status = await stockApi.getBulkStatus(jobId)
+            setBulkProgress({ current: status.completed + status.failed, total: status.total })
+            if (status.status === 'complete') {
+              clearInterval(poll)
+              setBulkProgress(null)
+              setBulkAnalyzing(false)
+              setBulkResult({
+                success: status.failed === 0,
+                message: `Completed: ${status.completed} analysed${status.failed > 0 ? `, ${status.failed} failed` : ''}.`,
+              })
+              setTimeout(() => setBulkResult(null), 6000)
+              await loadBuyList()
+              resolve()
+            }
+          } catch { /* keep polling on transient errors */ }
+        }, 2000)
+      })
+    } catch (err: any) {
+      setBulkProgress(null)
+      setBulkAnalyzing(false)
+      setBulkResult({ success: false, message: err?.message || 'Failed to start analysis.' })
+      setTimeout(() => setBulkResult(null), 6000)
+    }
+  }
+
   if (authLoading || (!isAuthenticated && !authLoading)) {
     return <div className="container" style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>Loading…</div>
   }
@@ -297,6 +342,12 @@ export default function BuyListPage() {
       {error && (
         <div style={{ padding: '12px 16px', backgroundColor: 'var(--status-error-bg)', border: '1px solid #ef4444', borderRadius: '6px', color: 'var(--status-error-text)', marginBottom: '20px' }}>
           ⚠️ {error}
+        </div>
+      )}
+
+      {bulkResult && (
+        <div style={{ padding: '12px 16px', backgroundColor: bulkResult.success ? '#d1fae5' : 'var(--status-error-bg)', border: `1px solid ${bulkResult.success ? '#10b981' : '#ef4444'}`, borderRadius: '6px', color: bulkResult.success ? '#065f46' : 'var(--status-error-text)', marginBottom: '20px' }}>
+          {bulkResult.success ? '✅' : '⚠️'} {bulkResult.message}
         </div>
       )}
 
@@ -389,6 +440,23 @@ export default function BuyListPage() {
                 🗑 Remove {selectedTickers.size} selected
               </button>
             )}
+            <button
+              onClick={runBulkAnalysis}
+              disabled={bulkAnalyzing || items.length === 0}
+              style={{
+                padding: '6px 14px', borderRadius: '6px', border: 'none',
+                backgroundColor: bulkAnalyzing ? '#9ca3af' : '#7c3aed',
+                color: 'white', fontSize: '13px', fontWeight: '500',
+                cursor: bulkAnalyzing || items.length === 0 ? 'not-allowed' : 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {bulkProgress
+                ? `⏳ ${bulkProgress.current}/${bulkProgress.total} done`
+                : bulkAnalyzing ? '⏳ Starting…'
+                : selectedTickers.size > 0 ? `📈 Analyse ${selectedTickers.size} selected`
+                : '📈 Analyse all'}
+            </button>
             <button
               onClick={loadBuyList}
               style={{ padding: '6px 14px', borderRadius: '6px', border: '1px solid var(--border-input)', backgroundColor: 'var(--bg-surface)', color: 'var(--text-secondary)', fontSize: '13px', cursor: 'pointer' }}
