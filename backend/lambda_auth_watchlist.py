@@ -14,6 +14,8 @@ dynamodb = boto3.resource('dynamodb', region_name='eu-west-1')
 WATCHLIST_TABLE = os.getenv('WATCHLIST_TABLE', 'stock-analysis-watchlist')
 MANUAL_DATA_TABLE = os.getenv('MANUAL_DATA_TABLE', 'stock-analysis-manual-data')
 BUY_LIST_TABLE = os.getenv('BUY_LIST_TABLE', 'stock-analysis-buy-list')
+DISCARDED_LIST_TABLE = os.getenv('DISCARDED_LIST_TABLE', 'stock-analysis-discarded-list')
+DISCARDED_TTL_DAYS = 7
 
 
 class DecimalEncoder(json.JSONEncoder):
@@ -293,6 +295,109 @@ def save_manual_data(ticker: str, data: dict) -> dict:
         }
 
 
+# ---------------------------------------------------------------------------
+# Discarded list
+# ---------------------------------------------------------------------------
+
+def get_discarded_list(user_id: str) -> dict:
+    """Get user's discarded list (auto-expired items excluded by DynamoDB TTL)."""
+    try:
+        import time
+        table = dynamodb.Table(DISCARDED_LIST_TABLE)
+        now = int(time.time())
+        response = table.query(
+            KeyConditionExpression='userId = :uid',
+            FilterExpression='attribute_not_exists(expires_at) OR expires_at > :now',
+            ExpressionAttributeValues={':uid': user_id, ':now': now}
+        )
+        items = response.get('Items', [])
+        return {
+            'statusCode': 200,
+            'body': json.dumps({'items': items}, cls=DecimalEncoder)
+        }
+    except Exception as e:
+        return {
+            'statusCode': 500,
+            'body': json.dumps({'error': f'Failed to get discarded list: {str(e)}'})
+        }
+
+
+def add_to_discarded_list(user_id: str, ticker: str, data: dict) -> dict:
+    """Add a stock to the discarded list with a 7-day TTL."""
+    try:
+        import time
+        table = dynamodb.Table(DISCARDED_LIST_TABLE)
+        expires_at = int(time.time()) + DISCARDED_TTL_DAYS * 86400
+        item = {
+            'userId': user_id,
+            'ticker': ticker,
+            'added_at': data.get('added_at', datetime.now().isoformat()),
+            'expires_at': expires_at,
+        }
+        for field in ('company_name', 'exchange', 'currency', 'recommendation',
+                      'reason'):
+            if data.get(field):
+                item[field] = data[field]
+        table.put_item(Item=item)
+        return {
+            'statusCode': 200,
+            'body': json.dumps({'message': 'Added to discarded list', 'item': item}, cls=DecimalEncoder)
+        }
+    except Exception as e:
+        return {
+            'statusCode': 500,
+            'body': json.dumps({'error': f'Failed to add to discarded list: {str(e)}'})
+        }
+
+
+def add_many_to_discarded_list(user_id: str, stocks: list) -> dict:
+    """Batch-add multiple stocks to the discarded list."""
+    try:
+        import time
+        table = dynamodb.Table(DISCARDED_LIST_TABLE)
+        expires_at = int(time.time()) + DISCARDED_TTL_DAYS * 86400
+        with table.batch_writer() as batch:
+            for stock in stocks:
+                ticker = stock.get('ticker', '')
+                if not ticker:
+                    continue
+                item = {
+                    'userId': user_id,
+                    'ticker': ticker,
+                    'added_at': datetime.now().isoformat(),
+                    'expires_at': expires_at,
+                }
+                for field in ('company_name', 'exchange', 'currency', 'recommendation', 'reason'):
+                    if stock.get(field):
+                        item[field] = stock[field]
+                batch.put_item(Item=item)
+        return {
+            'statusCode': 200,
+            'body': json.dumps({'message': f'Added {len(stocks)} items to discarded list'})
+        }
+    except Exception as e:
+        return {
+            'statusCode': 500,
+            'body': json.dumps({'error': f'Failed to batch-add to discarded list: {str(e)}'})
+        }
+
+
+def remove_from_discarded_list(user_id: str, ticker: str) -> dict:
+    """Remove a stock from the discarded list."""
+    try:
+        table = dynamodb.Table(DISCARDED_LIST_TABLE)
+        table.delete_item(Key={'userId': user_id, 'ticker': ticker})
+        return {
+            'statusCode': 200,
+            'body': json.dumps({'success': True, 'message': 'Removed from discarded list'})
+        }
+    except Exception as e:
+        return {
+            'statusCode': 500,
+            'body': json.dumps({'error': f'Failed to remove from discarded list: {str(e)}'})
+        }
+
+
 def get_buy_list(user_id: str) -> dict:
     """Get user's buy list."""
     try:
@@ -439,7 +544,8 @@ def lambda_handler(event, context):
             except Exception:
                 pass
 
-    if not user_id and ('/api/watchlist' in path or '/api/manual-data' in path or '/api/buy-list' in path):
+    if not user_id and ('/api/watchlist' in path or '/api/manual-data' in path
+                        or '/api/buy-list' in path or '/api/discarded-list' in path):
         return {
             'statusCode': 401,
             'headers': headers,
@@ -503,6 +609,28 @@ def lambda_handler(event, context):
                     'statusCode': 405,
                     'body': json.dumps({'error': 'Method not allowed'})
                 }
+
+        # Discarded list routes
+        elif '/api/discarded-list' in path:
+            if method == 'GET':
+                result = get_discarded_list(user_id)
+            elif method == 'POST' and path == '/api/discarded-list':
+                # Batch add: body = {"stocks": [{"ticker": ..., ...}, ...]}
+                body = json.loads(event.get('body', '{}') or '{}')
+                stocks = body.get('stocks', [])
+                if stocks:
+                    result = add_many_to_discarded_list(user_id, stocks)
+                else:
+                    result = {'statusCode': 400, 'body': json.dumps({'error': 'stocks list required'})}
+            elif method == 'POST' and '/api/discarded-list/' in path:
+                ticker = unquote(path.split('/api/discarded-list/')[-1].split('?')[0])
+                body = json.loads(event.get('body', '{}') or '{}')
+                result = add_to_discarded_list(user_id, ticker, body)
+            elif method == 'DELETE' and '/api/discarded-list/' in path:
+                ticker = unquote(path.split('/api/discarded-list/')[-1].split('?')[0])
+                result = remove_from_discarded_list(user_id, ticker)
+            else:
+                result = {'statusCode': 405, 'body': json.dumps({'error': 'Method not allowed'})}
 
         # Manual data routes
         elif '/api/manual-data/' in path:

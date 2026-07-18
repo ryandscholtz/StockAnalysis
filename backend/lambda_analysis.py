@@ -2488,6 +2488,325 @@ def _handle_bulk_job_ticker(event):
 # Lambda entry point
 # ---------------------------------------------------------------------------
 
+AUTO_ADD_JOB_PREFIX = 'AUTO_ADD_JOB#'
+DISCARDED_TABLE = os.environ.get('DISCARDED_LIST_TABLE', 'stock-analysis-discarded-list')
+AUTH_LAMBDA_NAME = os.environ.get('AUTH_LAMBDA', 'stock-analysis-auth')
+
+
+def _call_auth_lambda(path: str, method: str, body: dict = None, user_id: str = None) -> dict:
+    """Invoke the auth Lambda for watchlist/discarded operations."""
+    payload = {
+        'path': path,
+        'httpMethod': method,
+        'headers': {'x-user-id': user_id or ''},
+        'body': json.dumps(body) if body else '{}',
+        'queryStringParameters': {},
+    }
+    lc = boto3.client('lambda', region_name='eu-west-1')
+    resp = lc.invoke(
+        FunctionName=AUTH_LAMBDA_NAME,
+        InvocationType='RequestResponse',
+        Payload=json.dumps(payload),
+    )
+    result = json.loads(resp['Payload'].read())
+    return json.loads(result.get('body', '{}'))
+
+
+def _get_ai_stock_candidates(company_name_hint: str = '') -> list:
+    """Ask Bedrock for a list of potentially undervalued stocks to research."""
+    prompt = """You are a financial research assistant. Provide a list of 100 publicly traded stocks
+that may currently be undervalued based on fundamental analysis principles (low P/E, strong free cash
+flow, solid balance sheet, competitive moat, etc.).
+
+Return ONLY a JSON array of objects. No explanation, no markdown fences.
+Each object must have:
+  - "ticker": the primary US-listed or major-exchange ticker symbol (e.g. AAPL, BP.L, BHP.AX)
+  - "exchange": exchange code (e.g. NYSE, NASDAQ, LSE, ASX)
+  - "company_name": full company name
+
+Example: [{"ticker":"AAPL","exchange":"NASDAQ","company_name":"Apple Inc."}, ...]
+
+Include a diverse mix of sectors and geographies. Prioritise stocks with strong fundamentals
+and a history of consistent earnings. Return exactly 100 entries."""
+    try:
+        text = invoke_claude_bedrock_simple(
+            prompt,
+            max_tokens=4000,
+            operation='auto_add_stock_discovery',
+            model_id=get_claude_model_id('financial'),
+        )
+        import re as _re
+        text = _re.sub(r'```(?:json)?\s*', '', text).strip()
+        start = text.find('[')
+        end = text.rfind(']') + 1
+        if start < 0 or end <= start:
+            return []
+        candidates = json.loads(text[start:end])
+        return [c for c in candidates if isinstance(c, dict) and c.get('ticker')]
+    except Exception as e:
+        print(f'[AutoAdd] Bedrock discovery failed: {e}')
+        return []
+
+
+def handle_auto_add_stocks(event, context):
+    """POST /api/auto-add-stocks
+    1. Calls Bedrock for ~100 undervalued stock candidates.
+    2. Filters out existing watchlist + discarded tickers.
+    3. Kicks off bulk analysis for up to 50 remaining tickers.
+    4. Returns {autoJobId, bulkJobId, total, tickers}.
+    """
+    # Extract user identity
+    headers_in = event.get('headers', {}) or {}
+    user_id = headers_in.get('X-User-Id') or headers_in.get('x-user-id')
+    if not user_id:
+        auth_header = headers_in.get('Authorization') or headers_in.get('authorization', '')
+        if auth_header.startswith('Bearer '):
+            try:
+                import base64
+                token = auth_header[7:]
+                payload_b64 = token.split('.')[1]
+                payload_b64 += '=' * (-len(payload_b64) % 4)
+                payload = json.loads(base64.b64decode(payload_b64).decode('utf-8'))
+                user_id = payload.get('sub')
+            except Exception:
+                pass
+    if not user_id:
+        return {'statusCode': 401, 'body': json.dumps({'error': 'Unauthorized'})}
+
+    print(f'[AutoAdd] Starting for user {user_id}')
+
+    # Fetch existing watchlist and discarded tickers to filter out
+    known_tickers: set = set()
+    try:
+        wl = _call_auth_lambda('/api/watchlist', 'GET', user_id=user_id)
+        for item in wl.get('items', []):
+            if item.get('ticker'):
+                known_tickers.add(item['ticker'].upper())
+    except Exception as e:
+        print(f'[AutoAdd] Could not fetch watchlist: {e}')
+    try:
+        dl = _call_auth_lambda('/api/discarded-list', 'GET', user_id=user_id)
+        for item in dl.get('items', []):
+            if item.get('ticker'):
+                known_tickers.add(item['ticker'].upper())
+    except Exception as e:
+        print(f'[AutoAdd] Could not fetch discarded list: {e}')
+
+    print(f'[AutoAdd] Known tickers to skip: {len(known_tickers)}')
+
+    # Get AI candidates and filter
+    candidates = _get_ai_stock_candidates()
+    print(f'[AutoAdd] AI returned {len(candidates)} candidates')
+
+    filtered = [c for c in candidates if c['ticker'].upper() not in known_tickers]
+    to_analyze = filtered[:50]
+    tickers = [c['ticker'].upper() for c in to_analyze]
+    ticker_meta = {c['ticker'].upper(): c for c in to_analyze}
+
+    print(f'[AutoAdd] Filtered to {len(tickers)} tickers for analysis')
+
+    if not tickers:
+        return {
+            'statusCode': 200,
+            'body': json.dumps({
+                'autoJobId': None,
+                'bulkJobId': None,
+                'total': 0,
+                'tickers': [],
+                'message': 'No new candidates found after filtering known tickers.',
+            }),
+        }
+
+    # Start bulk analysis
+    dynamodb_res = boto3.resource('dynamodb', region_name='eu-west-1')
+    table = dynamodb_res.Table(MANUAL_DATA_TABLE)
+
+    bulk_job_id = str(uuid.uuid4())
+    auto_job_id = str(uuid.uuid4())
+    total = len(tickers)
+
+    # Store bulk job record
+    table.put_item(Item={
+        'ticker': f'{BULK_JOB_PREFIX}{bulk_job_id}',
+        'status': 'running',
+        'total': total,
+        'completed': 0,
+        'failed': 0,
+        'created_at': datetime.now().isoformat(),
+    })
+
+    # Store auto-add job record
+    from decimal import Decimal as _Dec
+    table.put_item(Item={
+        'ticker': f'{AUTO_ADD_JOB_PREFIX}{auto_job_id}',
+        'status': 'analyzing',
+        'user_id': user_id,
+        'bulk_job_id': bulk_job_id,
+        'tickers': tickers,
+        'ticker_meta': json.dumps(ticker_meta),
+        'total': total,
+        'created_at': datetime.now().isoformat(),
+    })
+
+    # Fan out bulk analysis async
+    fn_name = context.function_name if context and hasattr(context, 'function_name') else 'stock-analysis-analyzer'
+    lc = boto3.client('lambda', region_name='eu-west-1')
+    lc.invoke(
+        FunctionName=fn_name,
+        InvocationType='Event',
+        Payload=json.dumps({'_bulk_fanout': True, 'bulk_job_id': bulk_job_id, 'tickers': tickers}),
+    )
+
+    return {
+        'statusCode': 200,
+        'body': json.dumps({
+            'autoJobId': auto_job_id,
+            'bulkJobId': bulk_job_id,
+            'total': total,
+            'tickers': tickers,
+        }),
+    }
+
+
+def handle_auto_add_status(event):
+    """GET /api/auto-add-stocks/status?jobId=xxx
+    Returns auto-add job status. When the underlying bulk analysis is complete,
+    this endpoint finalises: routes Buy/Strong Buy to watchlist, rest to discarded.
+    """
+    params = event.get('queryStringParameters') or {}
+    auto_job_id = params.get('jobId', '').strip()
+    if not auto_job_id:
+        return {'statusCode': 400, 'body': json.dumps({'error': 'jobId required'})}
+
+    dynamodb_res = boto3.resource('dynamodb', region_name='eu-west-1')
+    table = dynamodb_res.Table(MANUAL_DATA_TABLE)
+
+    job = table.get_item(Key={'ticker': f'{AUTO_ADD_JOB_PREFIX}{auto_job_id}'}).get('Item')
+    if not job:
+        return {'statusCode': 404, 'body': json.dumps({'error': 'Job not found'})}
+
+    status = job.get('status', 'analyzing')
+    bulk_job_id = job.get('bulk_job_id', '')
+
+    # If already finalised, return stored results
+    if status in ('complete', 'error'):
+        return {
+            'statusCode': 200,
+            'body': json.dumps({
+                'status': status,
+                'addedToWatchlist': job.get('added_to_watchlist', []),
+                'addedToDiscarded': job.get('added_to_discarded', []),
+                'total': int(job.get('total', 0)),
+            }),
+        }
+
+    # Check bulk job progress
+    bulk_item = table.get_item(Key={'ticker': f'{BULK_JOB_PREFIX}{bulk_job_id}'}).get('Item')
+    if not bulk_item:
+        return {'statusCode': 200, 'body': json.dumps({'status': 'analyzing', 'completed': 0, 'total': int(job.get('total', 0))})}
+
+    bulk_status = bulk_item.get('status', 'running')
+    completed = int(bulk_item.get('completed', 0))
+    failed = int(bulk_item.get('failed', 0))
+    total = int(bulk_item.get('total', 0))
+
+    if bulk_status != 'complete':
+        return {
+            'statusCode': 200,
+            'body': json.dumps({
+                'status': 'analyzing',
+                'completed': completed + failed,
+                'total': total,
+            }),
+        }
+
+    # Bulk analysis done — finalise routing
+    print(f'[AutoAdd] Bulk done for job {auto_job_id}, routing results...')
+    user_id = job.get('user_id', '')
+    tickers = job.get('tickers', [])
+    ticker_meta_raw = job.get('ticker_meta', '{}')
+    try:
+        ticker_meta = json.loads(ticker_meta_raw) if isinstance(ticker_meta_raw, str) else {}
+    except Exception:
+        ticker_meta = {}
+
+    # Fetch analysis results for each ticker from MANUAL_DATA_TABLE
+    watchlist_stocks = []
+    discarded_stocks = []
+
+    for ticker in tickers:
+        try:
+            item = table.get_item(Key={'ticker': ticker}).get('Item')
+            if not item:
+                discarded_stocks.append(ticker)
+                continue
+            la = item.get('latest_analysis') or {}
+            if isinstance(la, str):
+                try:
+                    la = json.loads(la)
+                except Exception:
+                    la = {}
+            rec = la.get('recommendation') or la.get('modelRecommendation') or ''
+            if rec in ('Strong Buy', 'Buy'):
+                watchlist_stocks.append(ticker)
+            else:
+                discarded_stocks.append(ticker)
+        except Exception as e:
+            print(f'[AutoAdd] Error reading result for {ticker}: {e}')
+            discarded_stocks.append(ticker)
+
+    # Add qualified stocks to watchlist
+    if watchlist_stocks and user_id:
+        for ticker in watchlist_stocks:
+            try:
+                meta = ticker_meta.get(ticker, {})
+                _call_auth_lambda(
+                    f'/api/watchlist/{ticker}', 'POST',
+                    body={'companyName': meta.get('company_name', ''), 'exchange': meta.get('exchange', '')},
+                    user_id=user_id,
+                )
+            except Exception as e:
+                print(f'[AutoAdd] Failed to add {ticker} to watchlist: {e}')
+
+    # Add rest to discarded list
+    if discarded_stocks and user_id:
+        try:
+            stocks_payload = [
+                {
+                    'ticker': t,
+                    'company_name': ticker_meta.get(t, {}).get('company_name', ''),
+                    'exchange': ticker_meta.get(t, {}).get('exchange', ''),
+                    'reason': 'auto_add_analysis',
+                }
+                for t in discarded_stocks
+            ]
+            _call_auth_lambda('/api/discarded-list', 'POST', body={'stocks': stocks_payload}, user_id=user_id)
+        except Exception as e:
+            print(f'[AutoAdd] Failed to batch-add discarded: {e}')
+
+    # Update auto-add job as complete
+    table.update_item(
+        Key={'ticker': f'{AUTO_ADD_JOB_PREFIX}{auto_job_id}'},
+        UpdateExpression='SET #s = :s, added_to_watchlist = :aw, added_to_discarded = :ad',
+        ExpressionAttributeNames={'#s': 'status'},
+        ExpressionAttributeValues={
+            ':s': 'complete',
+            ':aw': watchlist_stocks,
+            ':ad': discarded_stocks,
+        },
+    )
+
+    return {
+        'statusCode': 200,
+        'body': json.dumps({
+            'status': 'complete',
+            'addedToWatchlist': watchlist_stocks,
+            'addedToDiscarded': discarded_stocks,
+            'total': total,
+        }),
+    }
+
+
 def lambda_handler(event, context):
     """AWS Lambda handler for stock analysis"""
 
@@ -2541,6 +2860,12 @@ def lambda_handler(event, context):
 
         elif '/api/bulk-status' in path and method == 'GET':
             result = handle_bulk_status(event)
+
+        elif '/api/auto-add-stocks/status' in path and method == 'GET':
+            result = handle_auto_add_status(event)
+
+        elif '/api/auto-add-stocks' in path and method == 'POST':
+            result = handle_auto_add_stocks(event, context)
 
         # /api/upload-pdf/status must be checked before /api/upload-pdf
         elif '/api/upload-pdf/status' in path and method == 'GET':

@@ -1034,6 +1034,57 @@ export const stockApi = {
     await api.delete(`/api/buy-list/${encodeURIComponent(ticker)}`)
     return { success: true }
   },
+
+  // ---- Discarded list ----
+  async getDiscardedList(): Promise<{ items: DiscardedItem[] }> {
+    const data = await api.get('/api/discarded-list')
+    return data as { items: DiscardedItem[] }
+  },
+
+  async addToDiscardedList(ticker: string, body: Partial<DiscardedItem> = {}): Promise<void> {
+    await api.post(`/api/discarded-list/${encodeURIComponent(ticker)}`, body)
+  },
+
+  async removeFromDiscardedList(ticker: string): Promise<void> {
+    await api.delete(`/api/discarded-list/${encodeURIComponent(ticker)}`)
+  },
+
+  // ---- Auto-add stocks ----
+  async startAutoAdd(): Promise<AutoAddJobResponse> {
+    const data = await api.post('/api/auto-add-stocks', {})
+    return data as AutoAddJobResponse
+  },
+
+  async getAutoAddStatus(jobId: string): Promise<AutoAddStatusResponse> {
+    const data = await api.get(`/api/auto-add-stocks/status?jobId=${encodeURIComponent(jobId)}`)
+    return data as AutoAddStatusResponse
+  },
+}
+
+export interface DiscardedItem {
+  ticker: string
+  company_name?: string
+  exchange?: string
+  reason?: string
+  added_at?: string
+  expires_at?: number
+  recommendation?: string
+}
+
+export interface AutoAddJobResponse {
+  autoJobId: string | null
+  bulkJobId: string | null
+  total: number
+  tickers: string[]
+  message?: string
+}
+
+export interface AutoAddStatusResponse {
+  status: 'analyzing' | 'complete' | 'error'
+  completed?: number
+  total?: number
+  addedToWatchlist?: string[]
+  addedToDiscarded?: string[]
 }
 
 export interface WatchlistItem {

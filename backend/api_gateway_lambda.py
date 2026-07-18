@@ -80,10 +80,10 @@ def route_request(event: dict) -> dict:
     elif '/api/pdf/' in path:
         return invoke_lambda(PDF_LAMBDA, event)
     
-    elif '/api/analysis' in path or '/api/analyze' in path or '/api/batch-analyze' in path or '/api/bulk-analyze' in path or '/api/bulk-status' in path or '/api/financial-data' in path:
+    elif '/api/analysis' in path or '/api/analyze' in path or '/api/batch-analyze' in path or '/api/bulk-analyze' in path or '/api/bulk-status' in path or '/api/financial-data' in path or '/api/auto-add-stocks' in path:
         return invoke_lambda(ANALYSIS_LAMBDA, event)
     
-    elif '/api/watchlist' in path or '/api/manual-data' in path or '/api/auth' in path or '/api/buy-list' in path:
+    elif '/api/watchlist' in path or '/api/manual-data' in path or '/api/auth' in path or '/api/buy-list' in path or '/api/discarded-list' in path:
         return invoke_lambda(AUTH_LAMBDA, event)
     
     else:

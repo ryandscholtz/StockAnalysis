@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { stockApi } from '@/lib/api'
+import { stockApi, DiscardedItem } from '@/lib/api'
 import { formatPrice, inferCurrencyFromTicker } from '@/lib/currency'
 import { useCurrency } from '@/lib/useCurrency'
 import { useAuth } from '@/components/AuthProvider'
@@ -90,6 +90,14 @@ export default function WatchlistPage() {
   const [showLocal, setShowLocal] = useState(false)
   const { preferredCurrency, convert, prefetchRates } = useCurrency()
 
+  // Discarded list + auto-add state
+  const [activeTab, setActiveTab] = useState<'watchlist' | 'discarded'>('watchlist')
+  const [discardedItems, setDiscardedItems] = useState<DiscardedItem[]>([])
+  const [discardedLoading, setDiscardedLoading] = useState(false)
+  const [autoAdding, setAutoAdding] = useState(false)
+  const [autoAddProgress, setAutoAddProgress] = useState<{ completed: number; total: number; phase: string } | null>(null)
+  const [autoAddResult, setAutoAddResult] = useState<{ watchlist: string[]; discarded: string[]; total: number } | null>(null)
+
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
       router.replace('/')
@@ -99,6 +107,7 @@ export default function WatchlistPage() {
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
       loadWatchlist()
+      loadDiscardedList()
     }
   }, [isAuthenticated, authLoading])
 
@@ -177,6 +186,66 @@ export default function WatchlistPage() {
       ])
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadDiscardedList = async () => {
+    try {
+      setDiscardedLoading(true)
+      const data = await stockApi.getDiscardedList()
+      setDiscardedItems(data.items || [])
+    } catch (err) {
+      console.error('Failed to load discarded list:', err)
+    } finally {
+      setDiscardedLoading(false)
+    }
+  }
+
+  const runAutoAdd = async () => {
+    setAutoAdding(true)
+    setAutoAddResult(null)
+    setAutoAddProgress({ completed: 0, total: 0, phase: 'Fetching AI recommendations…' })
+    try {
+      const job = await stockApi.startAutoAdd()
+      if (!job.autoJobId) {
+        setAutoAddProgress(null)
+        setAutoAdding(false)
+        setAutoAddResult({ watchlist: [], discarded: [], total: 0 })
+        return
+      }
+      setAutoAddProgress({ completed: 0, total: job.total, phase: `Analysing ${job.total} candidates…` })
+
+      await new Promise<void>((resolve) => {
+        const poll = setInterval(async () => {
+          try {
+            const status = await stockApi.getAutoAddStatus(job.autoJobId!)
+            if (status.status === 'analyzing') {
+              setAutoAddProgress({
+                completed: status.completed ?? 0,
+                total: status.total ?? job.total,
+                phase: `Analysing… (${status.completed ?? 0}/${status.total ?? job.total})`,
+              })
+            } else {
+              clearInterval(poll)
+              setAutoAddProgress(null)
+              setAutoAdding(false)
+              setAutoAddResult({
+                watchlist: status.addedToWatchlist ?? [],
+                discarded: status.addedToDiscarded ?? [],
+                total: status.total ?? job.total,
+              })
+              await Promise.all([loadWatchlist(), loadDiscardedList()])
+              resolve()
+            }
+          } catch {
+            // keep polling on transient errors
+          }
+        }, 3000)
+      })
+    } catch (err: any) {
+      setAutoAddProgress(null)
+      setAutoAdding(false)
+      setAutoAddResult({ watchlist: [], discarded: [], total: 0 })
     }
   }
 
@@ -363,13 +432,81 @@ export default function WatchlistPage() {
   return (
     <div className="container watchlist-page" style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
       {/* Header */}
-      <div style={{ marginBottom: '32px' }}>
-        <h1 style={{ fontSize: '36px', fontWeight: '700', color: 'var(--text-primary)', marginBottom: '8px' }}>
-          Watchlist
-        </h1>
-        <p style={{ fontSize: '16px', color: 'var(--text-muted)' }}>
-          Monitor and analyze your favorite stocks with real-time data and comprehensive financial metrics.
-        </p>
+      <div style={{ marginBottom: '24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
+          <div>
+            <h1 style={{ fontSize: '36px', fontWeight: '700', color: 'var(--text-primary)', marginBottom: '8px' }}>
+              Watchlist
+            </h1>
+            <p style={{ fontSize: '16px', color: 'var(--text-muted)' }}>
+              Monitor and analyze your favorite stocks with real-time data and comprehensive financial metrics.
+            </p>
+          </div>
+          {/* Auto-add button */}
+          <button
+            onClick={runAutoAdd}
+            disabled={autoAdding}
+            title="Use AI to discover undervalued stocks and auto-populate your watchlist"
+            style={{
+              padding: '10px 18px',
+              backgroundColor: autoAdding ? '#9ca3af' : '#0ea5e9',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              fontSize: '14px',
+              fontWeight: '600',
+              cursor: autoAdding ? 'not-allowed' : 'pointer',
+              whiteSpace: 'nowrap',
+              alignSelf: 'center',
+            }}
+          >
+            {autoAddProgress
+              ? `⏳ ${autoAddProgress.phase}`
+              : autoAdding
+                ? '⏳ Working…'
+                : '🤖 Auto-add Stocks'}
+          </button>
+        </div>
+
+        {/* Auto-add result banner */}
+        {autoAddResult && (
+          <div style={{ marginTop: '12px', padding: '12px 16px', backgroundColor: '#f0fdf4', border: '1px solid #10b981', borderRadius: '8px', color: '#065f46', fontSize: '14px' }}>
+            ✅ Analysis complete — added <strong>{autoAddResult.watchlist.length}</strong> stock{autoAddResult.watchlist.length !== 1 ? 's' : ''} to your watchlist
+            {autoAddResult.watchlist.length > 0 && (
+              <span style={{ marginLeft: '8px', fontSize: '13px', color: '#047857' }}>
+                ({autoAddResult.watchlist.slice(0, 10).join(', ')}{autoAddResult.watchlist.length > 10 ? '…' : ''})
+              </span>
+            )}
+            {autoAddResult.discarded.length > 0 && (
+              <span style={{ marginLeft: '4px' }}>, and <strong>{autoAddResult.discarded.length}</strong> added to the discarded list.</span>
+            )}
+            <button onClick={() => setAutoAddResult(null)} style={{ marginLeft: '12px', background: 'none', border: 'none', color: '#047857', cursor: 'pointer', fontSize: '16px', lineHeight: 1 }}>✕</button>
+          </div>
+        )}
+
+        {/* Tab switcher */}
+        <div style={{ display: 'flex', gap: '4px', background: 'var(--bg-hover)', borderRadius: '10px', padding: '4px', marginTop: '20px', width: 'fit-content' }}>
+          {(['watchlist', 'discarded'] as const).map(tab => (
+            <button
+              key={tab}
+              onClick={() => { setActiveTab(tab); if (tab === 'discarded') loadDiscardedList() }}
+              style={{
+                padding: '8px 20px',
+                borderRadius: '7px',
+                border: 'none',
+                fontSize: '14px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                backgroundColor: activeTab === tab ? 'var(--bg-surface)' : 'transparent',
+                color: activeTab === tab ? 'var(--text-primary)' : 'var(--text-muted)',
+                boxShadow: activeTab === tab ? '0 1px 4px rgba(0,0,0,0.12)' : 'none',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              {tab === 'watchlist' ? '📊 Watchlist' : '🗑 Discarded List'}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Error Message */}
@@ -386,7 +523,8 @@ export default function WatchlistPage() {
         </div>
       )}
 
-      {/* Watchlist Items */}
+      {/* Watchlist panel */}
+      {activeTab === 'watchlist' && (
       <div
         className="watchlist-cards-box"
         style={{
@@ -792,6 +930,97 @@ export default function WatchlistPage() {
           </div>
         )}
       </div>
+      )} {/* end activeTab === 'watchlist' */}
+
+      {/* Discarded list panel */}
+      {activeTab === 'discarded' && (
+        <div style={{ background: 'var(--bg-surface)', borderRadius: '12px', padding: '24px', boxShadow: '0 4px 6px rgba(0,0,0,0.15)', border: '1px solid var(--border-default)', marginBottom: '32px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+            <h2 style={{ fontSize: '22px', fontWeight: '600', color: 'var(--text-primary)', margin: 0 }}>
+              🗑 Discarded List
+            </h2>
+            <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+              Items are automatically removed after 7 days.
+            </div>
+            <button
+              onClick={loadDiscardedList}
+              style={{ padding: '6px 14px', borderRadius: '6px', border: '1px solid var(--border-input)', backgroundColor: 'var(--bg-surface)', color: 'var(--text-secondary)', fontSize: '13px', cursor: 'pointer' }}
+            >
+              🔄 Refresh
+            </button>
+          </div>
+
+          {discardedLoading ? (
+            <LoadingSpinner />
+          ) : discardedItems.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
+              <p>No discarded stocks. Stocks that don't meet the buy criteria during Auto-add will appear here.</p>
+            </div>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+                <thead>
+                  <tr style={{ borderBottom: '2px solid var(--border-default)', color: 'var(--text-muted)', textAlign: 'left' }}>
+                    <th style={{ padding: '8px 12px', fontWeight: '600' }}>Ticker</th>
+                    <th style={{ padding: '8px 12px', fontWeight: '600' }}>Company</th>
+                    <th style={{ padding: '8px 12px', fontWeight: '600' }}>Added</th>
+                    <th style={{ padding: '8px 12px', fontWeight: '600' }}>Expires</th>
+                    <th style={{ padding: '8px 12px', fontWeight: '600' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {discardedItems.map((item) => {
+                    const expiresDate = item.expires_at ? new Date(item.expires_at * 1000) : null
+                    const addedDate = item.added_at ? new Date(item.added_at) : null
+                    return (
+                      <tr key={item.ticker} style={{ borderBottom: '1px solid var(--border-default)' }}>
+                        <td style={{ padding: '10px 12px', fontWeight: '600', color: 'var(--color-primary)', fontFamily: 'monospace' }}>
+                          {item.ticker}
+                        </td>
+                        <td style={{ padding: '10px 12px', color: 'var(--text-secondary)' }}>
+                          {item.company_name || '—'}
+                        </td>
+                        <td style={{ padding: '10px 12px', color: 'var(--text-muted)', fontSize: '13px' }}>
+                          {addedDate ? addedDate.toLocaleDateString() : '—'}
+                        </td>
+                        <td style={{ padding: '10px 12px', color: 'var(--text-muted)', fontSize: '13px' }}>
+                          {expiresDate ? expiresDate.toLocaleDateString() : '—'}
+                        </td>
+                        <td style={{ padding: '10px 12px' }}>
+                          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                            <button
+                              onClick={async () => {
+                                await stockApi.addToWatchlist(item.ticker, {
+                                  company_name: item.company_name,
+                                  exchange: item.exchange,
+                                })
+                                await stockApi.removeFromDiscardedList(item.ticker)
+                                await Promise.all([loadDiscardedList(), loadWatchlist()])
+                              }}
+                              style={{ padding: '4px 10px', borderRadius: '5px', border: '1px solid #10b981', backgroundColor: 'transparent', color: '#059669', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
+                            >
+                              ➕ Add to Watchlist
+                            </button>
+                            <button
+                              onClick={async () => {
+                                await stockApi.removeFromDiscardedList(item.ticker)
+                                await loadDiscardedList()
+                              }}
+                              style={{ padding: '4px 10px', borderRadius: '5px', border: '1px solid #ef4444', backgroundColor: 'transparent', color: '#dc2626', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
+                            >
+                              🗑 Remove
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Confirm remove modal */}
       {confirmRemoveOpen && (
