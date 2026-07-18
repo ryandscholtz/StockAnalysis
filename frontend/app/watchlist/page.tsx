@@ -990,10 +990,7 @@ export default function WatchlistPage() {
                           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                             <button
                               onClick={async () => {
-                                await stockApi.addToWatchlist(item.ticker, {
-                                  company_name: item.company_name,
-                                  exchange: item.exchange,
-                                })
+                                await stockApi.addToWatchlist(item.ticker, item.company_name, item.exchange)
                                 await stockApi.removeFromDiscardedList(item.ticker)
                                 await Promise.all([loadDiscardedList(), loadWatchlist()])
                               }}
