@@ -2489,6 +2489,7 @@ def _handle_bulk_job_ticker(event):
 # ---------------------------------------------------------------------------
 
 AUTO_ADD_JOB_PREFIX = 'AUTO_ADD_JOB#'
+AUTO_ADD_LOCK_PREFIX = 'AUTO_ADD_LOCK#'
 DISCARDED_TABLE = os.environ.get('DISCARDED_LIST_TABLE', 'stock-analysis-discarded-list')
 AUTH_LAMBDA_NAME = os.environ.get('AUTH_LAMBDA', 'stock-analysis-auth')
 
@@ -2548,6 +2549,56 @@ and a history of consistent earnings. Return exactly 100 entries."""
         return []
 
 
+def _acquire_auto_add_lock(table, user_id: str, auto_job_id: str) -> tuple[bool, dict | None]:
+    """Acquire a per-user lock so auto-add can't be started again until previous job completes."""
+    key = f'{AUTO_ADD_LOCK_PREFIX}{user_id}'
+
+    def _put_lock() -> None:
+        table.put_item(
+            Item={
+                'ticker': key,
+                'user_id': user_id,
+                'status': 'locked',
+                'auto_job_id': auto_job_id,
+                'created_at': datetime.now().isoformat(),
+            },
+            ConditionExpression='attribute_not_exists(ticker)',
+        )
+
+    try:
+        _put_lock()
+        return True, None
+    except Exception as exc:
+        if 'ConditionalCheckFailedException' not in str(exc):
+            raise
+
+        existing = table.get_item(Key={'ticker': key}).get('Item') or {}
+        existing_job_id = existing.get('auto_job_id', '')
+
+        # If the existing lock references a finished (or missing) job, clear stale lock and retry once.
+        if existing_job_id:
+            existing_job = table.get_item(Key={'ticker': f'{AUTO_ADD_JOB_PREFIX}{existing_job_id}'}).get('Item')
+            existing_status = (existing_job or {}).get('status')
+            if existing_status in ('complete', 'error') or existing_job is None:
+                try:
+                    table.delete_item(Key={'ticker': key})
+                    _put_lock()
+                    return True, None
+                except Exception:
+                    pass
+
+        return False, existing
+
+
+def _release_auto_add_lock(table, user_id: str) -> None:
+    """Release per-user auto-add lock."""
+    key = f'{AUTO_ADD_LOCK_PREFIX}{user_id}'
+    try:
+        table.delete_item(Key={'ticker': key})
+    except Exception as exc:
+        print(f'[AutoAdd] Failed to release lock for {user_id}: {exc}')
+
+
 def handle_auto_add_stocks(event, context):
     """POST /api/auto-add-stocks
     1. Calls Bedrock for ~100 undervalued stock candidates.
@@ -2575,97 +2626,116 @@ def handle_auto_add_stocks(event, context):
 
     print(f'[AutoAdd] Starting for user {user_id}')
 
-    # Fetch existing watchlist and discarded tickers to filter out
-    known_tickers: set = set()
+    dynamodb_res = boto3.resource('dynamodb', region_name='eu-west-1')
+    table = dynamodb_res.Table(MANUAL_DATA_TABLE)
+    auto_job_id = str(uuid.uuid4())
+
+    lock_acquired = False
+    keep_lock_for_running_job = False
     try:
-        wl = _call_auth_lambda('/api/watchlist', 'GET', user_id=user_id)
-        for item in wl.get('items', []):
-            if item.get('ticker'):
-                known_tickers.add(item['ticker'].upper())
-    except Exception as e:
-        print(f'[AutoAdd] Could not fetch watchlist: {e}')
-    try:
-        dl = _call_auth_lambda('/api/discarded-list', 'GET', user_id=user_id)
-        for item in dl.get('items', []):
-            if item.get('ticker'):
-                known_tickers.add(item['ticker'].upper())
-    except Exception as e:
-        print(f'[AutoAdd] Could not fetch discarded list: {e}')
+        ok, existing_lock = _acquire_auto_add_lock(table, user_id, auto_job_id)
+        if not ok:
+            return {
+                'statusCode': 429,
+                'body': json.dumps({
+                    'error': 'Auto-add already running. Please wait until the previous analysis completes.',
+                    'runningAutoJobId': (existing_lock or {}).get('auto_job_id'),
+                }),
+            }
+        lock_acquired = True
 
-    print(f'[AutoAdd] Known tickers to skip: {len(known_tickers)}')
+        # Fetch existing watchlist and discarded tickers to filter out
+        known_tickers: set = set()
+        try:
+            wl = _call_auth_lambda('/api/watchlist', 'GET', user_id=user_id)
+            for item in wl.get('items', []):
+                if item.get('ticker'):
+                    known_tickers.add(item['ticker'].upper())
+        except Exception as e:
+            print(f'[AutoAdd] Could not fetch watchlist: {e}')
+        try:
+            dl = _call_auth_lambda('/api/discarded-list', 'GET', user_id=user_id)
+            for item in dl.get('items', []):
+                if item.get('ticker'):
+                    known_tickers.add(item['ticker'].upper())
+        except Exception as e:
+            print(f'[AutoAdd] Could not fetch discarded list: {e}')
 
-    # Get AI candidates and filter
-    candidates = _get_ai_stock_candidates()
-    print(f'[AutoAdd] AI returned {len(candidates)} candidates')
+        print(f'[AutoAdd] Known tickers to skip: {len(known_tickers)}')
 
-    filtered = [c for c in candidates if c['ticker'].upper() not in known_tickers]
-    to_analyze = filtered[:50]
-    tickers = [c['ticker'].upper() for c in to_analyze]
-    ticker_meta = {c['ticker'].upper(): c for c in to_analyze}
+        # Get AI candidates and filter
+        candidates = _get_ai_stock_candidates()
+        print(f'[AutoAdd] AI returned {len(candidates)} candidates')
 
-    print(f'[AutoAdd] Filtered to {len(tickers)} tickers for analysis')
+        filtered = [c for c in candidates if c['ticker'].upper() not in known_tickers]
+        to_analyze = filtered[:50]
+        tickers = [c['ticker'].upper() for c in to_analyze]
+        ticker_meta = {c['ticker'].upper(): c for c in to_analyze}
 
-    if not tickers:
+        print(f'[AutoAdd] Filtered to {len(tickers)} tickers for analysis')
+
+        if not tickers:
+            return {
+                'statusCode': 200,
+                'body': json.dumps({
+                    'autoJobId': None,
+                    'bulkJobId': None,
+                    'total': 0,
+                    'tickers': [],
+                    'message': 'No new candidates found after filtering known tickers.',
+                }),
+            }
+
+        # Start bulk analysis
+        bulk_job_id = str(uuid.uuid4())
+        total = len(tickers)
+
+        # Store bulk job record
+        table.put_item(Item={
+            'ticker': f'{BULK_JOB_PREFIX}{bulk_job_id}',
+            'status': 'running',
+            'total': total,
+            'completed': 0,
+            'failed': 0,
+            'created_at': datetime.now().isoformat(),
+        })
+
+        # Store auto-add job record
+        table.put_item(Item={
+            'ticker': f'{AUTO_ADD_JOB_PREFIX}{auto_job_id}',
+            'status': 'analyzing',
+            'user_id': user_id,
+            'bulk_job_id': bulk_job_id,
+            'tickers': tickers,
+            'ticker_meta': json.dumps(ticker_meta),
+            'total': total,
+            'created_at': datetime.now().isoformat(),
+        })
+
+        # Fan out bulk analysis async
+        fn_name = context.function_name if context and hasattr(context, 'function_name') else 'stock-analysis-analyzer'
+        lc = boto3.client('lambda', region_name='eu-west-1')
+        lc.invoke(
+            FunctionName=fn_name,
+            InvocationType='Event',
+            Payload=json.dumps({'_bulk_fanout': True, 'bulk_job_id': bulk_job_id, 'tickers': tickers}),
+        )
+
+        # Keep lock while this auto-add job is running; released when status finalises.
+        keep_lock_for_running_job = True
+
         return {
             'statusCode': 200,
             'body': json.dumps({
-                'autoJobId': None,
-                'bulkJobId': None,
-                'total': 0,
-                'tickers': [],
-                'message': 'No new candidates found after filtering known tickers.',
+                'autoJobId': auto_job_id,
+                'bulkJobId': bulk_job_id,
+                'total': total,
+                'tickers': tickers,
             }),
         }
-
-    # Start bulk analysis
-    dynamodb_res = boto3.resource('dynamodb', region_name='eu-west-1')
-    table = dynamodb_res.Table(MANUAL_DATA_TABLE)
-
-    bulk_job_id = str(uuid.uuid4())
-    auto_job_id = str(uuid.uuid4())
-    total = len(tickers)
-
-    # Store bulk job record
-    table.put_item(Item={
-        'ticker': f'{BULK_JOB_PREFIX}{bulk_job_id}',
-        'status': 'running',
-        'total': total,
-        'completed': 0,
-        'failed': 0,
-        'created_at': datetime.now().isoformat(),
-    })
-
-    # Store auto-add job record
-    from decimal import Decimal as _Dec
-    table.put_item(Item={
-        'ticker': f'{AUTO_ADD_JOB_PREFIX}{auto_job_id}',
-        'status': 'analyzing',
-        'user_id': user_id,
-        'bulk_job_id': bulk_job_id,
-        'tickers': tickers,
-        'ticker_meta': json.dumps(ticker_meta),
-        'total': total,
-        'created_at': datetime.now().isoformat(),
-    })
-
-    # Fan out bulk analysis async
-    fn_name = context.function_name if context and hasattr(context, 'function_name') else 'stock-analysis-analyzer'
-    lc = boto3.client('lambda', region_name='eu-west-1')
-    lc.invoke(
-        FunctionName=fn_name,
-        InvocationType='Event',
-        Payload=json.dumps({'_bulk_fanout': True, 'bulk_job_id': bulk_job_id, 'tickers': tickers}),
-    )
-
-    return {
-        'statusCode': 200,
-        'body': json.dumps({
-            'autoJobId': auto_job_id,
-            'bulkJobId': bulk_job_id,
-            'total': total,
-            'tickers': tickers,
-        }),
-    }
+    finally:
+        if lock_acquired and not keep_lock_for_running_job:
+            _release_auto_add_lock(table, user_id)
 
 
 def handle_auto_add_status(event):
@@ -2690,6 +2760,9 @@ def handle_auto_add_status(event):
 
     # If already finalised, return stored results
     if status in ('complete', 'error'):
+        user_id = job.get('user_id', '')
+        if user_id:
+            _release_auto_add_lock(table, user_id)
         return {
             'statusCode': 200,
             'body': json.dumps({
@@ -2795,6 +2868,9 @@ def handle_auto_add_status(event):
             ':ad': discarded_stocks,
         },
     )
+
+    if user_id:
+        _release_auto_add_lock(table, user_id)
 
     return {
         'statusCode': 200,
