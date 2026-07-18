@@ -1037,8 +1037,8 @@ export const stockApi = {
 
   // ---- Discarded list ----
   async getDiscardedList(): Promise<{ items: DiscardedItem[] }> {
-    const data = await api.get('/api/discarded-list')
-    return data as { items: DiscardedItem[] }
+    const response = await api.get<{ items: DiscardedItem[] }>('/api/discarded-list')
+    return response.data
   },
 
   async addToDiscardedList(ticker: string, body: Partial<DiscardedItem> = {}): Promise<void> {
@@ -1051,13 +1051,13 @@ export const stockApi = {
 
   // ---- Auto-add stocks ----
   async startAutoAdd(): Promise<AutoAddJobResponse> {
-    const data = await api.post('/api/auto-add-stocks', {})
-    return data as AutoAddJobResponse
+    const response = await api.post<AutoAddJobResponse>('/api/auto-add-stocks', {})
+    return response.data
   },
 
   async getAutoAddStatus(jobId: string): Promise<AutoAddStatusResponse> {
-    const data = await api.get(`/api/auto-add-stocks/status?jobId=${encodeURIComponent(jobId)}`)
-    return data as AutoAddStatusResponse
+    const response = await api.get<AutoAddStatusResponse>(`/api/auto-add-stocks/status?jobId=${encodeURIComponent(jobId)}`)
+    return response.data
   },
 }
 
