@@ -8,6 +8,7 @@ import boto3
 from datetime import datetime
 from decimal import Decimal
 from urllib.parse import unquote
+from boto3.dynamodb.conditions import Key, Attr
 
 # DynamoDB client
 dynamodb = boto3.resource('dynamodb', region_name='eu-west-1')
@@ -306,9 +307,8 @@ def get_discarded_list(user_id: str) -> dict:
         table = dynamodb.Table(DISCARDED_LIST_TABLE)
         now = int(time.time())
         response = table.query(
-            KeyConditionExpression='userId = :uid',
-            FilterExpression='attribute_not_exists(expires_at) OR expires_at > :now',
-            ExpressionAttributeValues={':uid': user_id, ':now': now}
+            KeyConditionExpression=Key('userId').eq(user_id),
+            FilterExpression=Attr('expires_at').not_exists() | Attr('expires_at').gt(now),
         )
         items = response.get('Items', [])
         return {
