@@ -2536,11 +2536,11 @@ def _call_auth_lambda(path: str, method: str, body: dict = None, user_id: str = 
 def _get_ai_stock_candidates(
     company_name_hint: str = '',
     exclude_tickers: set[str] | None = None,
-    target_count: int = 120,
+    target_count: int = 90,
 ) -> list:
     """Ask Bedrock for potentially undervalued stocks while excluding known symbols."""
     excluded = sorted({t.upper().strip() for t in (exclude_tickers or set()) if t})
-    excluded_sample = excluded[:400]
+    excluded_sample = excluded[:120]
     excluded_text = ', '.join(excluded_sample)
     omitted_exclusions = max(0, len(excluded) - len(excluded_sample))
 
@@ -2576,7 +2576,7 @@ and a history of consistent earnings. Return exactly {target_count} entries.{exc
     try:
         text = invoke_claude_bedrock_simple(
             prompt,
-            max_tokens=4000,
+            max_tokens=1800,
             operation='auto_add_stock_discovery',
             model_id=get_claude_model_id('financial'),
         )
@@ -2848,31 +2848,11 @@ def handle_auto_add_stocks(event, context):
 
         print(f'[AutoAdd] Known tickers to skip: {len(known_tickers)}')
 
-        # Get AI candidates and filter. Use exclusion-aware prompts so repeated runs produce new sets.
-        candidates = _get_ai_stock_candidates(exclude_tickers=known_tickers, target_count=120)
+        # Keep this request path fast to avoid API Gateway timeout; do one exclusion-aware discovery pass.
+        candidates = _get_ai_stock_candidates(exclude_tickers=known_tickers, target_count=90)
         print(f'[AutoAdd] AI pass 1 returned {len(candidates)} candidates')
 
         filtered = [c for c in candidates if c['ticker'] not in known_tickers]
-
-        # If overlap is still high, retry once with a stricter exclusion set including first-pass results.
-        if len(filtered) < 50:
-            retry_exclusions = set(known_tickers)
-            retry_exclusions.update(c['ticker'] for c in candidates)
-            retry_hint = (
-                'Return a materially different set from prior candidates with broad sector and geography diversity.'
-            )
-            retry_candidates = _get_ai_stock_candidates(
-                company_name_hint=retry_hint,
-                exclude_tickers=retry_exclusions,
-                target_count=140,
-            )
-            print(f'[AutoAdd] AI pass 2 returned {len(retry_candidates)} candidates')
-            for c in retry_candidates:
-                if c['ticker'] in known_tickers:
-                    continue
-                if any(existing['ticker'] == c['ticker'] for existing in filtered):
-                    continue
-                filtered.append(c)
 
         to_analyze = filtered[:50]
         tickers = [c['ticker'] for c in to_analyze]
