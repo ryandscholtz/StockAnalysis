@@ -1094,6 +1094,16 @@ export const stockApi = {
     const response = await api.get<AutoAddStatusResponse>(`/api/auto-add-stocks/status?jobId=${encodeURIComponent(jobId)}`)
     return response.data
   },
+
+  async getBedrockUsage(): Promise<BedrockUsageResponse> {
+    const response = await api.get<BedrockUsageResponse>('/api/bedrock-usage')
+    return response.data
+  },
+
+  async resetBedrockUsageInstance(): Promise<{ success: boolean; message: string }> {
+    const response = await api.post<{ success: boolean; message: string }>('/api/bedrock-usage/reset', {})
+    return response.data
+  },
 }
 
 export interface DiscardedItem {
@@ -1120,6 +1130,26 @@ export interface AutoAddStatusResponse {
   total?: number
   addedToWatchlist?: string[]
   addedToDiscarded?: string[]
+}
+
+export interface BedrockUsageCounter {
+  counter_type: 'TOTAL' | 'INSTANCE' | string
+  request_count: number
+  input_tokens: number
+  output_tokens: number
+  total_tokens: number
+  estimated_cost_usd: number
+  last_model_id?: string | null
+  last_operation?: string | null
+  last_usage_source?: string | null
+  created_at?: string | null
+  updated_at?: string | null
+  reset_at?: string | null
+}
+
+export interface BedrockUsageResponse {
+  total: BedrockUsageCounter
+  instance: BedrockUsageCounter
 }
 
 export interface WatchlistItem {

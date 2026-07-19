@@ -32,6 +32,7 @@ export default function Navigation() {
     { href: '/explore', label: 'Explore', requireAuth: false },
     { href: '/watchlist', label: 'Watchlist', requireAuth: true },
     { href: '/buy-list', label: 'Buy List', requireAuth: true },
+    { href: '/usage', label: 'Usage', requireAuth: true },
     { href: '/about', label: 'About', requireAuth: false },
   ]
 

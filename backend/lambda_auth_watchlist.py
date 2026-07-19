@@ -16,6 +16,7 @@ WATCHLIST_TABLE = os.getenv('WATCHLIST_TABLE', 'stock-analysis-watchlist')
 MANUAL_DATA_TABLE = os.getenv('MANUAL_DATA_TABLE', 'stock-analysis-manual-data')
 BUY_LIST_TABLE = os.getenv('BUY_LIST_TABLE', 'stock-analysis-buy-list')
 DISCARDED_LIST_TABLE = os.getenv('DISCARDED_LIST_TABLE', 'stock-analysis-discarded-list')
+BEDROCK_USAGE_TABLE = os.getenv('BEDROCK_USAGE_TABLE', 'stock-analysis-bedrock-usage')
 DISCARDED_TTL_DAYS = 7
 
 
@@ -25,6 +26,71 @@ class DecimalEncoder(json.JSONEncoder):
         if isinstance(obj, Decimal):
             return float(obj)
         return super(DecimalEncoder, self).default(obj)
+
+
+def _usage_snapshot(counter_type: str, item: dict | None = None) -> dict:
+    item = item or {}
+    return {
+        'counter_type': counter_type,
+        'request_count': int(item.get('request_count', 0) or 0),
+        'input_tokens': int(item.get('input_tokens', 0) or 0),
+        'output_tokens': int(item.get('output_tokens', 0) or 0),
+        'total_tokens': int(item.get('total_tokens', 0) or 0),
+        'estimated_cost_usd': float(item.get('estimated_cost_usd', 0) or 0),
+        'last_model_id': item.get('last_model_id'),
+        'last_operation': item.get('last_operation'),
+        'last_usage_source': item.get('last_usage_source'),
+        'created_at': item.get('created_at'),
+        'updated_at': item.get('updated_at'),
+        'reset_at': item.get('reset_at'),
+    }
+
+
+def get_bedrock_usage(user_id: str) -> dict:
+    try:
+        table = dynamodb.Table(BEDROCK_USAGE_TABLE)
+        response = table.query(KeyConditionExpression=Key('userId').eq(user_id))
+        items = response.get('Items', [])
+        by_type = {item.get('counterType'): item for item in items}
+        return {
+            'statusCode': 200,
+            'body': json.dumps({
+                'total': _usage_snapshot('TOTAL', by_type.get('TOTAL')),
+                'instance': _usage_snapshot('INSTANCE', by_type.get('INSTANCE')),
+            }, cls=DecimalEncoder)
+        }
+    except Exception as e:
+        return {
+            'statusCode': 500,
+            'body': json.dumps({'error': f'Failed to get Bedrock usage: {str(e)}'})
+        }
+
+
+def reset_bedrock_usage_instance(user_id: str) -> dict:
+    try:
+        table = dynamodb.Table(BEDROCK_USAGE_TABLE)
+        now = datetime.now().isoformat()
+        table.update_item(
+            Key={'userId': user_id, 'counterType': 'INSTANCE'},
+            UpdateExpression=(
+                'SET request_count = :zero, input_tokens = :zero, output_tokens = :zero, '
+                'total_tokens = :zero, estimated_cost_usd = :zero, reset_at = :now, '
+                'updated_at = :now, created_at = if_not_exists(created_at, :now)'
+            ),
+            ExpressionAttributeValues={
+                ':zero': Decimal('0'),
+                ':now': now,
+            }
+        )
+        return {
+            'statusCode': 200,
+            'body': json.dumps({'success': True, 'message': 'Usage instance counter reset'})
+        }
+    except Exception as e:
+        return {
+            'statusCode': 500,
+            'body': json.dumps({'error': f'Failed to reset Bedrock usage: {str(e)}'})
+        }
 
 
 def _enrich_with_latest_analysis(items: list) -> list:
@@ -545,7 +611,8 @@ def lambda_handler(event, context):
                 pass
 
     if not user_id and ('/api/watchlist' in path or '/api/manual-data' in path
-                        or '/api/buy-list' in path or '/api/discarded-list' in path):
+                        or '/api/buy-list' in path or '/api/discarded-list' in path
+                        or '/api/bedrock-usage' in path):
         return {
             'statusCode': 401,
             'headers': headers,
@@ -629,6 +696,14 @@ def lambda_handler(event, context):
             elif method == 'DELETE' and '/api/discarded-list/' in path:
                 ticker = unquote(path.split('/api/discarded-list/')[-1].split('?')[0])
                 result = remove_from_discarded_list(user_id, ticker)
+            else:
+                result = {'statusCode': 405, 'body': json.dumps({'error': 'Method not allowed'})}
+
+        elif '/api/bedrock-usage' in path:
+            if method == 'GET' and path == '/api/bedrock-usage':
+                result = get_bedrock_usage(user_id)
+            elif method == 'POST' and path == '/api/bedrock-usage/reset':
+                result = reset_bedrock_usage_instance(user_id)
             else:
                 result = {'statusCode': 405, 'body': json.dumps({'error': 'Method not allowed'})}
 

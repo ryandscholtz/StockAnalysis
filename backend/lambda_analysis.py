@@ -25,6 +25,8 @@ try:
         get_bedrock_region,
         get_claude_model_id,
         reset_invocation_budget,
+        set_usage_tracking_user,
+        clear_usage_tracking_user,
         is_ai_financial_fallback_disabled,
         is_ai_commentary_disabled,
         is_auto_valuation_preset_disabled,
@@ -58,6 +60,12 @@ except ImportError:
         return _HAIKU_DEFAULT
 
     def reset_invocation_budget() -> None:
+        pass
+
+    def set_usage_tracking_user(user_id: str | None) -> None:
+        pass
+
+    def clear_usage_tracking_user() -> None:
         pass
 
     def is_ai_financial_fallback_disabled() -> bool:
@@ -2350,6 +2358,7 @@ def handle_bulk_analyze(event, context):
     tickers = [str(t).strip().upper() for t in tickers if t]
     total = len(tickers)
     job_id = str(uuid.uuid4())
+    user_id = _extract_user_id_from_headers(event.get('headers', {}) or {})
 
     # Create job record
     dynamodb = boto3.resource('dynamodb', region_name='eu-west-1')
@@ -2370,7 +2379,7 @@ def handle_bulk_analyze(event, context):
     lc.invoke(
         FunctionName=function_name,
         InvocationType='Event',  # async, fire-and-forget
-        Payload=json.dumps({'_bulk_fanout': True, 'bulk_job_id': job_id, 'tickers': tickers}),
+        Payload=json.dumps({'_bulk_fanout': True, 'bulk_job_id': job_id, 'tickers': tickers, 'user_id': user_id}),
     )
 
     return {'statusCode': 200, 'body': json.dumps({'jobId': job_id, 'total': total})}
@@ -2407,6 +2416,7 @@ def _handle_bulk_fanout(event):
     """
     job_id = event.get('bulk_job_id')
     tickers = event.get('tickers', [])
+    user_id = event.get('user_id')
     if not job_id or not tickers:
         return
 
@@ -2419,7 +2429,7 @@ def _handle_bulk_fanout(event):
         lc.invoke(
             FunctionName=function_name,
             InvocationType='Event',
-            Payload=json.dumps({'_bulk_job': True, 'bulk_job_id': job_id, 'ticker': ticker}),
+            Payload=json.dumps({'_bulk_job': True, 'bulk_job_id': job_id, 'ticker': ticker, 'user_id': user_id}),
         )
 
     with ThreadPoolExecutor(max_workers=50) as executor:
@@ -2449,6 +2459,7 @@ def _handle_bulk_job_ticker(event):
     """
     job_id = event.get('bulk_job_id')
     ticker = event.get('ticker', '').strip().upper()
+    user_id = event.get('user_id')
     if not job_id or not ticker:
         return
 
@@ -2457,10 +2468,13 @@ def _handle_bulk_job_ticker(event):
 
     success = False
     try:
+        set_usage_tracking_user(user_id)
         result = analyze_stock_get(ticker, stream=False, params={})
         success = result.get('statusCode') == 200
     except Exception as exc:
         print(f"[BulkJob] {ticker} failed: {exc}")
+    finally:
+        clear_usage_tracking_user()
 
     try:
         resp = table.update_item(
@@ -2859,7 +2873,7 @@ def handle_auto_add_stocks(event, context):
         lc.invoke(
             FunctionName=fn_name,
             InvocationType='Event',
-            Payload=json.dumps({'_bulk_fanout': True, 'bulk_job_id': bulk_job_id, 'tickers': tickers}),
+            Payload=json.dumps({'_bulk_fanout': True, 'bulk_job_id': bulk_job_id, 'tickers': tickers, 'user_id': user_id}),
         )
 
         # Keep lock while this auto-add job is running; released when status finalises.
@@ -2898,6 +2912,23 @@ def handle_auto_add_status(event):
     return {'statusCode': 200, 'body': json.dumps(result)}
 
 
+def _extract_user_id_from_headers(headers: dict) -> str | None:
+    user_id = headers.get('X-User-Id') or headers.get('x-user-id')
+    if user_id:
+        return user_id
+    auth_header = headers.get('Authorization') or headers.get('authorization', '')
+    if auth_header.startswith('Bearer '):
+        try:
+            token = auth_header[7:]
+            payload_b64 = token.split('.')[1]
+            payload_b64 += '=' * (-len(payload_b64) % 4)
+            payload = json.loads(base64.b64decode(payload_b64).decode('utf-8'))
+            return payload.get('sub')
+        except Exception:
+            return None
+    return None
+
+
 def lambda_handler(event, context):
     """AWS Lambda handler for stock analysis"""
 
@@ -2928,6 +2959,8 @@ def lambda_handler(event, context):
 
     path = event.get('path', '')
     method = event.get('httpMethod', 'POST')
+    user_id = _extract_user_id_from_headers(event.get('headers', {}) or {})
+    set_usage_tracking_user(user_id)
 
     try:
         if '/api/analysis/' in path and method == 'POST':
@@ -2986,3 +3019,5 @@ def lambda_handler(event, context):
             'headers': headers,
             'body': json.dumps({'error': str(e)})
         }
+    finally:
+        clear_usage_tracking_user()

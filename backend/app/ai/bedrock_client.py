@@ -21,14 +21,34 @@ from __future__ import annotations
 import json
 import logging
 import os
+from decimal import Decimal
 from typing import Any, List, Optional
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_CLAUDE_MODEL_ID = "eu.anthropic.claude-haiku-4-5-20251001-v1:0"
+BEDROCK_USAGE_TABLE = os.getenv("BEDROCK_USAGE_TABLE", "stock-analysis-bedrock-usage")
+DEFAULT_INPUT_COST_PER_MILLION = Decimal(os.getenv("BEDROCK_INPUT_COST_PER_MTOKENS", "1.0"))
+DEFAULT_OUTPUT_COST_PER_MILLION = Decimal(os.getenv("BEDROCK_OUTPUT_COST_PER_MTOKENS", "5.0"))
+MODEL_RATE_DEFAULTS = {
+    "claude-haiku": (Decimal("1.0"), Decimal("5.0")),
+    "claude-sonnet": (Decimal("3.0"), Decimal("15.0")),
+    "claude-opus": (Decimal("15.0"), Decimal("75.0")),
+}
 
 # Per-request budget (reset via reset_invocation_budget() at handler start)
 _budget_remaining: Optional[int] = None
+_tracking_user_id: Optional[str] = None
+
+
+def set_usage_tracking_user(user_id: Optional[str]) -> None:
+    global _tracking_user_id
+    _tracking_user_id = user_id.strip() if isinstance(user_id, str) and user_id.strip() else None
+
+
+def clear_usage_tracking_user() -> None:
+    global _tracking_user_id
+    _tracking_user_id = None
 
 
 def get_bedrock_region() -> str:
@@ -115,6 +135,86 @@ def _estimate_message_chars(messages: List[dict]) -> int:
     return n
 
 
+def _estimate_tokens_from_chars(char_count: int) -> int:
+    if char_count <= 0:
+        return 0
+    return max(1, round(char_count / 4))
+
+
+def _extract_usage_counts(resp_body: dict, input_chars: int, out_chars: int) -> tuple[int, int, str]:
+    usage = resp_body.get("usage") if isinstance(resp_body, dict) else None
+    if isinstance(usage, dict):
+        input_tokens = usage.get("input_tokens") or usage.get("inputTokens") or usage.get("prompt_tokens") or usage.get("promptTokens")
+        output_tokens = usage.get("output_tokens") or usage.get("outputTokens") or usage.get("completion_tokens") or usage.get("completionTokens")
+        if input_tokens is not None or output_tokens is not None:
+            return int(input_tokens or 0), int(output_tokens or 0), "provider"
+    return _estimate_tokens_from_chars(input_chars), _estimate_tokens_from_chars(out_chars), "estimated"
+
+
+def _get_model_rate_per_million(model_id: str) -> tuple[Decimal, Decimal]:
+    mid = (model_id or "").lower()
+    if "claude-haiku" in mid:
+        key = "HAIKU"
+        defaults = MODEL_RATE_DEFAULTS["claude-haiku"]
+    elif "claude-sonnet" in mid:
+        key = "SONNET"
+        defaults = MODEL_RATE_DEFAULTS["claude-sonnet"]
+    elif "claude-opus" in mid:
+        key = "OPUS"
+        defaults = MODEL_RATE_DEFAULTS["claude-opus"]
+    else:
+        return DEFAULT_INPUT_COST_PER_MILLION, DEFAULT_OUTPUT_COST_PER_MILLION
+
+    input_rate = Decimal(os.getenv(f"BEDROCK_{key}_INPUT_COST_PER_MTOKENS", str(defaults[0])))
+    output_rate = Decimal(os.getenv(f"BEDROCK_{key}_OUTPUT_COST_PER_MTOKENS", str(defaults[1])))
+    return input_rate, output_rate
+
+
+def _estimate_cost_usd(model_id: str, input_tokens: int, output_tokens: int) -> Decimal:
+    input_rate, output_rate = _get_model_rate_per_million(model_id)
+    return (
+        (Decimal(input_tokens) / Decimal(1_000_000)) * input_rate
+        + (Decimal(output_tokens) / Decimal(1_000_000)) * output_rate
+    )
+
+
+def _record_usage(model_id: str, operation: str, input_tokens: int, output_tokens: int, usage_source: str) -> None:
+    if not _tracking_user_id:
+        return
+    try:
+        import boto3
+
+        now = __import__("datetime").datetime.now().isoformat()
+        total_tokens = input_tokens + output_tokens
+        estimated_cost = _estimate_cost_usd(model_id, input_tokens, output_tokens)
+        table = boto3.resource("dynamodb", region_name=get_bedrock_region()).Table(BEDROCK_USAGE_TABLE)
+
+        for counter_type in ("TOTAL", "INSTANCE"):
+            table.update_item(
+                Key={"userId": _tracking_user_id, "counterType": counter_type},
+                UpdateExpression=(
+                    "SET updated_at = :now, created_at = if_not_exists(created_at, :now), "
+                    "reset_at = if_not_exists(reset_at, :now), last_model_id = :model, "
+                    "last_operation = :operation, last_usage_source = :usage_source "
+                    "ADD request_count :request_count, input_tokens :input_tokens, "
+                    "output_tokens :output_tokens, total_tokens :total_tokens, estimated_cost_usd :estimated_cost"
+                ),
+                ExpressionAttributeValues={
+                    ":now": now,
+                    ":model": model_id,
+                    ":operation": operation,
+                    ":usage_source": usage_source,
+                    ":request_count": Decimal(1),
+                    ":input_tokens": Decimal(input_tokens),
+                    ":output_tokens": Decimal(output_tokens),
+                    ":total_tokens": Decimal(total_tokens),
+                    ":estimated_cost": estimated_cost,
+                },
+            )
+    except Exception as exc:
+        logger.warning("bedrock_usage_record_failed %s", exc)
+
+
 def invoke_claude_bedrock(
     *,
     messages: List[dict],
@@ -162,9 +262,17 @@ def invoke_claude_bedrock(
     resp_body = json.loads(response["body"].read())
     text = resp_body["content"][0]["text"]
     out_chars = len(text) if text else 0
+    input_tokens, output_tokens, usage_source = _extract_usage_counts(resp_body, input_chars, out_chars)
+    _record_usage(mid, operation, input_tokens, output_tokens, usage_source)
     logger.info(
         "bedrock_invoke_done %s",
-        json.dumps({**log_payload, "output_chars_approx": out_chars}, default=str),
+        json.dumps({
+            **log_payload,
+            "output_chars_approx": out_chars,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "usage_source": usage_source,
+        }, default=str),
     )
     return text
 
