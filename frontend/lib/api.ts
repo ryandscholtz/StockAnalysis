@@ -11,15 +11,50 @@ const api = axios.create({
   },
 })
 
+function getStoredAuthFallback(): { token: string | null; userId: string | null } {
+  if (typeof window === 'undefined') {
+    return { token: null, userId: null }
+  }
+
+  try {
+    const raw = localStorage.getItem('auth_tokens')
+    if (!raw) {
+      return { token: null, userId: null }
+    }
+
+    const parsed = JSON.parse(raw) as { idToken?: string; expiresAt?: number }
+    if (!parsed.idToken || !parsed.expiresAt || parsed.expiresAt <= Date.now()) {
+      return { token: null, userId: null }
+    }
+
+    const base64Url = parsed.idToken.split('.')[1]
+    if (!base64Url) {
+      return { token: parsed.idToken, userId: null }
+    }
+
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
+    const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4)
+    const payload = JSON.parse(atob(padded)) as { sub?: string }
+
+    return {
+      token: parsed.idToken,
+      userId: payload.sub || null,
+    }
+  } catch {
+    return { token: null, userId: null }
+  }
+}
+
 // Add request interceptor for logging and authentication
 api.interceptors.request.use(
   (config) => {
     // Add authentication token and user ID if available
-    const token = authService.getAccessToken()
+    const fallback = getStoredAuthFallback()
+    const token = authService.getAccessToken() || fallback.token
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
-    const userId = authService.getCurrentUser()?.userId
+    const userId = authService.getCurrentUser()?.userId || fallback.userId
     if (userId) {
       config.headers['X-User-Id'] = userId
     }

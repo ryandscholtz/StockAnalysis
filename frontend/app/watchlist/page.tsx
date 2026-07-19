@@ -656,6 +656,11 @@ export default function WatchlistPage() {
                 </button>
                 <button
                   onClick={async () => {
+                    if (!isAuthenticated) {
+                      setError('Please sign in again before adding stocks to your buy list.')
+                      router.push('/auth/signin')
+                      return
+                    }
                     const selected = watchlistItems.filter(i => selectedTickers.has(i.ticker))
                     await Promise.allSettled(selected.map(item => stockApi.addToBuyList(item.ticker, {
                       company_name: item.company_name,
