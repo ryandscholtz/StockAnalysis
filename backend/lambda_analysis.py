@@ -2533,9 +2533,33 @@ def _call_auth_lambda(path: str, method: str, body: dict = None, user_id: str = 
     return json.loads(result.get('body', '{}'))
 
 
-def _get_ai_stock_candidates(company_name_hint: str = '') -> list:
-    """Ask Bedrock for a list of potentially undervalued stocks to research."""
-    prompt = """You are a financial research assistant. Provide a list of 100 publicly traded stocks
+def _get_ai_stock_candidates(
+    company_name_hint: str = '',
+    exclude_tickers: set[str] | None = None,
+    target_count: int = 120,
+) -> list:
+    """Ask Bedrock for potentially undervalued stocks while excluding known symbols."""
+    excluded = sorted({t.upper().strip() for t in (exclude_tickers or set()) if t})
+    excluded_sample = excluded[:400]
+    excluded_text = ', '.join(excluded_sample)
+    omitted_exclusions = max(0, len(excluded) - len(excluded_sample))
+
+    exclusion_section = ""
+    if excluded_sample:
+        exclusion_section = (
+            "\n\nDO NOT include any ticker from this exclusion list: "
+            f"{excluded_text}."
+        )
+        if omitted_exclusions > 0:
+            exclusion_section += (
+                f" Also exclude {omitted_exclusions} additional symbols not shown due to size limits."
+            )
+
+    hint_section = ""
+    if company_name_hint:
+        hint_section = f"\n\nAdditional context: {company_name_hint.strip()}"
+
+    prompt = f"""You are a financial research assistant. Provide a list of {target_count} publicly traded stocks
 that may currently be undervalued based on fundamental analysis principles (low P/E, strong free cash
 flow, solid balance sheet, competitive moat, etc.).
 
@@ -2545,10 +2569,10 @@ Each object must have:
   - "exchange": exchange code (e.g. NYSE, NASDAQ, LSE, ASX)
   - "company_name": full company name
 
-Example: [{"ticker":"AAPL","exchange":"NASDAQ","company_name":"Apple Inc."}, ...]
+Example: [{{"ticker":"AAPL","exchange":"NASDAQ","company_name":"Apple Inc."}}, ...]
 
 Include a diverse mix of sectors and geographies. Prioritise stocks with strong fundamentals
-and a history of consistent earnings. Return exactly 100 entries."""
+and a history of consistent earnings. Return exactly {target_count} entries.{exclusion_section}{hint_section}"""
     try:
         text = invoke_claude_bedrock_simple(
             prompt,
@@ -2563,7 +2587,21 @@ and a history of consistent earnings. Return exactly 100 entries."""
         if start < 0 or end <= start:
             return []
         candidates = json.loads(text[start:end])
-        return [c for c in candidates if isinstance(c, dict) and c.get('ticker')]
+        normalized = []
+        seen = set()
+        for c in candidates:
+            if not isinstance(c, dict):
+                continue
+            ticker = str(c.get('ticker', '')).strip().upper()
+            if not ticker or ticker in seen:
+                continue
+            seen.add(ticker)
+            normalized.append({
+                'ticker': ticker,
+                'exchange': str(c.get('exchange', '')).strip(),
+                'company_name': str(c.get('company_name', '')).strip(),
+            })
+        return normalized
     except Exception as e:
         print(f'[AutoAdd] Bedrock discovery failed: {e}')
         return []
@@ -2810,14 +2848,35 @@ def handle_auto_add_stocks(event, context):
 
         print(f'[AutoAdd] Known tickers to skip: {len(known_tickers)}')
 
-        # Get AI candidates and filter
-        candidates = _get_ai_stock_candidates()
-        print(f'[AutoAdd] AI returned {len(candidates)} candidates')
+        # Get AI candidates and filter. Use exclusion-aware prompts so repeated runs produce new sets.
+        candidates = _get_ai_stock_candidates(exclude_tickers=known_tickers, target_count=120)
+        print(f'[AutoAdd] AI pass 1 returned {len(candidates)} candidates')
 
-        filtered = [c for c in candidates if c['ticker'].upper() not in known_tickers]
+        filtered = [c for c in candidates if c['ticker'] not in known_tickers]
+
+        # If overlap is still high, retry once with a stricter exclusion set including first-pass results.
+        if len(filtered) < 50:
+            retry_exclusions = set(known_tickers)
+            retry_exclusions.update(c['ticker'] for c in candidates)
+            retry_hint = (
+                'Return a materially different set from prior candidates with broad sector and geography diversity.'
+            )
+            retry_candidates = _get_ai_stock_candidates(
+                company_name_hint=retry_hint,
+                exclude_tickers=retry_exclusions,
+                target_count=140,
+            )
+            print(f'[AutoAdd] AI pass 2 returned {len(retry_candidates)} candidates')
+            for c in retry_candidates:
+                if c['ticker'] in known_tickers:
+                    continue
+                if any(existing['ticker'] == c['ticker'] for existing in filtered):
+                    continue
+                filtered.append(c)
+
         to_analyze = filtered[:50]
-        tickers = [c['ticker'].upper() for c in to_analyze]
-        ticker_meta = {c['ticker'].upper(): c for c in to_analyze}
+        tickers = [c['ticker'] for c in to_analyze]
+        ticker_meta = {c['ticker']: c for c in to_analyze}
 
         print(f'[AutoAdd] Filtered to {len(tickers)} tickers for analysis')
 
