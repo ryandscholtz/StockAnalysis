@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { stockApi, DiscardedItem } from '@/lib/api'
+import { stockApi, DiscardedItem, AutoAddDebugInfo } from '@/lib/api'
 import { formatPrice, inferCurrencyFromTicker } from '@/lib/currency'
 import { useCurrency } from '@/lib/useCurrency'
 import { useAuth } from '@/components/AuthProvider'
@@ -96,7 +96,14 @@ export default function WatchlistPage() {
   const [discardedLoading, setDiscardedLoading] = useState(false)
   const [autoAdding, setAutoAdding] = useState(false)
   const [autoAddProgress, setAutoAddProgress] = useState<{ completed: number; total: number; phase: string } | null>(null)
-  const [autoAddResult, setAutoAddResult] = useState<{ watchlist: string[]; discarded: string[]; total: number } | null>(null)
+  const [autoAddResult, setAutoAddResult] = useState<{
+    watchlist: string[]
+    discarded: string[]
+    total: number
+    debug?: AutoAddDebugInfo
+    autoJobId?: string | null
+    bulkJobId?: string | null
+  } | null>(null)
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -210,7 +217,14 @@ export default function WatchlistPage() {
       if (!job.autoJobId) {
         setAutoAddProgress(null)
         setAutoAdding(false)
-        setAutoAddResult({ watchlist: [], discarded: [], total: 0 })
+        setAutoAddResult({
+          watchlist: [],
+          discarded: [],
+          total: 0,
+          debug: job.debug,
+          autoJobId: job.autoJobId,
+          bulkJobId: job.bulkJobId,
+        })
         return
       }
       setAutoAddProgress({ completed: 0, total: job.total, phase: `Analysing ${job.total} candidates…` })
@@ -233,6 +247,9 @@ export default function WatchlistPage() {
                 watchlist: status.addedToWatchlist ?? [],
                 discarded: status.addedToDiscarded ?? [],
                 total: status.total ?? job.total,
+                debug: job.debug,
+                autoJobId: job.autoJobId,
+                bulkJobId: job.bulkJobId,
               })
               await Promise.all([loadWatchlist(), loadDiscardedList()])
               resolve()
@@ -479,6 +496,24 @@ export default function WatchlistPage() {
             )}
             {autoAddResult.discarded.length > 0 && (
               <span style={{ marginLeft: '4px' }}>, and <strong>{autoAddResult.discarded.length}</strong> added to the discarded list.</span>
+            )}
+            {autoAddResult.debug && (
+              <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px dashed rgba(6,95,70,0.35)', color: '#065f46' }}>
+                <div style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '0.02em', textTransform: 'uppercase', marginBottom: '6px' }}>
+                  Auto-add diagnostics
+                </div>
+                <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', fontSize: '12px' }}>
+                  <span>Known: <strong>{autoAddResult.debug.knownTickerCount ?? 0}</strong></span>
+                  <span>AI candidates: <strong>{autoAddResult.debug.aiCandidateCount ?? 0}</strong></span>
+                  <span>After filter: <strong>{autoAddResult.debug.filteredCount ?? 0}</strong></span>
+                  <span>Setup time: <strong>{autoAddResult.debug.elapsedMs ?? 0} ms</strong></span>
+                </div>
+                {(autoAddResult.autoJobId || autoAddResult.bulkJobId) && (
+                  <div style={{ marginTop: '6px', fontSize: '11px', color: '#047857', wordBreak: 'break-all' }}>
+                    Job IDs: auto {autoAddResult.autoJobId || 'n/a'} | bulk {autoAddResult.bulkJobId || 'n/a'}
+                  </div>
+                )}
+              </div>
             )}
             <button onClick={() => setAutoAddResult(null)} style={{ marginLeft: '12px', background: 'none', border: 'none', color: '#047857', cursor: 'pointer', fontSize: '16px', lineHeight: 1 }}>✕</button>
           </div>

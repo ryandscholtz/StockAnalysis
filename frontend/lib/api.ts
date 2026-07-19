@@ -1122,6 +1122,7 @@ export interface AutoAddJobResponse {
   total: number
   tickers: string[]
   message?: string
+  debug?: AutoAddDebugInfo
 }
 
 export interface AutoAddStatusResponse {
@@ -1130,6 +1131,14 @@ export interface AutoAddStatusResponse {
   total?: number
   addedToWatchlist?: string[]
   addedToDiscarded?: string[]
+}
+
+export interface AutoAddDebugInfo {
+  autoJobId?: string
+  knownTickerCount?: number
+  aiCandidateCount?: number
+  filteredCount?: number
+  elapsedMs?: number
 }
 
 export interface BedrockUsageCounter {

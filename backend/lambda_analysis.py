@@ -6,6 +6,7 @@ import json
 import os
 import base64
 import uuid
+import time
 import boto3
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
@@ -2512,6 +2513,24 @@ AUTO_ADD_JOB_PREFIX = 'AUTO_ADD_JOB#'
 AUTO_ADD_LOCK_PREFIX = 'AUTO_ADD_LOCK#'
 DISCARDED_TABLE = os.environ.get('DISCARDED_LIST_TABLE', 'stock-analysis-discarded-list')
 AUTH_LAMBDA_NAME = os.environ.get('AUTH_LAMBDA', 'stock-analysis-auth')
+AUTO_ADD_VERBOSE_LOGS = os.environ.get('AUTO_ADD_VERBOSE_LOGS', 'true').lower() in ('1', 'true', 'yes')
+
+
+def _auto_add_log(auto_job_id: str, user_id: str, stage: str, **fields) -> None:
+    """Emit structured CloudWatch logs for auto-add diagnostics."""
+    if not AUTO_ADD_VERBOSE_LOGS:
+        return
+    payload = {
+        'jobId': auto_job_id,
+        'userId': user_id,
+        'stage': stage,
+        'ts': datetime.now().isoformat(),
+    }
+    payload.update(fields)
+    try:
+        print(f"[AutoAddDebug] {json.dumps(payload, default=str)}")
+    except Exception:
+        print(f"[AutoAddDebug] {stage} job={auto_job_id} user={user_id} fields={fields}")
 
 
 def _call_auth_lambda(path: str, method: str, body: dict = None, user_id: str = None) -> dict:
@@ -2536,7 +2555,9 @@ def _call_auth_lambda(path: str, method: str, body: dict = None, user_id: str = 
 def _get_ai_stock_candidates(
     company_name_hint: str = '',
     exclude_tickers: set[str] | None = None,
-    target_count: int = 90,
+    target_count: int = 70,
+    auto_job_id: str = '',
+    user_id: str = '',
 ) -> list:
     """Ask Bedrock for potentially undervalued stocks while excluding known symbols."""
     excluded = sorted({t.upper().strip() for t in (exclude_tickers or set()) if t})
@@ -2574,19 +2595,62 @@ Example: [{{"ticker":"AAPL","exchange":"NASDAQ","company_name":"Apple Inc."}}, .
 Include a diverse mix of sectors and geographies. Prioritise stocks with strong fundamentals
 and a history of consistent earnings. Return exactly {target_count} entries.{exclusion_section}{hint_section}"""
     try:
+        _auto_add_log(
+            auto_job_id,
+            user_id,
+            'bedrock_request',
+            targetCount=target_count,
+            excludedCount=len(excluded),
+            excludedSample=excluded_sample[:25],
+            promptChars=len(prompt),
+        )
         text = invoke_claude_bedrock_simple(
             prompt,
-            max_tokens=1800,
+            max_tokens=2600,
             operation='auto_add_stock_discovery',
             model_id=get_claude_model_id('financial'),
+        )
+        _auto_add_log(
+            auto_job_id,
+            user_id,
+            'bedrock_response',
+            responseChars=len(text or ''),
+            responsePreview=(text or '')[:500],
         )
         import re as _re
         text = _re.sub(r'```(?:json)?\s*', '', text).strip()
         start = text.find('[')
         end = text.rfind(']') + 1
-        if start < 0 or end <= start:
-            return []
-        candidates = json.loads(text[start:end])
+
+        parsed_candidates = None
+        if start >= 0 and end > start:
+            try:
+                parsed_candidates = json.loads(text[start:end])
+            except Exception as exc:
+                _auto_add_log(auto_job_id, user_id, 'parse_full_json_failed', error=str(exc))
+
+        # Fallback for truncated output: salvage complete object literals that include ticker.
+        if parsed_candidates is None:
+            segment = text[start:] if start >= 0 else text
+            object_chunks = _re.findall(r'\{[^{}]*"ticker"[^{}]*\}', segment)
+            salvaged = []
+            for chunk in object_chunks:
+                try:
+                    obj = json.loads(chunk)
+                    if isinstance(obj, dict):
+                        salvaged.append(obj)
+                except Exception:
+                    continue
+            parsed_candidates = salvaged
+            _auto_add_log(
+                auto_job_id,
+                user_id,
+                'parse_salvaged_objects',
+                salvagedCount=len(salvaged),
+                cleanedPreview=text[:500],
+            )
+
+        candidates = parsed_candidates
         normalized = []
         seen = set()
         for c in candidates:
@@ -2601,8 +2665,17 @@ and a history of consistent earnings. Return exactly {target_count} entries.{exc
                 'exchange': str(c.get('exchange', '')).strip(),
                 'company_name': str(c.get('company_name', '')).strip(),
             })
+        _auto_add_log(
+            auto_job_id,
+            user_id,
+            'parse_success',
+            rawCount=len(candidates),
+            normalizedCount=len(normalized),
+            normalizedSample=[n['ticker'] for n in normalized[:20]],
+        )
         return normalized
     except Exception as e:
+        _auto_add_log(auto_job_id, user_id, 'bedrock_exception', error=str(e))
         print(f'[AutoAdd] Bedrock discovery failed: {e}')
         return []
 
@@ -2814,6 +2887,16 @@ def handle_auto_add_stocks(event, context):
     dynamodb_res = boto3.resource('dynamodb', region_name='eu-west-1')
     table = dynamodb_res.Table(MANUAL_DATA_TABLE)
     auto_job_id = str(uuid.uuid4())
+    started_at = time.perf_counter()
+
+    _auto_add_log(
+        auto_job_id,
+        user_id,
+        'start',
+        path=event.get('path'),
+        method=event.get('httpMethod'),
+        requestId=(getattr(context, 'aws_request_id', '') if context else ''),
+    )
 
     lock_acquired = False
     keep_lock_for_running_job = False
@@ -2831,36 +2914,78 @@ def handle_auto_add_stocks(event, context):
 
         # Fetch existing watchlist and discarded tickers to filter out
         known_tickers: set = set()
+        watchlist_count = 0
+        discarded_count = 0
         try:
             wl = _call_auth_lambda('/api/watchlist', 'GET', user_id=user_id)
             for item in wl.get('items', []):
                 if item.get('ticker'):
                     known_tickers.add(item['ticker'].upper())
+                    watchlist_count += 1
         except Exception as e:
             print(f'[AutoAdd] Could not fetch watchlist: {e}')
+            _auto_add_log(auto_job_id, user_id, 'watchlist_fetch_error', error=str(e))
         try:
             dl = _call_auth_lambda('/api/discarded-list', 'GET', user_id=user_id)
             for item in dl.get('items', []):
                 if item.get('ticker'):
                     known_tickers.add(item['ticker'].upper())
+                    discarded_count += 1
         except Exception as e:
             print(f'[AutoAdd] Could not fetch discarded list: {e}')
+            _auto_add_log(auto_job_id, user_id, 'discarded_fetch_error', error=str(e))
 
         print(f'[AutoAdd] Known tickers to skip: {len(known_tickers)}')
+        _auto_add_log(
+            auto_job_id,
+            user_id,
+            'known_tickers_loaded',
+            watchlistCount=watchlist_count,
+            discardedCount=discarded_count,
+            uniqueKnownCount=len(known_tickers),
+            knownSample=sorted(list(known_tickers))[:30],
+        )
 
         # Keep this request path fast to avoid API Gateway timeout; do one exclusion-aware discovery pass.
-        candidates = _get_ai_stock_candidates(exclude_tickers=known_tickers, target_count=90)
+        candidates = _get_ai_stock_candidates(
+            exclude_tickers=known_tickers,
+            target_count=70,
+            auto_job_id=auto_job_id,
+            user_id=user_id,
+        )
         print(f'[AutoAdd] AI pass 1 returned {len(candidates)} candidates')
 
         filtered = [c for c in candidates if c['ticker'] not in known_tickers]
+        _auto_add_log(
+            auto_job_id,
+            user_id,
+            'filter_complete',
+            aiCandidateCount=len(candidates),
+            filteredCount=len(filtered),
+            filteredSample=[c['ticker'] for c in filtered[:30]],
+        )
 
         to_analyze = filtered[:50]
         tickers = [c['ticker'] for c in to_analyze]
         ticker_meta = {c['ticker']: c for c in to_analyze}
 
         print(f'[AutoAdd] Filtered to {len(tickers)} tickers for analysis')
+        _auto_add_log(
+            auto_job_id,
+            user_id,
+            'selection_complete',
+            selectedCount=len(tickers),
+            selectedTickers=tickers[:50],
+            elapsedMs=int((time.perf_counter() - started_at) * 1000),
+        )
 
         if not tickers:
+            _auto_add_log(
+                auto_job_id,
+                user_id,
+                'no_candidates',
+                elapsedMs=int((time.perf_counter() - started_at) * 1000),
+            )
             return {
                 'statusCode': 200,
                 'body': json.dumps({
@@ -2869,6 +2994,12 @@ def handle_auto_add_stocks(event, context):
                     'total': 0,
                     'tickers': [],
                     'message': 'No new candidates found after filtering known tickers.',
+                    'debug': {
+                        'autoJobId': auto_job_id,
+                        'knownTickerCount': len(known_tickers),
+                        'aiCandidateCount': len(candidates),
+                        'filteredCount': len(filtered),
+                    },
                 }),
             }
 
@@ -2914,6 +3045,14 @@ def handle_auto_add_stocks(event, context):
             InvocationType='Event',
             Payload=json.dumps({'_bulk_fanout': True, 'bulk_job_id': bulk_job_id, 'tickers': tickers, 'user_id': user_id}),
         )
+        _auto_add_log(
+            auto_job_id,
+            user_id,
+            'bulk_started',
+            bulkJobId=bulk_job_id,
+            total=total,
+            elapsedMs=int((time.perf_counter() - started_at) * 1000),
+        )
 
         # Keep lock while this auto-add job is running; released when status finalises.
         keep_lock_for_running_job = True
@@ -2925,6 +3064,12 @@ def handle_auto_add_stocks(event, context):
                 'bulkJobId': bulk_job_id,
                 'total': total,
                 'tickers': tickers,
+                'debug': {
+                    'knownTickerCount': len(known_tickers),
+                    'aiCandidateCount': len(candidates),
+                    'filteredCount': len(filtered),
+                    'elapsedMs': int((time.perf_counter() - started_at) * 1000),
+                },
             }),
         }
     finally:
