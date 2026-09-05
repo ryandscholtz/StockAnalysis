@@ -25,6 +25,64 @@ _TICKER_CURRENCY_OVERRIDE: dict[str, str] = {
     '.XJSE': 'ZAC',   # Johannesburg Stock Exchange — prices quoted in cents
 }
 
+# Fidelity International Trading uses ROOT:CC (e.g. SAP:DE, NPN:ZA).
+# https://www.fidelity.com/stock-trading/faqs-international
+_FIDELITY_COUNTRY_TO_YAHOO = {
+    'AU': '.AX', 'AT': '.VI', 'BE': '.BR', 'CA': '.TO', 'DK': '.CO',
+    'FI': '.HE', 'FR': '.PA', 'DE': '.DE', 'GR': '.AT', 'HK': '.HK',
+    'IE': '.IR', 'IT': '.MI', 'JP': '.T', 'MX': '.MX', 'NL': '.AS',
+    'NZ': '.NZ', 'NO': '.OL', 'PL': '.WA', 'PT': '.LS', 'SG': '.SI',
+    'ZA': '.JO', 'ES': '.MC', 'SE': '.ST', 'CH': '.SW', 'GB': '.L',
+    'US': '',
+}
+
+_MARKETSTACK_SUFFIX_TO_YAHOO = {
+    '.XJSE': '.JO', '.XATH': '.AT', '.XDUB': '.IR', '.XNZE': '.NZ',
+    '.XTSX': '.V', '.XTSE': '.TO', '.XLON': '.L', '.XETR': '.DE',
+    '.XPAR': '.PA', '.XAMS': '.AS', '.XBRU': '.BR', '.XLIS': '.LS',
+    '.XMIL': '.MI', '.XMAD': '.MC', '.XSTO': '.ST', '.XCSE': '.CO',
+    '.XHEL': '.HE', '.XOSL': '.OL', '.XWAR': '.WA', '.XWBO': '.VI',
+    '.XSWX': '.SW', '.XASX': '.AX', '.XHKG': '.HK', '.XTKS': '.T',
+    '.XSES': '.SI', '.XMEX': '.MX',
+}
+
+_YAHOO_SUFFIXES = tuple(sorted(
+    {'.JO', '.IR', '.AT', '.NZ', '.AX', '.HK', '.TO', '.MX', '.PA', '.DE',
+     '.AS', '.BR', '.MI', '.MC', '.LS', '.SW', '.ST', '.CO', '.OL', '.HE',
+     '.WA', '.VI', '.SI', '.L', '.V', '.T', '.XJSE'},
+    key=len, reverse=True,
+))
+
+
+def _to_yahoo_symbol(ticker: str) -> str:
+    """Convert MarketStack MIC-style suffixes to Yahoo Finance form."""
+    if not ticker:
+        return ticker
+    upper = ticker.upper()
+    for mic_suffix, yahoo_suffix in _MARKETSTACK_SUFFIX_TO_YAHOO.items():
+        if upper.endswith(mic_suffix):
+            base = ticker[:-len(mic_suffix)]
+            return base + yahoo_suffix if yahoo_suffix else base
+    return ticker
+
+
+def _normalize_ticker(ticker: str) -> str:
+    """Accept Yahoo (SAP.DE), Fidelity (SAP:DE), and hyphen (MRF-JO) symbols."""
+    if not ticker:
+        return ticker
+    raw = ticker.strip().upper()
+    if ':' in raw:
+        root, _, cc = raw.partition(':')
+        root, cc = root.strip(), cc.strip()
+        if root and cc in _FIDELITY_COUNTRY_TO_YAHOO:
+            return root + _FIDELITY_COUNTRY_TO_YAHOO[cc]
+        return raw
+    for suffix in _YAHOO_SUFFIXES:
+        token = suffix.lstrip('.')
+        if raw.endswith(f'-{token}') and len(raw) > len(token) + 1:
+            return raw[:-(len(token) + 1)] + '.' + token
+    return _to_yahoo_symbol(raw)
+
 
 def _resolve_currency(ticker: str, api_currency: str | None) -> str:
     """Return the correct currency for a ticker, overriding API values where known."""
@@ -37,10 +95,7 @@ def _resolve_currency(ticker: str, api_currency: str | None) -> str:
 
 def _yahoo_symbol(ticker: str) -> str:
     """Convert MarketStack/XJSE style tickers to Yahoo Finance format"""
-    # BEL.XJSE -> BEL.JO, PPE.XJSE -> PPE.JO
-    if ticker.upper().endswith('.XJSE'):
-        return ticker[:-5] + '.JO'
-    return ticker
+    return _to_yahoo_symbol(ticker)
 
 
 def get_ticker_data_yahoo(ticker: str) -> dict:
@@ -131,6 +186,7 @@ def get_ticker_data(ticker: str) -> dict:
     these exchanges is often stale or incorrect.
     For all other tickers, MarketStack (paid) is tried first, with Yahoo as fallback.
     """
+    ticker = _normalize_ticker(ticker)
     upper = ticker.upper()
     use_yahoo_first = any(upper.endswith(s) for s in _TICKER_CURRENCY_OVERRIDE)
 
@@ -179,6 +235,7 @@ def _urllib_get(url: str) -> dict:
 
 def search_stocks(query: str) -> dict:
     """Search for stocks using Yahoo Finance quote search"""
+    query = _normalize_ticker(query) or query
     try:
         url = f"https://query1.finance.yahoo.com/v1/finance/search?q={urlencode({'q': query})}&quotesCount=10&newsCount=0"
         data = _urllib_get(url)
@@ -242,7 +299,14 @@ _EXPLORE_TICKER_LIST_CACHE_TTL = 86400  # 24 hours
 
 # MarketStack MIC -> Yahoo suffix for symbol conversion (e.g. XJSE -> .JO)
 _MIC_TO_YAHOO_SUFFIX = {
-    "XJSE": ".JO",   # Johannesburg
+    "XNYS": "", "XNAS": "", "XASE": "",
+    "XTSE": ".TO", "XTSX": ".V", "XMEX": ".MX",
+    "XLON": ".L", "XETR": ".DE", "XPAR": ".PA", "XAMS": ".AS",
+    "XMIL": ".MI", "XMAD": ".MC", "XSTO": ".ST", "XCSE": ".CO",
+    "XOSL": ".OL", "XBRU": ".BR", "XLIS": ".LS", "XWAR": ".WA",
+    "XWBO": ".VI", "XHEL": ".HE", "XSWX": ".SW", "XATH": ".AT",
+    "XDUB": ".IR", "XASX": ".AX", "XHKG": ".HK", "XTKS": ".T",
+    "XSES": ".SI", "XNZE": ".NZ", "XJSE": ".JO",
 }
 
 
@@ -275,7 +339,11 @@ def _fetch_tickers_from_marketstack(mic: str, yahoo_suffix: str) -> list[str]:
                 if not raw:
                     continue
                 # Convert to Yahoo format: BEL.XJSE -> BEL.JO, or plain NPN -> NPN.JO
-                sym = _yahoo_symbol(raw) if raw.upper().endswith('.XJSE') else (raw + yahoo_suffix if yahoo_suffix and not raw.endswith(yahoo_suffix) else raw)
+                converted = _yahoo_symbol(raw)
+                if converted != raw:
+                    sym = converted
+                else:
+                    sym = raw + yahoo_suffix if yahoo_suffix and not raw.endswith(yahoo_suffix) else raw
                 if sym and sym not in all_symbols:
                     all_symbols.append(sym)
             count = pagination.get('count', 0)
@@ -573,6 +641,26 @@ MARKET_TICKERS = {
             "OMAB.MX", "ASURB.MX", "ALFAA.MX", "IENOVA.MX", "ALSEA.MX",
         ],
     },
+    "AMEX": {
+        "name": "NYSE American",
+        "description": "NYSE American (AMEX) – all listed companies",
+        "region": "US", "continent": "Americas",
+        "screener_exchange": "ASE",
+        "fidelity": True,
+        "tickers": ["GDX", "GDXJ", "UNG", "USO", "UVXY", "VXX", "PEO", "NGD"],
+    },
+    "TSXV": {
+        "name": "TSX Venture",
+        "description": "TSX Venture Exchange – all listed Canadian venture companies",
+        "region": "CA", "continent": "Americas",
+        "screener_exchange": "VAN",
+        "yahoo_suffix": ".V",
+        "exchange_mic": "XTSX",
+        "fidelity": True,
+        "tickers": [
+            "HIVE.V", "BITF.V", "LGD.V", "SKE.V", "NFG.V", "VLE.V", "GWM.V",
+        ],
+    },
     # ── Europe ──────────────────────────────────────────────────────────────────
     "LSE": {
         "name": "London Stock Exchange",
@@ -722,6 +810,32 @@ MARKET_TICKERS = {
         "tickers": [  # fallback
             "NOVN.SW", "NESN.SW", "ROG.SW", "ABBN.SW", "ZURN.SW", "CFR.SW",
             "SIKA.SW", "ALC.SW", "LONN.SW", "SLHN.SW",
+        ],
+    },
+    "EURONEXT_DU": {
+        "name": "Euronext Dublin",
+        "description": "Euronext Dublin – all listed Irish companies",
+        "region": "IE", "continent": "Europe",
+        "screener_exchange": "ISE",
+        "yahoo_suffix": ".IR",
+        "exchange_mic": "XDUB",
+        "fidelity": True,
+        "tickers": [
+            "A5G.IR", "BIRG.IR", "KRZ.IR", "KRX.IR", "RYA.IR", "SK3.IR",
+            "GL9.IR", "IRES.IR", "UDG.IR", "GRW.IR",
+        ],
+    },
+    "ATHEX": {
+        "name": "Athens Stock Exchange",
+        "description": "Athens Stock Exchange – all listed Greek companies",
+        "region": "GR", "continent": "Europe",
+        "screener_exchange": "ATH",
+        "yahoo_suffix": ".AT",
+        "exchange_mic": "XATH",
+        "fidelity": True,
+        "tickers": [
+            "ETE.AT", "EUROB.AT", "ALPHA.AT", "TPEIR.AT", "OPAP.AT", "HTO.AT",
+            "MYTIL.AT", "PPC.AT", "MOH.AT", "BELA.AT", "TITC.AT", "LAMDA.AT",
         ],
     },
     "FTSE100": {
@@ -948,6 +1062,20 @@ MARKET_TICKERS = {
         "tickers": [  # fallback
             "D05.SI", "O39.SI", "U11.SI", "Z74.SI", "C6L.SI", "BN4.SI",
             "J36.SI", "S63.SI",
+        ],
+    },
+    "NZX": {
+        "name": "NZX",
+        "description": "New Zealand Stock Exchange – all listed companies",
+        "region": "NZ", "continent": "Asia Pacific",
+        "screener_exchange": "NZE",
+        "yahoo_suffix": ".NZ",
+        "exchange_mic": "XNZE",
+        "fidelity": True,
+        "tickers": [
+            "FPH.NZ", "AIA.NZ", "SPK.NZ", "MEL.NZ", "CEN.NZ", "MFT.NZ",
+            "ATM.NZ", "FBU.NZ", "IFT.NZ", "EBO.NZ", "RYM.NZ", "CNU.NZ",
+            "KPG.NZ", "SUM.NZ", "GNE.NZ",
         ],
     },
     "SSE": {
@@ -1193,6 +1321,7 @@ def get_quote_data(ticker: str) -> dict:
     Returns: price, marketCap, peRatio, forwardPE, pbRatio, psRatio, evToEbitda,
              dividendYield, eps, beta, week52High, week52Low, volume, priceChangePct, etc.
     """
+    ticker = _normalize_ticker(ticker)
     try:
         results = _fetch_one_batch([ticker.upper()], *_get_yahoo_session())
         if not results:

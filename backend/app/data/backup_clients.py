@@ -8,6 +8,7 @@ import os
 from datetime import datetime, timedelta
 import re
 import json
+from app.config.markets import GOOGLE_FINANCE_EXCHANGE_MAP
 
 logger = logging.getLogger(__name__)
 
@@ -140,40 +141,11 @@ class GoogleFinanceClient:
 
         ticker_upper = ticker.upper()
 
-        # Map exchange suffixes to Google Finance exchange codes
-        exchange_map = {
-            '.JO': 'JSE',  # Johannesburg Stock Exchange
-            '.L': 'LON',   # London Stock Exchange
-            '.TO': 'TSE',  # Toronto Stock Exchange
-            '.PA': 'EPA',  # Euronext Paris
-            '.DE': 'ETR',  # Xetra (Germany)
-            '.HK': 'HKG',  # Hong Kong Stock Exchange
-            '.SS': 'SHA',  # Shanghai Stock Exchange
-            '.SZ': 'SHE',  # Shenzhen Stock Exchange
-            '.T': 'TYO',   # Tokyo Stock Exchange
-            '.AS': 'AMS',  # Amsterdam Stock Exchange
-            '.BR': 'BVMF', # B3 (Brazil)
-            '.MX': 'MEX',  # Mexican Stock Exchange
-            '.SA': 'SAU',  # Saudi Stock Exchange
-            '.SW': 'SWX',  # SIX Swiss Exchange
-            '.VI': 'VIE',  # Vienna Stock Exchange
-            '.ST': 'STO',  # Stockholm Stock Exchange
-            '.OL': 'OSL',  # Oslo Stock Exchange
-            '.CO': 'CPH',  # Copenhagen Stock Exchange
-            '.HE': 'HEL',  # Helsinki Stock Exchange
-            '.IC': 'ICE',  # Iceland Stock Exchange
-            '.LS': 'LIS',  # Lisbon Stock Exchange
-            '.MC': 'MAD',  # Madrid Stock Exchange
-            '.MI': 'MIL',  # Milan Stock Exchange
-            '.NX': 'NSE',  # National Stock Exchange of India
-            '.TA': 'TLV',  # Tel Aviv Stock Exchange
-            '.TW': 'TPE',  # Taiwan Stock Exchange
-            '.V': 'VAN',   # TSX Venture Exchange
-            '.WA': 'WAR',  # Warsaw Stock Exchange
-        }
+        # Map Yahoo exchange suffixes to Google Finance exchange codes
+        exchange_map = GOOGLE_FINANCE_EXCHANGE_MAP
 
-        # Check if ticker has an exchange suffix
-        for suffix, exchange_code in exchange_map.items():
+        # Check if ticker has an exchange suffix (longest first)
+        for suffix, exchange_code in sorted(exchange_map.items(), key=lambda kv: len(kv[0]), reverse=True):
             if ticker_upper.endswith(suffix):
                 base_ticker = ticker_upper[:-len(suffix)]
                 return f"{exchange_code}:{base_ticker}"

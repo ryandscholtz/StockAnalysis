@@ -1,6 +1,8 @@
 // Enhanced search functionality with local ticker database
 // This provides a better search experience while the API has limited tickers
 
+import { normalizeTicker } from './markets'
+
 export interface TickerInfo {
   ticker: string
   companyName: string
@@ -98,6 +100,48 @@ export const POPULAR_TICKERS: TickerInfo[] = [
   { ticker: 'NEE', companyName: 'NextEra Energy Inc.', exchange: 'NYSE', sector: 'Utilities' },
   { ticker: 'DUK', companyName: 'Duke Energy Corporation', exchange: 'NYSE', sector: 'Utilities' },
   { ticker: 'SO', companyName: 'The Southern Company', exchange: 'NYSE', sector: 'Utilities' },
+
+  // Fidelity international markets — representative listings
+  { ticker: 'RY.TO', companyName: 'Royal Bank of Canada', exchange: 'TSX', sector: 'Financial', aliases: ['rbc'] },
+  { ticker: 'SHOP.TO', companyName: 'Shopify Inc.', exchange: 'TSX', sector: 'Technology', aliases: ['shopify'] },
+  { ticker: 'AMXL.MX', companyName: 'America Movil', exchange: 'BMV', sector: 'Telecom', aliases: ['america movil'] },
+  { ticker: 'AZN.L', companyName: 'AstraZeneca PLC', exchange: 'LSE', sector: 'Healthcare', aliases: ['astrazeneca'] },
+  { ticker: 'SHEL.L', companyName: 'Shell plc', exchange: 'LSE', sector: 'Energy', aliases: ['shell'] },
+  { ticker: 'HSBA.L', companyName: 'HSBC Holdings plc', exchange: 'LSE', sector: 'Financial', aliases: ['hsbc'] },
+  { ticker: 'SAP.DE', companyName: 'SAP SE', exchange: 'XETRA', sector: 'Technology', aliases: ['sap'] },
+  { ticker: 'SIE.DE', companyName: 'Siemens AG', exchange: 'XETRA', sector: 'Industrial', aliases: ['siemens'] },
+  { ticker: 'MC.PA', companyName: 'LVMH', exchange: 'Euronext Paris', sector: 'Consumer', aliases: ['lvmh'] },
+  { ticker: 'OR.PA', companyName: "L'Oréal", exchange: 'Euronext Paris', sector: 'Consumer', aliases: ['loreal'] },
+  { ticker: 'ASML.AS', companyName: 'ASML Holding', exchange: 'Euronext Amsterdam', sector: 'Technology', aliases: ['asml'] },
+  { ticker: 'ABI.BR', companyName: 'Anheuser-Busch InBev', exchange: 'Euronext Brussels', sector: 'Consumer', aliases: ['ab inbev', 'inbev'] },
+  { ticker: 'EDP.LS', companyName: 'EDP', exchange: 'Euronext Lisbon', sector: 'Utilities' },
+  { ticker: 'A5G.IR', companyName: 'AIB Group', exchange: 'Euronext Dublin', sector: 'Financial', aliases: ['aib'] },
+  { ticker: 'BIRG.IR', companyName: 'Bank of Ireland', exchange: 'Euronext Dublin', sector: 'Financial' },
+  { ticker: 'KRZ.IR', companyName: 'Kerry Group', exchange: 'Euronext Dublin', sector: 'Consumer', aliases: ['kerry'] },
+  { ticker: 'ENI.MI', companyName: 'Eni S.p.A.', exchange: 'Borsa Italiana', sector: 'Energy', aliases: ['eni'] },
+  { ticker: 'RACE.MI', companyName: 'Ferrari N.V.', exchange: 'Borsa Italiana', sector: 'Consumer', aliases: ['ferrari'] },
+  { ticker: 'ITX.MC', companyName: 'Inditex', exchange: 'Bolsa de Madrid', sector: 'Consumer', aliases: ['zara', 'inditex'] },
+  { ticker: 'SAN.MC', companyName: 'Banco Santander', exchange: 'Bolsa de Madrid', sector: 'Financial', aliases: ['santander'] },
+  { ticker: 'NOVO-B.CO', companyName: 'Novo Nordisk', exchange: 'Nasdaq Copenhagen', sector: 'Healthcare', aliases: ['novo'] },
+  { ticker: 'NOKIA.HE', companyName: 'Nokia', exchange: 'Nasdaq Helsinki', sector: 'Technology', aliases: ['nokia'] },
+  { ticker: 'EQNR.OL', companyName: 'Equinor', exchange: 'Oslo Børs', sector: 'Energy', aliases: ['equinor'] },
+  { ticker: 'VOLV-B.ST', companyName: 'Volvo AB', exchange: 'Nasdaq Stockholm', sector: 'Industrial', aliases: ['volvo'] },
+  { ticker: 'NESN.SW', companyName: 'Nestlé S.A.', exchange: 'SIX', sector: 'Consumer', aliases: ['nestle'] },
+  { ticker: 'NOVN.SW', companyName: 'Novartis AG', exchange: 'SIX', sector: 'Healthcare', aliases: ['novartis'] },
+  { ticker: 'OMV.VI', companyName: 'OMV AG', exchange: 'Vienna', sector: 'Energy' },
+  { ticker: 'PKO.WA', companyName: 'PKO Bank Polski', exchange: 'GPW', sector: 'Financial' },
+  { ticker: 'ETE.AT', companyName: 'National Bank of Greece', exchange: 'Athens', sector: 'Financial', aliases: ['nbg'] },
+  { ticker: 'OPAP.AT', companyName: 'OPAP S.A.', exchange: 'Athens', sector: 'Consumer' },
+  { ticker: 'BHP.AX', companyName: 'BHP Group', exchange: 'ASX', sector: 'Materials', aliases: ['bhp'] },
+  { ticker: 'CBA.AX', companyName: 'Commonwealth Bank', exchange: 'ASX', sector: 'Financial' },
+  { ticker: '0700.HK', companyName: 'Tencent Holdings', exchange: 'HKEX', sector: 'Technology', aliases: ['tencent'] },
+  { ticker: '7203.T', companyName: 'Toyota Motor', exchange: 'TSE', sector: 'Consumer', aliases: ['toyota'] },
+  { ticker: '6758.T', companyName: 'Sony Group', exchange: 'TSE', sector: 'Technology', aliases: ['sony'] },
+  { ticker: 'D05.SI', companyName: 'DBS Group', exchange: 'SGX', sector: 'Financial', aliases: ['dbs'] },
+  { ticker: 'FPH.NZ', companyName: 'Fisher & Paykel Healthcare', exchange: 'NZX', sector: 'Healthcare' },
+  { ticker: 'AIA.NZ', companyName: 'Auckland International Airport', exchange: 'NZX', sector: 'Industrial' },
+  { ticker: 'NPN.JO', companyName: 'Naspers', exchange: 'JSE', sector: 'Technology', aliases: ['naspers'] },
+  { ticker: 'FSR.JO', companyName: 'FirstRand', exchange: 'JSE', sector: 'Financial' },
 ]
 
 export function testEnhancedSearch(): string {
@@ -109,7 +153,7 @@ export function searchTickers(query: string, limit: number = 10): TickerInfo[] {
     return []
   }
 
-  const queryUpper = query.toUpperCase().trim()
+  const queryUpper = (normalizeTicker(query) || query).toUpperCase().trim()
   const results: TickerInfo[] = []
 
   // First, find exact ticker matches

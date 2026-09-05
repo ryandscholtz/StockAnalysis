@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { stockApi, SearchResult } from '@/lib/api'
 import { searchTickers, TickerInfo, testEnhancedSearch } from '@/lib/enhanced-search'
+import { normalizeTicker } from '@/lib/markets'
 
 interface StockSearchProps {
   onSearch: (ticker: string) => void
@@ -137,7 +138,7 @@ export default function StockSearch({ onSearch }: StockSearchProps) {
         handleSelectSuggestion(selected)
       } else {
         // Otherwise, search with the entered ticker
-        const tickerUpper = ticker.trim().toUpperCase()
+        const tickerUpper = normalizeTicker(ticker.trim())
         // Save to recent searches
         const updated = [tickerUpper, ...recentSearches.filter(s => s !== tickerUpper)].slice(0, 5)
         setRecentSearches(updated)
@@ -198,7 +199,7 @@ export default function StockSearch({ onSearch }: StockSearchProps) {
               ref={inputRef}
               type="text"
               className="input"
-              placeholder="Search by ticker or company name (e.g., AAPL or Apple)"
+              placeholder="Ticker or name (AAPL, SAP:DE, Naspers)"
               value={ticker || ''}
               onChange={(e) => {
                 const value = e.target.value || ''

@@ -33,6 +33,13 @@ from app.analysis.growth_metrics import GrowthMetricsCalculator
 from app.analysis.price_ratios import PriceRatiosCalculator
 from app.analysis.data_quality import DataQualityAnalyzer
 from app.core.dependencies import get_yahoo_client, get_correlation_id
+from app.config.markets import (
+    MARKET_TICKERS,
+    MIC_TO_YAHOO_SUFFIX,
+    normalize_ticker,
+    to_yahoo_symbol,
+    is_international_ticker,
+)
 
 router = APIRouter()
 
@@ -141,6 +148,7 @@ async def search_tickers(
     Returns list of matching stocks
     """
     try:
+        q = normalize_ticker(q) or q
         logger.info(f"Searching for tickers with query: {q}", extra={"correlation_id": correlation_id})
         
         # Run synchronous search in executor to avoid blocking
@@ -263,8 +271,7 @@ async def _analyze_stock_with_progress(ticker: str, progress_tracker: ProgressTr
             if not ai_data:
                 error_detail += " and no AI-extracted data available. "
                 # Check if this is an international ticker
-                exchange_suffixes = ['.JO', '.L', '.TO', '.PA', '.DE', '.HK', '.SS', '.SZ', '.T', '.AS', '.BR', '.MX', '.SA', '.SW', '.VI', '.ST', '.OL', '.CO', '.HE', '.IC', '.LS', '.MC', '.MI', '.NX', '.TA', '.TW', '.V', '.WA']
-                is_international = any(ticker.upper().endswith(suffix) for suffix in exchange_suffixes)
+                is_international = is_international_ticker(ticker)
 
                 # Check if backup sources are configured
                 from app.data.backup_clients import BackupDataFetcher
@@ -855,14 +862,8 @@ async def analyze_stock(
     Use ?stream=true for progress updates via Server-Sent Events
     Use ?force_refresh=true to bypass database cache and run new analysis
     """
-    # Normalize ticker: convert hyphens back to dots for international exchanges
-    # Common exchange suffixes (e.g., MRF-JO -> MRF.JO for Johannesburg)
-    exchange_suffixes = ['JO', 'L', 'TO', 'PA', 'DE', 'HK', 'SS', 'SZ', 'T', 'AS', 'BR', 'MX', 'SA', 'SW', 'VI', 'ST', 'OL', 'CO', 'HE', 'IC', 'LS', 'MC', 'MI', 'NX', 'TA', 'TW', 'V', 'WA']
-    ticker_upper = ticker.upper()
-    for suffix in exchange_suffixes:
-        if ticker_upper.endswith(f'-{suffix}'):
-            ticker = ticker_upper[:-len(suffix)-1] + '.' + suffix
-            break
+    # Normalize Fidelity (SAP:DE), hyphen (MRF-JO), and MarketStack (BEL.XJSE) tickers
+    ticker = normalize_ticker(ticker)
 
     # Check database first (unless force_refresh is True)
     if not force_refresh:
@@ -2661,6 +2662,7 @@ async def get_quote(ticker: str):
     Get quick quote for a ticker (price and basic info)
     """
     try:
+        ticker = normalize_ticker(ticker)
         data_fetcher = DataFetcher()
         company_data = await data_fetcher.fetch_company_data(ticker)
 
@@ -3476,129 +3478,7 @@ async def update_watchlist_item(
 # Explore Stocks – market/exchange browser
 # ---------------------------------------------------------------------------
 
-MARKET_TICKERS: Dict[str, Dict] = {
-    "SP500": {
-        "name": "S&P 500",
-        "description": "Top S&P 500 companies by market cap",
-        "region": "US",
-        "tickers": [
-            "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "BRK-B", "LLY", "JPM",
-            "V", "UNH", "XOM", "MA", "AVGO", "JNJ", "HD", "PG", "COST", "ABBV",
-            "MRK", "CVX", "KO", "WMT", "PEP", "BAC", "CRM", "NFLX", "TMO", "ORCL",
-            "AMD", "ABT", "ACN", "LIN", "MCD", "DHR", "CSCO", "TXN", "NEE", "PM",
-            "ADBE", "WFC", "MS", "RTX", "INTU", "DIS", "BMY", "UPS", "AMGN", "LOW",
-        ],
-    },
-    "NASDAQ100": {
-        "name": "NASDAQ 100",
-        "description": "Top NASDAQ 100 technology & growth companies",
-        "region": "US",
-        "tickers": [
-            "AAPL", "MSFT", "NVDA", "AMZN", "META", "TSLA", "GOOGL", "GOOG", "AVGO", "COST",
-            "NFLX", "TMUS", "AMD", "CSCO", "ADBE", "PEP", "TXN", "QCOM", "HON", "INTU",
-            "AMAT", "AMGN", "ISRG", "MU", "BKNG", "LRCX", "REGN", "ADI", "VRTX", "PANW",
-            "KLAC", "SNPS", "MRVL", "CDNS", "GILD", "SBUX", "ADP", "MDLZ", "PYPL", "CTAS",
-            "ABNB", "ORLY", "FTNT", "MELI", "MNST", "CRWD", "PCAR", "KDP", "INTC", "ASML",
-        ],
-    },
-    "DOW30": {
-        "name": "Dow Jones 30",
-        "description": "Dow Jones Industrial Average – 30 blue-chip stocks",
-        "region": "US",
-        "tickers": [
-            "AAPL", "AMGN", "AXP", "BA", "CAT", "CRM", "CSCO", "CVX", "DIS", "DOW",
-            "GS", "HD", "HON", "IBM", "INTC", "JNJ", "JPM", "KO", "MCD", "MMM",
-            "MRK", "MSFT", "NKE", "PG", "TRV", "UNH", "V", "VZ", "WBA", "WMT",
-        ],
-    },
-    "NYSE": {
-        "name": "NYSE",
-        "description": "Popular New York Stock Exchange stocks",
-        "region": "US",
-        "tickers": [
-            "JPM", "BAC", "V", "JNJ", "WMT", "PG", "XOM", "CVX", "KO", "PEP",
-            "MCD", "DIS", "MS", "GS", "WFC", "C", "ABT", "LLY", "UNH", "PFE",
-            "MRK", "ABBV", "TMO", "HD", "NKE", "TGT", "LOW", "CRM", "AXP", "MA",
-            "CAT", "BA", "HON", "MMM", "UPS", "GE", "NEE", "DUK", "AMT", "PLD",
-            "XOM", "COP", "EOG", "BRK-B", "RTX", "IBM", "T", "VZ", "FDX", "SLB",
-        ],
-    },
-    "NASDAQ": {
-        "name": "NASDAQ",
-        "description": "Popular NASDAQ-listed stocks",
-        "region": "US",
-        "tickers": [
-            "AAPL", "MSFT", "NVDA", "AMZN", "META", "TSLA", "GOOGL", "GOOG", "NFLX", "AMD",
-            "INTC", "CSCO", "ADBE", "PYPL", "INTU", "QCOM", "TXN", "HON", "AMGN", "SBUX",
-            "COST", "PEP", "TMUS", "AVGO", "ISRG", "MU", "LRCX", "REGN", "GILD", "VRTX",
-            "PANW", "CRWD", "FTNT", "ABNB", "MELI", "BKNG", "ORLY", "MNST", "KDP", "MDLZ",
-            "ADP", "CTAS", "CDNS", "SNPS", "PCAR", "KLAC", "AMAT", "MRVL", "ADI", "LYFT",
-        ],
-    },
-    "FTSE100": {
-        "name": "FTSE 100",
-        "description": "London Stock Exchange – top 100 UK companies",
-        "region": "UK",
-        "tickers": [
-            "AZN.L", "SHEL.L", "HSBA.L", "ULVR.L", "BP.L", "BATS.L", "GSK.L", "RIO.L",
-            "DGE.L", "REL.L", "BA.L", "LSEG.L", "PRU.L", "IMB.L", "NG.L", "VOD.L",
-            "BT-A.L", "LLOY.L", "BARC.L", "NWG.L", "STAN.L", "AAL.L", "ANTO.L", "ABF.L",
-            "CNA.L", "SSE.L", "WPP.L", "HLN.L", "MNDI.L", "RKT.L",
-        ],
-    },
-    "ASX200": {
-        "name": "ASX 200",
-        "description": "Australian Securities Exchange – top 200 Australian companies",
-        "region": "AU",
-        "tickers": [
-            "BHP.AX", "CSL.AX", "CBA.AX", "NAB.AX", "WBC.AX", "ANZ.AX", "WES.AX",
-            "MQG.AX", "RIO.AX", "TLS.AX", "WOW.AX", "FMG.AX", "AMC.AX",
-            "ALL.AX", "REA.AX", "QBE.AX", "SUN.AX", "IAG.AX", "MPL.AX", "ORG.AX",
-        ],
-    },
-    "TSX": {
-        "name": "TSX",
-        "description": "Toronto Stock Exchange – top Canadian companies",
-        "region": "CA",
-        "tickers": [
-            "RY.TO", "TD.TO", "BNS.TO", "BMO.TO", "CM.TO", "ENB.TO", "CNR.TO",
-            "TRP.TO", "SU.TO", "ABX.TO", "MFC.TO", "SLF.TO", "CP.TO", "BCE.TO",
-            "T.TO", "CNQ.TO", "PPL.TO", "ATD.TO", "GWO.TO", "AEM.TO",
-        ],
-    },
-    "DAX": {
-        "name": "DAX 40",
-        "description": "Frankfurt Stock Exchange – top 40 German companies",
-        "region": "DE",
-        "tickers": [
-            "SAP.DE", "SIE.DE", "ALV.DE", "MBG.DE", "DTE.DE", "BAYN.DE", "BMW.DE",
-            "VOW3.DE", "MUV2.DE", "DB1.DE", "RWE.DE", "BAS.DE", "MRK.DE", "HEI.DE",
-            "ADS.DE", "IFX.DE", "LIN.DE", "EOAN.DE", "HEN3.DE", "DHER.DE",
-        ],
-    },
-    "NIKKEI": {
-        "name": "Nikkei 225",
-        "description": "Tokyo Stock Exchange – top Japanese companies",
-        "region": "JP",
-        "tickers": [
-            "7203.T", "6758.T", "9984.T", "6861.T", "8306.T", "8316.T", "6902.T",
-            "9432.T", "9433.T", "4063.T", "6954.T", "7974.T", "8035.T", "4519.T",
-            "6367.T", "5108.T", "4661.T", "9022.T", "8591.T", "6098.T",
-        ],
-    },
-    "JSE": {
-        "name": "JSE",
-        "description": "Johannesburg Stock Exchange – all listed equities",
-        "region": "ZA",
-        "exchange_mic": "XJSE",
-        "yahoo_suffix": ".JO",
-        "tickers": [
-            "NPN.JO", "PRX.JO", "CPI.JO", "FSR.JO", "SBK.JO", "MTN.JO", "AGL.JO",
-            "SOL.JO", "SHP.JO", "WHL.JO", "REM.JO", "DSY.JO", "GRT.JO", "AMS.JO",
-            "ABG.JO", "NED.JO", "BID.JO", "IMP.JO", "SGL.JO", "GFI.JO", "HAR.JO",
-        ],
-    },
-}
+# MARKET_TICKERS is imported from app.config.markets (Fidelity-supported exchanges).
 
 # Static ticker -> company name for Explore (avoids empty Company when yfinance blocks in Lambda)
 TICKER_COMPANY_NAMES: Dict[str, str] = {
@@ -3840,14 +3720,10 @@ _EXPLORE_CACHE_TTL = 900  # 15 minutes
 _explore_ticker_list_cache: Dict[str, Dict] = {}
 _EXPLORE_TICKER_LIST_CACHE_TTL = 86400  # 24 hours
 
-_MIC_TO_YAHOO_SUFFIX = {"XJSE": ".JO"}
-
 
 def _yahoo_symbol_explore(ticker: str) -> str:
-    """Convert MarketStack XJSE-style ticker to Yahoo format (.JO)."""
-    if ticker.upper().endswith(".XJSE"):
-        return ticker[:-5] + ".JO"
-    return ticker
+    """Convert MarketStack MIC-style tickers (BEL.XJSE) to Yahoo format (BEL.JO)."""
+    return to_yahoo_symbol(ticker)
 
 
 def _fetch_tickers_from_marketstack(mic: str, yahoo_suffix: str) -> List[str]:
@@ -3875,11 +3751,11 @@ def _fetch_tickers_from_marketstack(mic: str, yahoo_suffix: str) -> List[str]:
                 raw = (item.get("symbol") or "").strip()
                 if not raw:
                     continue
-                sym = (
-                    _yahoo_symbol_explore(raw)
-                    if raw.upper().endswith(".XJSE")
-                    else (raw + yahoo_suffix if yahoo_suffix and not raw.endswith(yahoo_suffix) else raw)
-                )
+                converted = _yahoo_symbol_explore(raw)
+                if converted != raw:
+                    sym = converted
+                else:
+                    sym = raw + yahoo_suffix if yahoo_suffix and not raw.endswith(yahoo_suffix) else raw
                 if sym and sym not in all_symbols:
                     all_symbols.append(sym)
             count = pagination.get("count", 0)
@@ -3893,19 +3769,93 @@ def _fetch_tickers_from_marketstack(mic: str, yahoo_suffix: str) -> List[str]:
         return []
 
 
-def _get_tickers_for_market(market_id: str, market_config: Dict) -> List[str]:
-    """Return ticker list for a market: from API when exchange_mic is set (with cache/fallback), else static."""
-    mic = market_config.get("exchange_mic")
-    yahoo_suffix = market_config.get("yahoo_suffix", _MIC_TO_YAHOO_SUFFIX.get(mic, ""))
+def _fetch_screener_tickers(screener_exchange: str, max_count: int = 10_000) -> List[str]:
+    """Fetch equity tickers for an exchange via Yahoo Finance screener (no paid API key)."""
+    import http.cookiejar
+    from urllib.request import build_opener, HTTPCookieProcessor, Request as _Req
 
-    if mic:
+    try:
+        jar = http.cookiejar.CookieJar()
+        opener = build_opener(HTTPCookieProcessor(jar))
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        }
+        try:
+            opener.open(_Req("https://fc.yahoo.com", headers=headers), timeout=10)
+        except Exception:
+            pass
+        with opener.open(_Req("https://query1.finance.yahoo.com/v1/test/getcrumb", headers=headers), timeout=10) as resp:
+            crumb = resp.read().decode().strip()
+        cookie_str = "; ".join(f"{c.name}={c.value}" for c in jar)
+    except Exception as e:
+        logger.debug("Yahoo session error for screener %s: %s", screener_exchange, e)
+        return []
+
+    url = (
+        f"https://query2.finance.yahoo.com/v1/finance/screener"
+        f"?formatted=false&crumb={crumb}&lang=en-US&region=US"
+    )
+    all_symbols: List[str] = []
+    batch = 250
+    for offset in range(0, max_count, batch):
+        size = min(batch, max_count - offset)
+        body = json.dumps({
+            "size": size,
+            "offset": offset,
+            "sortField": "intradaymarketcap",
+            "sortType": "DESC",
+            "quoteType": "EQUITY",
+            "topOperator": "AND",
+            "query": {
+                "operator": "AND",
+                "operands": [{"operator": "EQ", "operands": ["exchange", screener_exchange]}],
+            },
+            "userId": "",
+            "userIdType": "guid",
+        }).encode("utf-8")
+        req = Request(url, data=body, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Cookie": cookie_str,
+        })
+        try:
+            with urlopen(req, timeout=20) as resp:
+                data = json.loads(resp.read().decode())
+            result = data.get("finance", {}).get("result") or []
+            quotes = result[0].get("quotes", []) if result else []
+            symbols = [q["symbol"] for q in quotes if q.get("symbol")]
+            all_symbols.extend(symbols)
+            if len(symbols) < size:
+                break
+        except Exception as e:
+            logger.debug("Screener error %s offset=%s: %s", screener_exchange, offset, e)
+            break
+    return all_symbols
+
+
+def _get_tickers_for_market(market_id: str, market_config: Dict) -> List[str]:
+    """Return ticker list: Yahoo screener, then MarketStack, then static fallback."""
+    screener_exchange = market_config.get("screener_exchange")
+    mic = market_config.get("exchange_mic")
+    yahoo_suffix = market_config.get("yahoo_suffix", MIC_TO_YAHOO_SUFFIX.get(mic or "", ""))
+
+    if screener_exchange or mic:
         now = datetime.utcnow()
         cache_entry = _explore_ticker_list_cache.get(market_id)
         if cache_entry:
             age = (now - cache_entry["timestamp"]).total_seconds()
             if age < _EXPLORE_TICKER_LIST_CACHE_TTL:
                 return list(cache_entry["tickers"])
-        tickers = _fetch_tickers_from_marketstack(mic, yahoo_suffix)
+
+        tickers: List[str] = []
+        if screener_exchange:
+            tickers = _fetch_screener_tickers(
+                screener_exchange, max_count=market_config.get("screener_max", 10_000)
+            )
+        if not tickers and mic:
+            tickers = _fetch_tickers_from_marketstack(mic, yahoo_suffix)
         if tickers:
             _explore_ticker_list_cache[market_id] = {"tickers": tickers, "timestamp": now}
             return tickers
@@ -3913,6 +3863,7 @@ def _get_tickers_for_market(market_id: str, market_config: Dict) -> List[str]:
         if static:
             return list(static)
         return []
+
     return list(dict.fromkeys(market_config.get("tickers", [])))
 
 
@@ -4093,8 +4044,11 @@ async def get_explore_markets():
     """Return available markets/exchanges for the explore page."""
     markets = []
     for key, val in MARKET_TICKERS.items():
-        if val.get("exchange_mic") and key in _explore_ticker_list_cache:
+        is_screener = bool(val.get("screener_exchange") or val.get("exchange_mic"))
+        if is_screener and key in _explore_ticker_list_cache:
             ticker_count = len(_explore_ticker_list_cache[key]["tickers"])
+        elif is_screener:
+            ticker_count = None
         else:
             ticker_count = len(val.get("tickers") or [])
         markets.append({
@@ -4102,7 +4056,10 @@ async def get_explore_markets():
             "name": val["name"],
             "description": val["description"],
             "region": val["region"],
+            "continent": val.get("continent", "Other"),
             "ticker_count": ticker_count,
+            "screener_based": is_screener,
+            "fidelity": bool(val.get("fidelity")),
         })
     return {"markets": markets}
 

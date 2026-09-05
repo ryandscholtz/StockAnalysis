@@ -9,6 +9,25 @@ import urllib.request
 import urllib.parse
 from datetime import datetime, timezone, timedelta
 
+_FIDELITY_CC = {
+    'AU': '.AX', 'AT': '.VI', 'BE': '.BR', 'CA': '.TO', 'DK': '.CO',
+    'FI': '.HE', 'FR': '.PA', 'DE': '.DE', 'GR': '.AT', 'HK': '.HK',
+    'IE': '.IR', 'IT': '.MI', 'JP': '.T', 'MX': '.MX', 'NL': '.AS',
+    'NZ': '.NZ', 'NO': '.OL', 'PL': '.WA', 'PT': '.LS', 'SG': '.SI',
+    'ZA': '.JO', 'ES': '.MC', 'SE': '.ST', 'CH': '.SW', 'GB': '.L', 'US': '',
+}
+
+
+def _normalize_fidelity_query(query: str) -> str:
+    raw = (query or '').strip().upper()
+    if ':' in raw:
+        root, _, cc = raw.partition(':')
+        if root.strip() and cc.strip() in _FIDELITY_CC:
+            return root.strip() + _FIDELITY_CC[cc.strip()]
+    if raw.endswith('.XJSE'):
+        return raw[:-5] + '.JO'
+    return raw
+
 def lambda_handler(event, context):
     """
     Enhanced Lambda handler with MarketStack integration (using urllib)
@@ -427,7 +446,7 @@ def lambda_handler(event, context):
     # Search endpoint for tickers across all exchanges
     if path == '/api/search':
         if method == 'GET':
-            query = query_params.get('q', '').strip().upper()
+            query = _normalize_fidelity_query(query_params.get('q', '').strip().upper())
             if not query:
                 return {
                     'statusCode': 400,
@@ -451,7 +470,11 @@ def lambda_handler(event, context):
                     'query': query,
                     'results': search_results,
                     'total': len(search_results),
-                    'exchanges_searched': ['NASDAQ', 'NYSE', 'LSE', 'TSX', 'ASX', 'XETRA', 'EURONEXT', 'JSE', 'SIX', 'OMX'],
+                    'exchanges_searched': [
+                        'NASDAQ', 'NYSE', 'AMEX', 'LSE', 'TSX', 'TSXV', 'ASX', 'XETRA',
+                        'EURONEXT', 'JSE', 'SIX', 'OMX', 'ATHEX', 'ISE', 'NZX', 'BMV',
+                        'TSE', 'HKEX', 'SGX', 'GPW', 'OSLO', 'BME', 'BIT',
+                    ],
                     'data_source': data_source,
                     'api_integration': 'MarketStack API (live search)' if data_source == 'marketstack_api' else 'Local Database (fallback)',
                     'timestamp': datetime.now(timezone.utc).isoformat()
@@ -918,6 +941,32 @@ def _search_local_database(query):
         'AXP': {'name': 'American Express Company', 'exchange': 'NYSE', 'country': 'US', 'sector': 'Financial Services', 'currency': 'USD'},
         'MS': {'name': 'Morgan Stanley', 'exchange': 'NYSE', 'country': 'US', 'sector': 'Investment Banking', 'currency': 'USD'},
         'GS': {'name': 'The Goldman Sachs Group, Inc.', 'exchange': 'NYSE', 'country': 'US', 'sector': 'Investment Banking', 'currency': 'USD'},
+
+        # Fidelity markets previously missing from local search
+        'A5G.IR': {'name': 'AIB Group plc', 'exchange': 'EURONEXT_DUBLIN', 'country': 'IE', 'sector': 'Banking', 'currency': 'EUR'},
+        'BIRG.IR': {'name': 'Bank of Ireland Group plc', 'exchange': 'EURONEXT_DUBLIN', 'country': 'IE', 'sector': 'Banking', 'currency': 'EUR'},
+        'KRZ.IR': {'name': 'Kerry Group plc', 'exchange': 'EURONEXT_DUBLIN', 'country': 'IE', 'sector': 'Consumer Goods', 'currency': 'EUR'},
+        'ETE.AT': {'name': 'National Bank of Greece S.A.', 'exchange': 'ATHEX', 'country': 'GR', 'sector': 'Banking', 'currency': 'EUR'},
+        'EUROB.AT': {'name': 'Eurobank Ergasias Services and Holdings S.A.', 'exchange': 'ATHEX', 'country': 'GR', 'sector': 'Banking', 'currency': 'EUR'},
+        'OPAP.AT': {'name': 'OPAP S.A.', 'exchange': 'ATHEX', 'country': 'GR', 'sector': 'Consumer', 'currency': 'EUR'},
+        'FPH.NZ': {'name': 'Fisher & Paykel Healthcare Corporation Limited', 'exchange': 'NZX', 'country': 'NZ', 'sector': 'Healthcare', 'currency': 'NZD'},
+        'AIA.NZ': {'name': 'Auckland International Airport Limited', 'exchange': 'NZX', 'country': 'NZ', 'sector': 'Transportation', 'currency': 'NZD'},
+        'SPK.NZ': {'name': 'Spark New Zealand Limited', 'exchange': 'NZX', 'country': 'NZ', 'sector': 'Telecommunications', 'currency': 'NZD'},
+        'HIVE.V': {'name': 'HIVE Digital Technologies Ltd.', 'exchange': 'TSXV', 'country': 'CA', 'sector': 'Technology', 'currency': 'CAD'},
+        'AMXL.MX': {'name': 'America Movil S.A.B. de C.V.', 'exchange': 'BMV', 'country': 'MX', 'sector': 'Telecommunications', 'currency': 'MXN'},
+        'D05.SI': {'name': 'DBS Group Holdings Ltd', 'exchange': 'SGX', 'country': 'SG', 'sector': 'Banking', 'currency': 'SGD'},
+        '0700.HK': {'name': 'Tencent Holdings Limited', 'exchange': 'HKEX', 'country': 'HK', 'sector': 'Technology', 'currency': 'HKD'},
+        '7203.T': {'name': 'Toyota Motor Corporation', 'exchange': 'TSE', 'country': 'JP', 'sector': 'Automotive', 'currency': 'JPY'},
+        'PKO.WA': {'name': 'Powszechna Kasa Oszczednosci Bank Polski S.A.', 'exchange': 'GPW', 'country': 'PL', 'sector': 'Banking', 'currency': 'PLN'},
+        'EQNR.OL': {'name': 'Equinor ASA', 'exchange': 'OSLO', 'country': 'NO', 'sector': 'Energy', 'currency': 'NOK'},
+        'NOVO-B.CO': {'name': 'Novo Nordisk A/S', 'exchange': 'OMX', 'country': 'DK', 'sector': 'Pharmaceuticals', 'currency': 'DKK'},
+        'NESN.SW': {'name': 'Nestlé S.A.', 'exchange': 'SIX', 'country': 'CH', 'sector': 'Consumer Goods', 'currency': 'CHF'},
+        'OMV.VI': {'name': 'OMV AG', 'exchange': 'WIENER', 'country': 'AT', 'sector': 'Energy', 'currency': 'EUR'},
+        'NOKIA.HE': {'name': 'Nokia Oyj', 'exchange': 'OMX', 'country': 'FI', 'sector': 'Technology', 'currency': 'EUR'},
+        'ITX.MC': {'name': 'Industria de Diseño Textil S.A.', 'exchange': 'BME', 'country': 'ES', 'sector': 'Retail', 'currency': 'EUR'},
+        'ENI.MI': {'name': 'Eni S.p.A.', 'exchange': 'BIT', 'country': 'IT', 'sector': 'Energy', 'currency': 'EUR'},
+        'EDP.LS': {'name': 'EDP - Energias de Portugal S.A.', 'exchange': 'EURONEXT', 'country': 'PT', 'sector': 'Utilities', 'currency': 'EUR'},
+        'ABI.BR': {'name': 'Anheuser-Busch InBev SA/NV', 'exchange': 'EURONEXT', 'country': 'BE', 'sector': 'Beverages', 'currency': 'EUR'},
     }
     
     # Search logic: match ticker symbol or company name
