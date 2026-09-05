@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { stockApi, WatchlistItemDetail, QuoteResponse } from '@/lib/api'
 import { StockAnalysis } from '@/types/analysis'
 import { formatPrice, inferCurrencyFromTicker } from '@/lib/currency'
+import { normalizeTicker } from '@/lib/markets'
 import { useCurrency } from '@/lib/useCurrency'
 import AnalysisCard from '@/components/AnalysisCard'
 import ValuationStatus from '@/components/ValuationStatus'
@@ -60,12 +61,12 @@ export default function TickerPage() {
   useEffect(() => {
     const tickerParam = searchParams.get('symbol') || searchParams.get('ticker')
     if (tickerParam) {
-      setTicker(tickerParam.toUpperCase())
+      setTicker(normalizeTicker(decodeURIComponent(tickerParam)))
     } else if (typeof window !== 'undefined') {
       // Check hash for ticker
       const hash = window.location.hash.replace('#', '')
       if (hash) {
-        setTicker(hash.toUpperCase())
+        setTicker(normalizeTicker(decodeURIComponent(hash)))
       }
     }
   }, [searchParams])

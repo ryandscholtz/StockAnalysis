@@ -500,10 +500,33 @@ def get_financial_data_from_sec(ticker: str) -> dict | None:
 # ---------------------------------------------------------------------------
 
 def _yahoo_symbol(ticker: str) -> str:
-    """Convert our ticker format to Yahoo Finance symbol format."""
-    if ticker.upper().endswith('.XJSE'):
-        return ticker[:-5] + '.JO'
-    return ticker
+    """Convert our ticker format (including Fidelity ROOT:CC and MarketStack MIC) to Yahoo Finance."""
+    raw = (ticker or '').strip().upper()
+    fidelity_cc = {
+        'AU': '.AX', 'AT': '.VI', 'BE': '.BR', 'CA': '.TO', 'DK': '.CO',
+        'FI': '.HE', 'FR': '.PA', 'DE': '.DE', 'GR': '.AT', 'HK': '.HK',
+        'IE': '.IR', 'IT': '.MI', 'JP': '.T', 'MX': '.MX', 'NL': '.AS',
+        'NZ': '.NZ', 'NO': '.OL', 'PL': '.WA', 'PT': '.LS', 'SG': '.SI',
+        'ZA': '.JO', 'ES': '.MC', 'SE': '.ST', 'CH': '.SW', 'GB': '.L',
+        'US': '',
+    }
+    if ':' in raw:
+        root, _, cc = raw.partition(':')
+        if root.strip() and cc.strip() in fidelity_cc:
+            raw = root.strip() + fidelity_cc[cc.strip()]
+    mic_map = {
+        '.XJSE': '.JO', '.XATH': '.AT', '.XDUB': '.IR', '.XNZE': '.NZ',
+        '.XTSX': '.V', '.XTSE': '.TO', '.XLON': '.L', '.XETR': '.DE',
+        '.XPAR': '.PA', '.XAMS': '.AS', '.XBRU': '.BR', '.XLIS': '.LS',
+        '.XMIL': '.MI', '.XMAD': '.MC', '.XSTO': '.ST', '.XCSE': '.CO',
+        '.XHEL': '.HE', '.XOSL': '.OL', '.XWAR': '.WA', '.XWBO': '.VI',
+        '.XSWX': '.SW', '.XASX': '.AX', '.XHKG': '.HK', '.XTKS': '.T',
+        '.XSES': '.SI', '.XMEX': '.MX',
+    }
+    for mic_suffix, yahoo_suffix in mic_map.items():
+        if raw.endswith(mic_suffix):
+            return raw[:-len(mic_suffix)] + yahoo_suffix
+    return raw
 
 
 def _yahoo_get_session():
@@ -1311,6 +1334,7 @@ def calculate_pe_valuation(ticker: str, data: dict) -> dict:
 
 def analyze_stock(ticker: str, event: dict) -> dict:
     """Perform comprehensive stock analysis (POST endpoint)"""
+    ticker = _yahoo_symbol(ticker)
     try:
         body = json.loads(event.get('body', '{}'))
         analysis_type = body.get('type', 'dcf')
@@ -1366,6 +1390,7 @@ def get_analysis_presets() -> dict:
 
 def analyze_stock_get(ticker: str, stream: bool, params: dict) -> dict:
     """Handle GET /api/analyze/{ticker} — AI-driven analysis with SSE streaming."""
+    ticker = _yahoo_symbol(ticker)
     reset_invocation_budget()
 
     progress_events = []
@@ -2057,7 +2082,7 @@ def handle_get_pdf_upload_url(event: dict) -> dict:
     Returns: { upload_url, s3_key }
     """
     params = event.get('queryStringParameters') or {}
-    ticker = params.get('ticker', '').strip().upper()
+    ticker = _yahoo_symbol(params.get('ticker', '').strip().upper())
     if not ticker:
         return {'statusCode': 400, 'body': json.dumps({'error': 'ticker parameter required'})}
 
@@ -2243,7 +2268,7 @@ def handle_pdf_upload(event: dict, context) -> dict:
     Body: { "s3_key": "uploads/BEL.XJSE_20260301_120000.pdf", "currency": "ZAR" }
     """
     params = event.get('queryStringParameters') or {}
-    ticker = params.get('ticker', '').strip().upper()
+    ticker = _yahoo_symbol(params.get('ticker', '').strip().upper())
     if not ticker:
         return {'statusCode': 400, 'body': json.dumps({'error': 'ticker parameter required'})}
 
@@ -2310,7 +2335,7 @@ def handle_pdf_upload(event: dict, context) -> dict:
 def handle_pdf_status(event: dict) -> dict:
     """GET /api/upload-pdf/status?ticker=XXX — returns current processing status."""
     params = event.get('queryStringParameters') or {}
-    ticker = params.get('ticker', '').strip().upper()
+    ticker = _yahoo_symbol(params.get('ticker', '').strip().upper())
     if not ticker:
         return {'statusCode': 400, 'body': json.dumps({'error': 'ticker required'})}
     try:

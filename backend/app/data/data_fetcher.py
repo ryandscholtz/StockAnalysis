@@ -7,6 +7,7 @@ from app.data.api_client import YahooFinanceClient, FREDClient
 from app.data.sec_edgar_client import SECEdgarClient, AlphaVantageClient
 from app.data.data_agent import FinancialDataAgent
 from app.data.backup_clients import BackupDataFetcher
+from app.config.markets import is_international_ticker, normalize_ticker
 import os
 import logging
 
@@ -57,14 +58,13 @@ class DataFetcher:
         For international tickers (with exchange suffixes like .JO, .L, etc.), prioritizes Yahoo Finance
         """
         try:
+            ticker = normalize_ticker(ticker)
             logger.info(f"Fetching data for ticker: {ticker} (using backup APIs first)")
             current_price = None
             info = {}
             yf_ticker = None
 
-            # Check if this is an international ticker (has exchange suffix)
-            exchange_suffixes = ['.JO', '.L', '.TO', '.PA', '.DE', '.HK', '.SS', '.SZ', '.T', '.AS', '.BR', '.MX', '.SA', '.SW', '.VI', '.ST', '.OL', '.CO', '.HE', '.IC', '.LS', '.MC', '.MI', '.NX', '.TA', '.TW', '.V', '.WA']
-            is_international = any(ticker.upper().endswith(suffix) for suffix in exchange_suffixes)
+            is_international = is_international_ticker(ticker)
 
             # For international tickers, backup APIs often don't support them, so try Yahoo Finance first
             if is_international:

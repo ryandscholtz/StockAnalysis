@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { WatchlistSimulation } from './watchlist-simulation'
 import { authService } from './auth'
+import { normalizeTicker } from './markets'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'
 
@@ -558,8 +559,9 @@ export const stockApi = {
     if (!query || query.trim().length === 0) {
       return []
     }
+    const normalized = normalizeTicker(query) || query
     const response = await api.get<any>(`/api/search`, {
-      params: { q: query }
+      params: { q: normalized }
     })
     const results: any[] = response.data.results || []
     return results.map((item: any) => ({
@@ -1221,6 +1223,7 @@ export interface ExploreMarket {
   region: string
   ticker_count: number | null
   screener_based?: boolean
+  fidelity?: boolean
 }
 
 export interface ExploreStock {

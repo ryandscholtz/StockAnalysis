@@ -144,7 +144,7 @@ export default function Home() {
             icon: '🌍',
             title: 'Multi-Exchange Support',
             description:
-              'Analyse stocks across major global exchanges with automatic currency handling.',
+              'Analyse stocks on every Fidelity-supported market, with automatic local-currency handling.',
           },
         ].map((feature) => (
           <div
